@@ -354,6 +354,7 @@ Same jobs and rules, different software, look, navigation, site names and data, 
 | Unit tests | calc golden test with facts as the pages show them, allocation ties, band edges, inclusive ceilings and thresholds; number parser; validators; selection | I10, I11, I14, I18 |
 | Recorded pages | pages recorded by `tools/stress/run_agents.py`, a few kept in `eval/fixtures/pages/`; reader tests for every trap category on synthetic pages (`tests/test_reader.py`) ✅ | I17 |
 | Dry run + score | `tools/score.sh`: a local run with `DRY_RUN=1` stops after the answer, `eval/compare.py` scores the logged answer with the official weights | I7 |
+| Resolver eval | `tools/resolver_eval.py`: the resolvers on recorded evidence with rule-level changes (`eval/mutations.py`), several passes each for the model's variance | I18 |
 | Mutation tests | recorded pages relabelled, locale-swapped, with hidden decoys, shuffled menus and table rows, content in an extra frame: extraction must not change ✅ (`tests/test_mutations.py`) | I20 |
 | Chaos runs *(stretch)* | local runs with random 503s, a forced session expiry, slow responses: the run must still sign | — |
 | Mirror world *(stretch)* | a small local re-skin of the four jobs with information split differently and a synthetic scenario with a known answer | — |

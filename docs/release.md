@@ -39,6 +39,7 @@ Nothing is pushed. A branch that beats main goes to main by PR after Luca's yes.
 | `eval/compare.py answer.json` | Points per field against the public-1 reference `eval/expected.json` |
 | `tools/rescore.py [run.log ...]` | The logged facts of past runs (default `bench/.ci/logs/`) through today's `calc.compute`, scored per run: a calc change checked without a test run (`facts` itself is not replayed) |
 | `tools/score.sh` | Local dry run against the scouting sites (`DRY_RUN=1` stops before the submission), scored with `eval/compare.py`; no sandbox run needed |
+| `tools/resolver_eval.py [FIXTURE] [--repeat N]` | `requirements` and `commercials` on recorded evidence (`eval/fixtures/resolvers`), as recorded and with the changes in `eval/mutations.py` (newer, future-dated, look-alike and unauthorized approvals, a shifted index window, other number formats, newer, future, set and withdrawn quantities); each pass scored against the facts the change leaves; model calls only, no browser |
 | `tools/audit_package.py [--agent DIR \| --package ID] [run.log ...]` | Fails on a public-1 value (reference values plus ids, hosts, site path segments and addresses from run logs), a German word of the public sites the brief doesn't tell every team (quoted labels in `scouting-notes.md`, the scouted Q&A), an own browser launch or an API key; `--package` audits what was uploaded |
 | `tests/` | Unit tests; `tests/fixtures/facts.json` holds the complete facts of one public-1 run |
 | `bench/RUNS.md` | One row per run: platform quality, offline score, time, cost, cause |
