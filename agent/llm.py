@@ -135,6 +135,12 @@ BROWSER_TOOLS = [
 
 HTTP_STATUS = re.compile(r"Fetched \S+ \(HTTP (\d+)\)")
 FINISH_NOW = "Time is almost up: call finish now with your best findings."
+KEPT_PREFIX = "Kept as evidence #"
+SHORTENED = "\n[older page read shortened: what you noted is kept; read it again if you need a value you did not note]"
+# a kept page reaches the analyst in full: reopening it to copy values only costs steps (one agent fetched the same
+# six Q&A pages 35 times)
+SHORTENED_KEPT = ("\n[older page read shortened; the page is kept word for word and the analyst reads it in full, so "
+                  "don't open it again just to copy its values]")
 
 
 async def page_status(tab) -> int:
@@ -185,7 +191,7 @@ async def investigate(tab, system: str, mission: str, finish_schema: dict, deadl
             return f"Already kept as evidence #{kept[text]} (same content); not kept again."
         evidence.append(f"### {args.get('label', '')}\n{text}")
         kept[text] = len(evidence)
-        return f"Kept as evidence #{len(evidence)}.\n{text}"
+        return f"{KEPT_PREFIX}{len(evidence)}.\n{text}"
     warned = False
     for step in range(max_steps):
         left = deadline - time.time()
@@ -261,8 +267,8 @@ async def investigate(tab, system: str, mission: str, finish_schema: dict, deadl
             results.append(entry)
         for old in (entry for results in steps[:-KEEP_STEPS] for entry in results):
             if len(old["content"]) > 400:
-                old["content"] = (old["content"][:300] + "\n[older page read shortened: what you noted is kept; "
-                                  "read it again if you need a value you did not note]")
+                old["content"] = old["content"][:300] + (SHORTENED_KEPT if old["content"].startswith(KEPT_PREFIX)
+                                                         else SHORTENED)
     messages.append({"role": "user", "content": "Stop now and call finish with your best findings."})
     log(tag, "finish forced (deadline or step limit)")
     try:
