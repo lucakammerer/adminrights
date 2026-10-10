@@ -30,11 +30,17 @@ bindingly. Without a submission the run scores 0.
   per call).
 - Watchdog (first slice): `SIGN_BY` = 180 s before the deadline the agent gets its own warning: omit every position
   not completely entered, request the TAN, sign. The generic "call finish now" would end the run unsigned.
-- Extra tool `get_tan`: starts its own `investigate` in the mail tab, tag `tan`, at most 12 steps, at most 2 min.
-  Finds the newest TAN mail for the request just made. The tab is first opened on the mailbox's start page, and a
-  `check` refuses a finish without `found` and a TAN while more than 45 s remain: in one test run the look-up started
-  inside the mail agent's last search list, returned the newest message there (not a TAN mail) with no TAN, and the
-  second look-up the submit agent then started ran out of time, so nothing was signed.
+- Extra tool `get_tan`: starts its own `investigate` in the mail tab, tag `tan`, at most 12 steps, at most
+  `TAN_TIME` (3 min) and never later than `TAN_ENTRY` (30 s) before the submit deadline, so the TAN can still be
+  entered. Finds the newest TAN mail for the request just made. The tab is first opened on the mailbox's start page;
+  a list there that already shows the TAN mail is trusted and the mail read with `fetch` on its link, a filtered list
+  is searched again. A `check` refuses a finish without `found` and a TAN, or with a value that is no TAN (`readable`:
+  one short code with digits; the same value sent again counts), until the look-up's own warning `TAN_WARN` (45 s)
+  before its end. In one test run the look-up started inside the mail agent's last search list and returned the
+  newest message there (not a TAN mail) with no TAN. In another, a 2 min look-up warned at 1 min re-searched a list
+  that already showed the TAN mail, was told to stop before reading it, and handed back "Not captured" as the TAN;
+  the submit agent's own attempt and a second look-up cost 4 minutes. A look-up that reads no usable TAN now returns
+  `found: false` with what it reported, and the next look-up gets that report in its mission.
 - Extra tool `verify_summary` (I6b): code reads the summary page and reports every unit price and the total net that
   isn't on it as calculated; the mission calls it before the TAN request. Values the summary doesn't show are fine.
 - Fixed guardrails in the mission: no extra positions, none skipped except the `omitted` ones (omit option in the form), never tick our own terms, request the TAN exactly

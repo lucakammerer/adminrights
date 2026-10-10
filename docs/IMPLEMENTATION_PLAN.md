@@ -105,7 +105,7 @@ Each agent is a folder `agent/agents/<name>/` with `agent.py` (mission, result s
 | `erp.run` | ERP (one tab each) | the material for one requirement; its pages kept; `check` → `extract` reads the facts, `validate.material_mismatch` refuses a wrong pick once | 40 steps |
 | `resolvers` | — | three `ask_json` calls: sites, requirements, commercials | 3 attempts each |
 | `submit` | tender portal | fill the wizard, sign | 70 steps |
-| `get_tan` | webmail | the newest TAN for the request just made | 12 steps, 2 min |
+| `get_tan` | webmail | the newest TAN for the request just made | 12 steps, 3 min |
 
 ### 3.3 The tool loop (`agent/llm.py` `investigate`)
 
@@ -156,7 +156,8 @@ Every browser agent is the same loop; agents differ only in mission, result sche
   still signs.
 - **Submission** (`agents/submit`): one model agent with the `form` tool and German number formatting; before the TAN
   `verify_summary` checks unit prices and total on the summary page in code; `get_tan`
-  runs in the mail tab from the mailbox's start page, and a finish without a TAN is refused while time allows; guardrails in the mission (no extra positions, omit only listed ones, never tick our own terms,
+  runs in the mail tab from the mailbox's start page, and a finish without a TAN, or with text that is no TAN, is
+  refused while time allows and never reaches the portal; guardrails in the mission (no extra positions, omit only listed ones, never tick our own terms,
   one TAN request). One `form` call per page or position, a configurator's dependent choices each followed by its
   apply button, named by field label (refs are lost when a choice is applied) and sent without reading their options
   first (`form` matches an option by text, beginning or part, and a step without a match stops with the page's
