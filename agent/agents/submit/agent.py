@@ -5,26 +5,57 @@ import time
 import llm
 from agents.common import BOOL, STR, SYSTEM, context, login_line, obj
 
-SIGN_BY = 180  # seconds before the deadline: stop entering, omit what is unfinished, sign (TAN look-up ~2 min)
+SIGN_BY = 180  # seconds before the deadline: stop entering, omit what is unfinished, sign (TAN look-up 1-3 min)
+# One TAN look-up: unlock gate, list, message, finish, at 5-30 s per step under load. At 2 min with the warning at
+# 1 min, one look-up was told to stop before it opened the message it had found, handed back "Not captured" as the
+# TAN, and the retry cost 4 minutes. Its check refuses a non-TAN until the warning (llm.investigate checks while > 45 s
+# remain), and the submit agent keeps TAN_ENTRY after it to enter the TAN and submit.
+TAN_TIME = 180
+TAN_WARN = 45
+TAN_ENTRY = 30
+TAN_HURRY = ("Time is almost up: if you found the signing-TAN message, read it now with fetch and finish with its TAN "
+             "exactly as written; otherwise finish with found false.")
 
 
 def german(value: float) -> str:
     return f"{value:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
 
+def readable(tan: str) -> bool:
+    """A TAN as a message writes it: one short code with digits, not a sentence about it."""
+    return len(tan) <= 32 and len(tan.split()) <= 3 and any(c.isdigit() for c in tan)
+
+
 async def run(task, tab, mail_tab, answer: dict, omitted: list, specs: dict, contact: str, deadline):
+    doubted: set[str] = set()  # values refused once as not a TAN: sent again, they count
+    earlier: list[dict] = []  # look-ups that read no TAN, for the next one
+
+    def usable(result: dict) -> bool:
+        tan = str(result.get("tan") or "").strip()
+        return bool(result.get("found") and tan and (readable(tan) or tan in doubted))
+
     async def fetch_tan(args):
+        hint = ("\nAn earlier look-up in this run read no TAN; it reported: "
+                + json.dumps(earlier[-1], ensure_ascii=False) if earlier else "")
         mission = f"""{login_line(mail_tab.site)}
-In this mailbox (you may already be logged in), find the newest signing-TAN message for tender
-{answer['tender_reference']}. The tender portal just said: "{args.get('portal_message', '')}". Search for it
-yourself: a list on the page may be left from an earlier search, and its newest message is not necessarily a TAN
-message. Pick only a message that gives a signing TAN for this tender, the one for that request (highest request
-number / newest), open it and finish with found true and the TAN exactly as written."""
+In this mailbox (you may already be logged in), find the signing-TAN message for tender {answer['tender_reference']}
+and read its TAN. The tender portal just said: "{args.get('portal_message', '')}". The page below is the mailbox's
+start page; an earlier search may still filter its list. If the list shows a signing-TAN message for this tender and
+that request (the highest request number, the newest), read it right away with fetch on its link; otherwise search the
+mailbox for the tender reference. A message that does not give a signing TAN for this tender doesn't count. Finish
+with found true and the TAN exactly as the message writes it, never with a TAN you have not read in it.{hint}"""
 
         async def check(result, _evidence):
-            """A look-up that found no TAN keeps searching instead of handing the portal a non-TAN."""
-            if result.get("found") and str(result.get("tan") or "").strip():
+            """A look-up that found no TAN, or wrote a sentence about one, keeps searching instead of handing it to
+            the portal."""
+            if usable(result):
                 return result, ""
+            tan = str(result.get("tan") or "").strip()
+            if result.get("found") and tan:
+                doubted.add(tan)
+                return result, (f"Not done: {tan!r} does not look like a TAN copied from a message. Read the "
+                                "signing-TAN message (fetch its link) and finish with its TAN exactly as written; if "
+                                "the message really shows this value, finish with it again.")
             return result, ("Not done: no signing-TAN message found yet. Search the mailbox for it (newest first, "
                             "every folder), open it and finish with found true and its TAN.")
 
@@ -33,9 +64,15 @@ number / newest), open it and finish with found true and the TAN exactly as writ
         except Exception as error:  # noqa: BLE001  a slow page: the agent opens the mailbox itself
             llm.log("tan", f"start page failed: {type(error).__name__}")
         found = await llm.investigate(mail_tab, SYSTEM, mission, obj(found=BOOL, tan=STR, request=STR, subject=STR),
-                                      min(deadline, time.time() + 120), "tan", max_steps=12, check=check)
+                                      min(deadline - TAN_ENTRY, time.time() + TAN_TIME), "tan", max_steps=16,
+                                      check=check, warn_at=TAN_WARN, warning=TAN_HURRY)
         found.pop("evidence", None)
-        return json.dumps(found, ensure_ascii=False)
+        if usable(found):
+            return json.dumps(found, ensure_ascii=False)
+        earlier.append(found)  # a finish after the warning skips the check: never hand the portal what isn't a TAN
+        llm.log("tan", "no TAN read")
+        return json.dumps({"found": False, "reported": found, "next": "No TAN was read: call get_tan again."},
+                          ensure_ascii=False)
 
     async def verify_summary(_args):
         """Read-back before signing (I6b): every unit price and the total as calculated must be on the summary."""
