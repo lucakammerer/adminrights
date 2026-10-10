@@ -11,13 +11,12 @@ import browsers
 import calc
 import llm
 import run as contract
-from agents.common import site
-from agents.customer_portal import agent as customer_portal
 from agents.erp import agent as erp_agent
-from agents.mail import agent as mail_agent
 from agents.resolvers import agent as resolvers
 from agents.submit import agent as submit_agent
+from agents.supplier_portal import agent as supplier_portal
 from agents.tender_portal import agent as tender_portal
+from agents.webmail import agent as webmail
 from browser import Tab
 
 
@@ -36,30 +35,31 @@ async def main() -> int:
     budget = min(contract.seconds_left(task), 19 * 60)
     end = started + budget
     llm.log("run", f"{task.get('run_id') or '(local scouting)'}; {budget:.0f}s budget")
+    roles_job = asyncio.create_task(resolvers.sites(task))
     async with async_playwright() as playwright:
         count = max(1, min(4, len(browsers.cdp_urls()) or 4))
         tabs = {}
-        order = ["tender-portal", "customer-portal", "mail", "erp"]
         pages = []
         for i in range(4):
             _, page = await browsers.connect(playwright, i if i < count else 0)
             if i >= count:
                 page = await page.context.new_page()
             pages.append(page)
-        for site_id, page in zip(order, pages):
-            entry = site(task, site_id)
+        roles = await roles_job
+        llm.log("sites", json.dumps({role: entry["siteId"] for role, entry in roles.items()}))
+        for (role, entry), page in zip(roles.items(), pages):
             await page.goto(entry["url"], wait_until="domcontentloaded")
-            tabs[site_id] = Tab(page, entry)
+            tabs[role] = Tab(page, entry)
 
         phase1 = end - 9 * 60
         tender, spec, mail, _ = await asyncio.gather(
-            safe("tender-portal", tender_portal.run(task, tabs["tender-portal"], phase1)),
-            safe("customer-portal", customer_portal.run(task, tabs["customer-portal"], phase1)),
-            safe("mail", mail_agent.run(task, tabs["mail"], phase1)),
+            safe("tender-portal", tender_portal.run(task, tabs["tender_portal"], phase1)),
+            safe("supplier-portal", supplier_portal.run(task, tabs["supplier_portal"], phase1)),
+            safe("webmail", webmail.run(task, tabs["webmail"], phase1)),
             safe("erp-login", erp_agent.login(task, tabs["erp"], phase1)))
         llm.log("tender-portal", json.dumps(tender, ensure_ascii=False)[:3000])
-        llm.log("customer-portal", json.dumps(spec, ensure_ascii=False)[:3000])
-        llm.log("mail", json.dumps(mail, ensure_ascii=False)[:4000])
+        llm.log("supplier-portal", json.dumps(spec, ensure_ascii=False)[:3000])
+        llm.log("webmail", json.dumps(mail, ensure_ascii=False)[:4000])
 
         commercials_job = asyncio.create_task(resolvers.commercials(task, tender, mail))  # only calc needs it
         requirements = await resolvers.requirements(task, tender, spec, mail)
@@ -93,7 +93,7 @@ async def main() -> int:
         llm.log("answer", json.dumps(result["answer"], ensure_ascii=False))
 
         specs = {r["position"]: ", ".join(f"{k} {r.get(k)}" for k in spec_keys) for r in requirements["positions"]}
-        outcome = await submit_agent.run(task, tabs["tender-portal"], tabs["mail"], result["answer"], result["omitted"], specs,
+        outcome = await submit_agent.run(task, tabs["tender_portal"], tabs["webmail"], result["answer"], result["omitted"], specs,
                                    mail.get("own_address", ""), end - 20)
         llm.log("submit", json.dumps(outcome, ensure_ascii=False))
     return 0

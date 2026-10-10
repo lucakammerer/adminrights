@@ -56,7 +56,8 @@ atira submit .                                      # only after Luca approves
 - An agent returns `finish` as a string instead of an object, `json.loads` fails, the result becomes
   `{"text": ...}`. Fields like `tender_reference` are then silently missing.
 - A position without a material makes `calc.compute` return `no_bid`, even if the ERP agent only timed out.
-- `main` assumes fixed `siteId`s (`tender-portal`, `customer-portal`, `mail`, `erp`).
+- Looking a website up by its `siteId`: ids and names differ in the private dataset. Use the roles from
+  `resolvers.sites` (`tender_portal`, `supplier_portal`, `erp`, `webmail`).
 - Putting public-1 values into a prompt "just as an example" is hardcoding.
 - Leaving dev scripts that launch their own Chromium in the package: the reviewer sees them.
 - A run that ends without an answer looks like a model failure but is usually a time problem: check the phase

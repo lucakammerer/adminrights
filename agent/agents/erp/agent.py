@@ -2,7 +2,7 @@
 import json
 
 import llm
-from agents.common import BOOL, INT, NUM, RESOLVE, STR, SYSTEM, arr, context, login_line, obj, site
+from agents.common import BOOL, INT, NUM, RESOLVE, STR, SYSTEM, arr, context, login_line, obj
 
 
 RESULT = obj(
@@ -18,7 +18,7 @@ REQUIRED = ("material_number", "available_stock_pieces", "lead_time_stock_weeks"
 
 
 async def login(task, tab, deadline):
-    mission = f"""{login_line(site(task, tab.site['siteId']))}
+    mission = f"""{login_line(tab.site)}
 Your part: log in to this ERP and get past every cookie, notice or unlock step until you reach its main screen
 (where materials can be searched). Then finish with {{"ok": true}}."""
     return await llm.investigate(tab, SYSTEM, mission, obj(ok=BOOL), deadline, "erp-login", max_steps=20)
@@ -58,7 +58,7 @@ as shown and the record's own number format and price unit.
 async def run(task, tab, requirement: dict, deadline):
     mission = f"""{context(task)}
 
-{login_line(site(task, 'erp'))} (you should already be logged in)
+{login_line(tab.site)} (you should already be logged in)
 Your part: find the material for one requirement in this ERP. Requirement: {json.dumps(requirement, ensure_ascii=False)}
 1. Search the catalogue group (Kataloggruppe) and read every result page.
 2. Compare each candidate's bore, stroke, pressure, mounting and certification with the requirement: all must be

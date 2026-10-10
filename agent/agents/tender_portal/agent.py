@@ -2,7 +2,7 @@
 import re
 
 import llm
-from agents.common import STR, NUM, SYSTEM, arr, context, login_line, obj, site
+from agents.common import STR, NUM, SYSTEM, arr, context, login_line, obj
 
 
 RESULT = obj(
@@ -16,7 +16,7 @@ async def run(task, tab, deadline):
     ref = re.search(r"\(([^()]+)\)\.", task["brief"])
     mission = f"""{context(task)}
 
-{login_line(site(task, tab.site['siteId']))}
+{login_line(tab.site)}
 Your part: on this tender portal, find the tender in the brief (exact reference{f' {ref.group(1)}' if ref else ''}).
 If its documents need an expression of interest ("Teilnahme bekunden"), give it. Collect:
 1. the bill of quantities: every position with its id, description, quantity and unit (Stück, Satz, ...);

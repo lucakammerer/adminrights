@@ -1,6 +1,32 @@
 """Resolvers: apply the brief's rules to the kept evidence, without a browser. See README.md."""
+import json
+
 import llm
 from agents.common import RESOLVE, context, evidence
+
+ROLES = {
+    "tender_portal": "the public tender, its bill of quantities, the bidder Q&A and the bid submission",
+    "supplier_portal": "the buyer's technical specification and its revisions",
+    "erp": "the company's materials, stock, lead times and price conditions",
+    "webmail": "the sales mailbox with the approvals and the signing TAN",
+}
+
+
+async def sites(task) -> dict:
+    """Which website plays which role, judged from the brief: names and ids differ between datasets."""
+    listing = [{"siteId": s["siteId"], "url": s["url"]} for s in task["access"]]
+    by_id = {s["siteId"]: s for s in task["access"]}
+    question = f"""{context(task)}
+
+Websites: {json.dumps(listing)}
+Assign each role exactly one of these websites by its siteId: {json.dumps(ROLES)}
+JSON: {{{", ".join(f'"{role}": "<siteId>"' for role in ROLES)}}}"""
+    for _ in range(2):
+        roles = await llm.ask_json(RESOLVE, question)
+        chosen = [roles.get(role) for role in ROLES]
+        if all(c in by_id for c in chosen) and len(set(chosen)) == len(ROLES):
+            return {role: by_id[roles[role]] for role in ROLES}
+    raise ValueError(f"no clear website per role: {roles}")
 
 
 async def requirements(task, tender, spec, mail) -> dict:

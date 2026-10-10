@@ -1,4 +1,4 @@
-# Mail agent
+# Webmail agent
 
 ## Mission
 
@@ -18,7 +18,7 @@ senders), not from public-1.
 
 ## Implementation
 
-`agent.py` `run` → `llm.investigate`, tag `mail`, at most 60 steps, phase 1 deadline.
+`agent.py` `run` → `llm.investigate`, tag `webmail`, at most 60 steps, phase 1 deadline.
 Always searches "reference + one topic word", because search combines words with AND. Keeps each message via its own
 URL so sender, date and body are complete. Skips TAN mails; `get_tan` fetches those ([submit](../submit/README.md)).
 

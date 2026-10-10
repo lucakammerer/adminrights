@@ -1,7 +1,13 @@
 # Resolvers
 
-Two `ask_json` calls without a browser, in parallel after phase 1. They apply the rules to the evidence and return
-typed facts for `calc`. This is where interpretation happens: which record is valid, what a clause means.
+`ask_json` calls without a browser. `sites` maps the websites to their roles; `requirements` and `commercials` run
+after phase 1, apply the rules to the evidence and return typed facts for `calc`. This is where interpretation happens: which record is valid, what a clause means.
+
+## sites
+
+**Input:** brief and the run's websites (id and URL, no logins). **Output:** one website per role: `tender_portal`,
+`supplier_portal`, `erp`, `webmail`. Runs first, while the browsers connect; `main` only addresses websites by role,
+because ids and names differ between datasets. Two attempts, then the run fails (no role, no bid).
 
 ## requirements
 
@@ -40,7 +46,7 @@ older, future-dated records never apply. Without a condition group, `base` appli
 
 ## Implementation
 
-`agent.py` `requirements`, `commercials`; system prompt `RESOLVE` in `agents/common.py`. `agent/llm.py` `ask_json`:
+`agent.py` `sites`, `requirements`, `commercials`; system prompt `RESOLVE` in `agents/common.py`. `agent/llm.py` `ask_json`:
 JSON mode, up to 3 attempts.
 
 ## Open

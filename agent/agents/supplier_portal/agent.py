@@ -1,6 +1,6 @@
-"""Customer portal agent: the current specification revision from the supplier portal. See README.md."""
+"""Supplier portal agent: the current specification revision from the supplier portal. See README.md."""
 import llm
-from agents.common import NUM, STR, SYSTEM, arr, context, login_line, obj, site
+from agents.common import NUM, STR, SYSTEM, arr, context, login_line, obj
 
 
 RESULT = obj(
@@ -13,11 +13,11 @@ RESULT = obj(
 async def run(task, tab, deadline):
     mission = f"""{context(task)}
 
-{login_line(site(task, tab.site['siteId']))}
+{login_line(tab.site)}
 Your part: on this supplier portal, find the buyer's technical specification for the tender in the brief. Find out
 which revision is marked current/valid (its status, not whichever opens first). Read every requirement of that
 revision (all pages) with bore, stroke, pressure, mounting, certification, catalogue group (Kataloggruppe) and the
 full original wording (it may say the stroke is a usable stroke / nutzbarer Weg with an end-reserve key, or give
 pieces per set). Also list all revisions with date and status. Keep the revision list and every requirement page of
 the current revision with save_evidence. Finish with the result."""
-    return await llm.investigate(tab, SYSTEM, mission, RESULT, deadline, "customer-portal", max_steps=40)
+    return await llm.investigate(tab, SYSTEM, mission, RESULT, deadline, "supplier-portal", max_steps=40)

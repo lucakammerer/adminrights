@@ -6,8 +6,9 @@ and its documentation (`README.md`); `agent/agents/common.py` holds what they sh
 
 ```
 main (budget = min(time left, 19 min), end = start + budget)
+ ├─ Phase 0: resolvers.sites assigns each website its role from the brief (names and ids differ per dataset)
  ├─ Phase 1, parallel, one browser each, deadline end − 9 min
- │   tender_portal.run · customer_portal.run · mail.run · erp.login
+ │   tender_portal.run · supplier_portal.run · webmail.run · erp.login
  ├─ Phase 2, no browser
  │   resolvers.requirements (resolvers.commercials starts too, runs alongside phase 3)
  ├─ Phase 3, parallel in ERP tabs, deadline end − 6 min
@@ -49,7 +50,7 @@ evidence; output is a fixed JSON schema stated in the prompt.
 ## Logs
 
 Every line goes through `llm.log` as `[tag  123s] ...` with the seconds since start. `main` prints one line per phase
-(`tender-portal`, `customer-portal`, `mail`, `requirements`, `commercials`, `erp`, `facts`, `calc`, `answer`, `submit`); every agent
+(`sites`, `tender-portal`, `supplier-portal`, `webmail`, `requirements`, `commercials`, `erp`, `facts`, `calc`, `answer`, `submit`); every agent
 step appears as `[tag  123s] n: tool {args}`.
 
 ## Timing
