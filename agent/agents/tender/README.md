@@ -8,17 +8,17 @@ the portal: the bill of quantities and every bidder Q&A word for word. It does n
 ## Rules
 
 Gathers for 1, 12, 13, 14, 17, 23, 24, 25 (quantity, condition group, withdrawals, technical amendments, units,
-packaging tariff, delivery commitment, setup pool). Decisions happen in [resolvers.md](resolvers.md).
+packaging tariff, delivery commitment, setup pool). Decisions happen in [resolvers](../resolvers/README.md).
 
 ## Input / output
 
 - Input: brief (up to "## Site access"), portal login, reference taken from the brief by regex.
-- Output `TENDER_RESULT`: `tender_reference`, `title`, `positions[]` (`position`, `description`, `quantity`, `unit`),
+- Output `RESULT`: `tender_reference`, `title`, `positions[]` (`position`, `description`, `quantity`, `unit`),
   `clarifications[]` (`number`, `date`, `question`, `answer`), `other_relevant_facts`, plus `evidence`.
 
 ## Implementation
 
-`agent/agent.py` `run_tender` → `llm.investigate`, tag `tender`, at most 45 steps, phase 1 deadline.
+`agent.py` `run` → `llm.investigate`, tag `tender`, at most 45 steps, phase 1 deadline.
 Registers interest ("Teilnahme bekunden") if documents are behind it. Keeps the bill of quantities and every Q&A page
 with `save_evidence`.
 
@@ -30,7 +30,6 @@ with `save_evidence`.
 
 ## Open
 
-- In the first full local run `finish` came back as a string with invalid JSON (verbatim Q&A text). `investigate`
-  wraps it as `{"text": ...}`, so `build_facts` sees no `tender_reference` and the answer's reference is empty.
-  Fix: take the reference from the brief and send a broken `finish` back to the model.
+- `finish` sometimes comes back as a string; `llm.parse_object` recovers the object, else `{"text": ...}`. The answer's
+  reference then still comes from `resolvers.commercials`, but the agent's structured fields are lost.
 - Only searches the tender portal. If the private dataset puts Q&A elsewhere, they are missed.

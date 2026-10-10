@@ -13,19 +13,20 @@ match exactly, and keep every page holding its facts. If there is none, report t
 
 ## Input / output
 
-- `run_erp_login`: login, output `{ok}`.
-- `run_erp_position`: input is one requirement from `resolve_requirements` (5 attributes + `catalogue_group`).
-  Agent output `{material_number, why}`.
-- `extract_erp`: turns that into `ERP_RESULT`: status, attributes, `available_stock_pieces` (unrestricted only),
+- `login`: login, output `{ok}`.
+- `run`: input is one requirement from `resolvers.requirements` (5 attributes + `catalogue_group`).
+  Agent output `{material_number, no_match, why}`. `no_match` is true only after every candidate was checked and
+  none qualifies (→ `no_bid`); an empty result without it means the search didn't finish (→ position omitted).
+- `extract`: turns that into `RESULT`: status, attributes, `available_stock_pieces` (unrestricted only),
   stock and production lead times, `pieces_per_carton`, `allocation_mass`, `surcharge_mass`, `price_index_key`,
   `setup_fee`, `price_condition` (validity, currency, FX key, price unit, number format, scales as shown).
 
 ## Implementation
 
-- `agent/agent.py` `run_erp_login`: tag `erp-login`, at most 20 steps, phase 1. Only warms up the session.
-- `agent/agent.py` `run_erp_position`: tag `erp:<catalogue group>`, at most 40 steps, deadline end − 6 min.
+- `agent.py` `login`: tag `erp-login`, at most 20 steps, phase 1. Only warms up the session.
+- `agent.py` `run`: tag `erp:<catalogue group>`, at most 40 steps, deadline end − 6 min.
   `main` dedupes requirements and runs each in its own tab of the same browser.
-- `agent/agent.py` `extract_erp`: runs as `check` on `finish`. One `ask_json` reads the facts **only from the kept
+- `agent.py` `extract`: runs as `check` on `finish`. One `ask_json` reads the facts **only from the kept
   pages**. If required fields or scale prices are missing, `finish` is refused with a list of what is missing.
 
 ## Pitfalls
@@ -37,6 +38,4 @@ match exactly, and keep every page holding its facts. If there is none, report t
 
 ## Open
 
-- "No matching material" and "agent failed" look the same (`material_number` empty). Both lead to `no_bid`. The agent
-  has to report the difference so `calc` can omit the position in the second case.
 - Waits for phase 2 although it only needs the requirements.
