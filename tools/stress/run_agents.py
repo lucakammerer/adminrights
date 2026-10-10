@@ -437,12 +437,14 @@ async def main() -> int:
                     summaries[f"erp:{key[-1]}"] = info
                 (out / "erp.json").write_text(json.dumps(erp_found, indent=1, ensure_ascii=False))
 
+            others = [results["supplier_portal"]] if "supplier_portal" in results else []  # as agent.main passes
             if args.s4 and args.resolve and requirements:
                 first = await orchestration.safe("commercials", resolvers.commercials(
-                    task, results["tender_portal"], results["webmail"]), time.time() + 300)
+                    task, results["tender_portal"], results["webmail"], others), time.time() + 300)
                 (out / "commercials-first-pass.json").write_text(json.dumps(first, indent=1, ensure_ascii=False))
                 SWEEP["first"] = commercials_score(first, facts)
-                open_facts = sweep_agent.gaps(results["tender_portal"], requirements, first, erp_found or None)
+                open_facts = [g for g in sweep_agent.gaps(results["tender_portal"], {}, first)
+                              if g["resolver"] == "commercials"]  # as agent.main: commercial facts, during the ERP stage
                 log("s4", f"open facts after the first pass: {[g['fact'] for g in open_facts]}")
                 started = time.time()
                 swept = await sweep_agent.sweep(task, tabs, open_facts, time.time() + 240) if open_facts else {}
@@ -472,8 +474,9 @@ async def main() -> int:
             rows += erp_score(erp_found, requirements, facts)
     if args.resolve and "tender_portal" in results and "webmail" in results:
         started = time.time()
+        others = [results["supplier_portal"]] if "supplier_portal" in results else []  # as agent.main passes
         commercials = await orchestration.safe("commercials", resolvers.commercials(
-            task, results["tender_portal"], results["webmail"]), time.time() + 300)
+            task, results["tender_portal"], results["webmail"], others), time.time() + 300)
         summaries["commercials"] = {"seconds": round(time.time() - started)}
         (out / "commercials.json").write_text(json.dumps(commercials, indent=1, ensure_ascii=False))
         rows += commercials_score(commercials, facts)

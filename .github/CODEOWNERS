@@ -5,7 +5,6 @@
 
 # Efficiency
 /agent/agent.py                  @FinnPixel
-/agent/budget.py                 @FinnPixel
 /agent/llm.py                    @FinnPixel
 /agent/agent.json                @FinnPixel
 /agent/agents/submit/            @FinnPixel

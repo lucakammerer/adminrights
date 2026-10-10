@@ -37,6 +37,8 @@ bindingly. Without a submission the run scores 0.
   second look-up the submit agent then started ran out of time, so nothing was signed.
 - Extra tool `verify_summary` (I6b): code reads the summary page and reports every unit price and the total net that
   isn't on it as calculated; the mission calls it before the TAN request. Values the summary doesn't show are fine.
+  Once the summary shows any non-zero breakdown value (base price, surcharge, packaging, project bonus), it checks
+  every non-zero one, so a breakdown value typed wrong is caught too.
 - Fixed guardrails in the mission: no extra positions, none skipped except the `omitted` ones (omit option in the form), never tick our own terms, request the TAN exactly
   once (a new request invalidates the old one, valid 5 min), net not gross.
 
