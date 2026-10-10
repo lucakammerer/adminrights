@@ -1,5 +1,6 @@
 """reader.js and fetched documents (I17), on synthetic pages for each trap category: decoys out; generated labels,
-tooltips and canvas marks in; off-screen text marked; a fetched page's own style rules respected; a PDF read.
+tooltips and canvas marks in; off-screen text marked; a fetched page's own style rules respected; a PDF read; a table
+row on one line and a tooltip a control names read once.
 
 Run from the repo root: uv run --project agent --no-sync python -m unittest discover -s tests -v
 """
@@ -32,6 +33,8 @@ PAGE = """<!doctype html><html><head><style>
 <span role="tooltip" style="visibility:hidden">Valid until 2030-12-31 <b>hover value 31</b></span>
 <a href="/x">Open <span aria-hidden="true">decoy-in-link</span></a>
 <button aria-describedby="d1">Check</button><span id="d1">Approved <b hidden>decoy-in-description</b></span>
+<table><tr><th>Ref</th><th>Value</th></tr><tr><td><div>R-1</div></td><td><p>12</p><p>units</p></td></tr></table>
+<button aria-describedby="t9">Date</button><span id="t9" role="tooltip">2031-05-06</span>
 </body></html>"""
 
 
@@ -112,6 +115,15 @@ class Reader(unittest.TestCase):
         for text in (self.live, self.fetched):
             self.assertIn("(off-screen text: screen reader value 17)", text)
             self.assertIn("(off-screen text: off page value 23)", text)
+
+    def test_a_table_row_is_one_line(self):
+        for text in (self.live, self.fetched):
+            self.assertIn("| Ref | Value\n| R-1 | 12 units\n", text)
+
+    def test_a_tooltip_a_control_names_is_read_once(self):
+        for text in (self.live, self.fetched):
+            self.assertIn('button "Date" (info: 2031-05-06)', text)
+            self.assertEqual(text.count("2031-05-06"), 1)
 
     def test_pdf_is_read(self):
         self.assertIn("Delivery note 0815", describe_file("note.pdf", minimal_pdf("Delivery note 0815")))
