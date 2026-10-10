@@ -5,11 +5,11 @@ How a change gets from a branch to a submission. Only Luca starts test runs and 
 ## Branches and the test loop
 
 Finn pushes to `p1/<topic>`, Yazan to `p2/<topic>`, each started from main. `tools/ci.py` runs every 5 minutes
-on the server `luca-kammerer` from a clone of the release branch (`python tools/ci.py`, one tick):
+on the server `luca-kammerer` from a clone of the repo (`python tools/ci.py`, one tick):
 
-1. Fetch. Candidates, in order: the base (origin/main plus the release branch's pushed head), each `p1/*` and `p2/*` head
-   merged onto the base, and all of them together once there are two or more. A merge conflict is reported to the
-   owner, never resolved by the loop.
+1. Fetch. Candidates, in order: origin/main alone, each `p1/*` and `p2/*` head and the clone's own pushed branch
+   merged onto origin/main, and all of them together once there are two or more. Every branch is compared with main,
+   never with another unmerged branch. A merge conflict is reported to the owner, never resolved by the loop.
 2. Skip what was tested: the key is the git tree of `agent/`, the only part that gets uploaded.
 3. Free gates: compile, `tools/audit_package.py` (no public-1 value, no own browser), and the unit tests in `tests/`
    (among them the calc golden test, which must score 100).
@@ -17,14 +17,14 @@ on the server `luca-kammerer` from a clone of the release branch (`python tools/
 5. When a run ends: its log goes to `bench/.ci/logs/`, the logged answer is scored with `eval/compare.py`, and a row is
    added to `bench/RUNS.md`. The outcome column is filled by hand: which phase lost the points and whose code it is.
 
-Nothing is pushed. A branch that beats the base goes to main by PR after Luca's yes.
+Nothing is pushed. A branch that beats main goes to main by PR after Luca's yes.
 
 ### Running the loop
 
 - Needs git with read access to origin, `atira` on the PATH and signed in for the team (`atira login`), `uv` and
   Python ≥ 3.10. No environment variables. The tests sync `agent/.venv` on first use.
 - State outside git: `bench/.ci/state.json` (tested `agent/` trees and their runs, runs still open) and
-  `bench/.ci/logs/` (run logs; the audit also reads them). Without them a fresh clone tests the current base once
+  `bench/.ci/logs/` (run logs; the audit also reads them). Without them a fresh clone tests the current main once
   more and doesn't collect runs that another machine started.
 - Rows it adds to `bench/RUNS.md` stay in that clone until committed.
 - Cron, never two ticks at once: `*/5 * * * * cd <clone> && flock -n bench/.ci/lock python3 tools/ci.py >> bench/.ci/ci.log 2>&1`
