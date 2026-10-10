@@ -36,7 +36,7 @@ Nothing is pushed. A branch that beats the base goes to main by PR after Luca's 
 | `tools/check_release.sh` | Definition of Done check (RULES §9): audit, unit tests, `agent.json`; green = exit 0 |
 | `eval/compare.py answer.json` | Points per field against the public-1 reference `eval/expected.json` |
 | `tools/score.sh` | Local dry run against the scouting sites (`DRY_RUN=1` stops before the submission), scored with `eval/compare.py`; no sandbox run needed |
-| `tools/audit_package.py [--agent DIR \| --package ID] [run.log ...]` | Fails on a public-1 value (reference values plus ids, hosts, site path segments and addresses from run logs), an own browser launch or an API key; `--package` audits what was uploaded |
+| `tools/audit_package.py [--agent DIR \| --package ID] [run.log ...]` | Fails on a public-1 value (reference values plus ids, hosts, site path segments and addresses from run logs), a German word of the public sites the brief doesn't tell every team (quoted labels in `scouting-notes.md`, the scouted Q&A), an own browser launch or an API key; `--package` audits what was uploaded |
 | `tests/` | Unit tests; `tests/fixtures/facts.json` holds the complete facts of one public-1 run |
 | `bench/RUNS.md` | One row per run: platform quality, offline score, time, cost, cause |
 
