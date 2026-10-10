@@ -1,8 +1,10 @@
 """Score an RFQ answer against eval/expected.json (docs/scoring.md, bid case).
 
-usage: python eval/compare.py answer.json [expected.json]
+usage: python eval/compare.py <answer.json | agent log> [expected.json]
+A log is searched for the last `[answer ...] {...}` line that agent.py prints.
 """
 import json
+import re
 import sys
 from decimal import ROUND_HALF_UP, Decimal
 from pathlib import Path
@@ -85,8 +87,19 @@ def score(ans, exp):
     return rows, total, ref_ok
 
 
+def load_answer(path):
+    text = Path(path).read_text()
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        found = re.findall(r"^\[answer[^\]]*\]\s*(\{.*\})\s*$", text, re.M)
+        if not found:
+            sys.exit(f"no answer JSON or [answer] log line in {path}")
+        return json.loads(found[-1])
+
+
 def main():
-    ans = json.loads(Path(sys.argv[1]).read_text())
+    ans = load_answer(sys.argv[1])
     exp_path = Path(sys.argv[2]) if len(sys.argv) > 2 else Path(__file__).with_name("expected.json")
     exp = json.loads(exp_path.read_text())
     rows, total, eligible = score(ans, exp)

@@ -14,6 +14,7 @@ RESULT = obj(
     price_condition=obj(valid_from=STR, valid_to=STR, currency=STR, fx_key=STR, price_unit_pieces=NUM,
                         number_format=STR, scales=arr(obj(from_quantity=NUM, price_as_shown=STR))),
     other_relevant_facts=STR)
+FINISH_GRACE = 30  # seconds for a forced finish, which before ran to the stage cut and left the extract none
 REQUIRED = ("material_number", "available_stock_pieces", "lead_time_stock_weeks", "lead_time_production_weeks",
               "pieces_per_carton", "allocation_mass", "surcharge_mass", "price_condition")
 
@@ -52,8 +53,8 @@ as shown and the record's own number format and price unit.
     if not missing:
         return data, ""
     return data, ("Not done: the kept pages do not show " + ", ".join(missing) + f" for {data['material_number']}. "
-                  "Open the pages that show them (for prices: the quantity-scale view of the condition record valid "
-                  "on the scenario date), keep them with save_evidence, then call finish again.")
+                  "Open the pages that show them (for prices: the quantity scales of the condition record valid on "
+                  "the scenario date), keep them with save_evidence, then call finish again.")
 
 
 async def run(task, tab, requirement: dict, deadline):
@@ -61,14 +62,15 @@ async def run(task, tab, requirement: dict, deadline):
 
 {login_line(tab.site)} (you should already be logged in)
 Your part: find the material for one requirement in this ERP. Requirement: {json.dumps(requirement, ensure_ascii=False)}
-1. Search the catalogue group (Kataloggruppe) and read every result page.
+1. Search by the requirement's catalogue group (the brief says how records are found) and read every result page.
 2. Compare each candidate's bore, stroke, pressure, mounting and certification with the requirement: all must be
-   exactly equal. The material must be active/released (not blocked/gesperrt). If you checked every candidate
-   and none qualifies, finish with material_number empty, no_match true and say why.
-3. For the chosen material, keep with save_evidence every page that shows its facts: its description (pieces per
-   carton, allocation mass, surcharge mass, price index key), technical data, status and lead times (from stock and
-   production), the stock detail by storage location / stock type, and the price condition valid on the scenario
-   date including its quantity-scale prices (prices may only be on a separate scales view).
+   exactly equal. The material must be active/released, not blocked (the site may show that in German or as a status
+   code). If you checked every candidate and none qualifies, finish with material_number empty, no_match true and say
+   why.
+3. For the chosen material, keep with save_evidence every page that shows its facts: pieces per carton, allocation
+   mass, surcharge mass, price index key, technical data, status, lead times (from stock and production), the stock
+   by storage location / stock type, and the price condition valid on the scenario date including its quantity-scale
+   prices (they may sit on a different view than the condition's header).
 Finish with material_number and why; the facts are read from the pages you kept."""
     pages: list[str] = []
     doubted: set[str] = set()
@@ -84,8 +86,13 @@ Finish with material_number and why; the facts are read from the pages you kept.
                           "and choose the one that matches exactly, or finish with no_match if none does.")
         return data, problem
 
-    result = await llm.investigate(tab, SYSTEM, mission, obj(material_number=STR, no_match=BOOL, why=STR), deadline,
-                                   f"erp:{requirement.get('catalogue_group')}", max_steps=40, check=check)
+    tag = f"erp:{requirement.get('catalogue_group')}"
+    with llm.limits(deadline):  # a forced finish must not eat the time the extract below needs after it
+        result = await llm.investigate(tab, SYSTEM, mission, obj(material_number=STR, no_match=BOOL, why=STR),
+                                       deadline - FINISH_GRACE, tag, max_steps=40, check=check)
     if result.get("material_number") and not result.get("price_condition"):
-        result, _ = await extract(task, requirement, result, result.get("evidence", []))
+        try:
+            result, _ = await extract(task, requirement, result, result.get("evidence", []))
+        except Exception as error:  # noqa: BLE001  out of time: the material and its kept pages still count
+            llm.log(tag, f"extract failed: {type(error).__name__}: {str(error)[:200]}")
     return result

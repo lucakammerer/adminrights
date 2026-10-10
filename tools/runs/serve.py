@@ -5,7 +5,8 @@ usage: python3 tools/runs/serve.py [port]    then open http://127.0.0.1:8770
 
 Read-only. Uses the personal token (`atira token`, or ATIRA_TOKEN) and the local git history: a run's package is
 matched to the commit whose agent/ tree it equals, or to the closest one plus the files that differ, so every run
-shows the code it ran, with or without a label.
+shows the code it ran, with or without a label. Each run is compared with the previous run that signed a bid: the
+commits since that change agent/, with their pull requests.
 """
 import io
 import json
@@ -30,8 +31,10 @@ TARGET_MINUTES, TARGET_COST = 8, 0.10
 OWNER = {"time": "Efficiency · Finn", "evidence": "Generalization · Yazan", "logic": "Quality & Release · Luca"}
 FIELDS = ("material_number", "quantity", "base_unit_price", "surcharge_per_unit", "packaging_per_unit",
           "rebate_total", "unit_price", "lead_time_weeks")
+PULL = re.compile(r"Merge pull request #(\d+)")
 finished: dict[str, dict] = {}  # a finished run never changes, so it is built once
 sources: dict[str, dict] = {}  # a run's package never changes either
+ranges: dict[tuple[str, str, str], list[dict]] = {}
 
 
 def get(path: str, raw: bool = False):
@@ -45,6 +48,9 @@ def git(*args: str, stdin: str | None = None, index: str | None = None) -> str:
     env = {**os.environ, "GIT_INDEX_FILE": index} if index else None
     done = subprocess.run(["git", "-C", str(REPO), *args], input=stdin, capture_output=True, text=True, env=env, check=False)
     return done.stdout.strip()
+
+
+GITHUB = re.sub(r"^git@github\.com:", "https://github.com/", git("remote", "get-url", "origin")).removesuffix(".git")
 
 
 def package_tree(run_id: str) -> str:
@@ -108,6 +114,37 @@ def provenance(run: dict) -> dict:
         "files": git("diff", "--name-only", f"origin/main...{commit}", "--", "agent").splitlines(),
         "differs": differs,
     }
+
+
+def pull_request(commit: str) -> int | None:
+    """The pull request that brought a commit into main, if it is there yet."""
+    merges = git("log", "--merges", "--ancestry-path", "--reverse", "--format=%s", f"{commit}..origin/main")
+    return next((int(m[1]) for m in map(PULL.match, merges.splitlines()) if m), None)
+
+
+def changes(base: str, head: str) -> list[dict]:
+    """The package commits head has on top of base. Cached until main moves, since a merge gives a commit its PR."""
+    key = (base, head, git("rev-parse", "origin/main"))
+    if key not in ranges:
+        ranges[key] = []
+        for line in git("log", "--no-merges", "--format=%h %s", f"{base}..{head}", "--", "agent").splitlines():
+            commit, subject = line.split(" ", 1)
+            pr = pull_request(commit)
+            ranges[key].append({"commit": commit, "subject": subject, "url": f"{GITHUB}/commit/{commit}",
+                                "pr": pr and {"number": pr, "url": f"{GITHUB}/pull/{pr}"}})
+    return ranges[key]
+
+
+def compare(listed: list[dict]) -> None:
+    """Point each run at the previous run that signed a bid and the commits since."""
+    bids = [r for r in listed if r.get("has_answer") and r.get("score")]
+    for run in listed:
+        run["baseline"] = None
+        base = next((b for b in bids if b["created_at"] < run["created_at"]), None)
+        if base and base["source"].get("commit") and run["source"].get("commit"):
+            a, b = base["source"], run["source"]
+            same = not (a["differs"] or b["differs"] or git("diff", "--name-only", a["commit"], b["commit"], "--", "agent"))
+            run["baseline"] = {"run_id": base["run_id"], "commits": changes(a["commit"], b["commit"]), "same": same}
 
 
 def phases(run_id: str) -> list[dict]:
@@ -202,7 +239,9 @@ def runs() -> list[dict]:
     if any(r["run_id"] not in sources for r in listed):
         git("fetch", "--quiet", "origin")
     with ThreadPoolExecutor(max_workers=3) as pool:
-        return list(pool.map(load, listed))
+        loaded = sorted(pool.map(load, listed), key=lambda r: r["created_at"], reverse=True)
+    compare(loaded)
+    return loaded
 
 
 class Handler(BaseHTTPRequestHandler):

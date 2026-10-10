@@ -123,7 +123,8 @@ Every browser agent is the same loop; agents differ only in mission, result sche
 - **`check`:** optional validator on `finish`: a problem refuses `finish` and the agent keeps working.
 - **Time:** 60 s before the deadline the agent is told to finish (the caller may send its own warning earlier: submit
   does, see §3.4); at the deadline or the step limit `finish` is forced via `tool_choice` and the result is marked
-  `forced`; `main` drops `no_match` from a forced ERP result.
+  `forced`; a `finish` the agent sends after the warning is marked `forced` too (one ERP agent answered `no_match`
+  for a search it never completed); `main` drops `no_match` from a forced ERP result.
 - **Evidence:** `save_evidence` never keeps an error page (HTTP ≥ 400; a URL is retried twice first, the model is told)
   and keeps a page with the same content only once.
 - **`check` bounds:** its model calls take at most `CHECK_TIMEOUT` (60 s) each and end at the agent's deadline; a
@@ -393,7 +394,7 @@ Every item has exactly one owner. When it touches a file someone else owns (§14
 
 | ID | Change | Where | Acceptance | Rules | Owner |
 | --- | --- | --- | --- | --- | --- |
-| I1 | Unfinished ≠ no match (§4.4). Since PR #5 a search cut by its hard deadline is omitted; remaining: a forced finish can still claim no match. **First slice, before I9:** `investigate` marks a forced `finish`, and a forced result never counts as `no_match` | `llm.py` (the mark), `agents/erp`, `validate.py`, `calc.compute` | a run with a starved ERP stage never answers no_bid | 3, 8, 9 | L |
+| I1 | Unfinished ≠ no match (§4.4). Since PR #5 a search cut by its hard deadline is omitted, and `investigate` marks every forced `finish` (deadline, step limit, or sent after the time warning), whose `no_match` `main` drops; remaining: a `no_match` only with evidence that every candidate was compared | `llm.py` (the mark), `agents/erp`, `validate.py`, `calc.compute` | a run with a starved ERP stage never answers no_bid | 3, 8, 9 | L |
 | I2 | Model calls bounded by the caller's deadline; concurrency cap. Since PR #5 the phase cuts cancel slow calls; remaining: the bound inside a phase, the cap | `llm.py` | test with a fake slow client | T1.3 | F |
 | I3 | ✅ Site roles from the brief (PR #5); the run's submission target pins the tender portal, and an unclear assignment falls back by elimination instead of crashing (F21). Tests: `tests/test_sites.py`, `tools/stress/s1_sites.py` | `agent.py`, `agents/resolvers` | stress level S1 passes (§14.1) | T1.12 | Y |
 | I4 | Dependency graph + per-stage budgets (§4.1, §4.2). Since PR #5 every phase has a hard cut; remaining: start stages when their inputs exist, budgets computed at stage start | `agent.py`, `budget.py`, `agents/erp` | dry run: ERP starts during the first stage; answer < 8 min | T1.3, T3.2 | F |

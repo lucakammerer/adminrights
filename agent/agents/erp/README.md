@@ -28,6 +28,9 @@ match exactly, and keep every page holding its facts. If there is none, report t
   `main` dedupes requirements and runs each in its own tab of the same browser.
 - `agent.py` `extract`: runs as `check` on `finish`. One `ask_json` (effort low: 13 s instead of 56 s; thinking off rewrote number formats) reads the facts **only from the kept
   pages**. If required fields or scale prices are missing, `finish` is refused with a list of what is missing.
+- `agent.py` `run`: the search steps end `FINISH_GRACE` (30 s) before the deadline and a forced finish by the deadline,
+  so a search cut at its deadline still gets its kept pages read by `extract` before the stage cut (end − 6 min). If
+  that read fails, the material and its kept pages still count.
 - `agent/agent.py` `erp_search`: a `no_match` (it turns into `no_bid`) is confirmed by a second, independent agent in a
   fresh tab when at least 150 s remain before the ERP deadline; if that one finds a material, its result wins.
 - `agent.py` `run` `check`: after `extract`, `validate.material_mismatch` compares bore, stroke, pressure, mounting and
@@ -36,9 +39,9 @@ match exactly, and keep every page holding its facts. If there is none, report t
 
 ## Pitfalls
 
-- SAP-style transaction codes, F4 search help, status codes, short session timeout.
+- Transaction codes, search helps, status codes instead of words, short session timeout.
 - Empty or over-broad searches list nothing; narrow to at most 20 hits.
-- Scale prices are often only in a separate view of the condition; several conditions with validity periods.
+- Scale prices may sit on another view than the condition header; several conditions with validity periods.
 - Stock by storage location and stock type; blocked stock doesn't count.
 
 ## Open

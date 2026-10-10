@@ -106,7 +106,7 @@ BROWSER_TOOLS = [
         ["ref", "option"]),
     _fn("check", "Tick (checked=true) or untick a checkbox or radio button by ref.",
         {**REF, "checked": {"type": "boolean"}}, ["ref"]),
-    _fn("press", "Press a key on the focused element, e.g. Enter, Escape, F4, Tab.", {"key": {"type": "string"}},
+    _fn("press", "Press a key on the focused element, e.g. Enter, Escape, Tab.", {"key": {"type": "string"}},
         ["key"]),
     _fn("back", "Go back in the browser history."),
     _fn("form", "Work through a form in one go: steps run in order, each waits for the page to settle. A step is "
@@ -126,7 +126,7 @@ BROWSER_TOOLS = [
         "page, a Q&A page, a material record). Give its URL (a link target or results page) or leave it empty for the "
         "current page. The analyst reads exactly what you keep, so keep every page that holds facts the rules need, "
         "and nothing unrelated.", {"url": {"type": "string"}, "label": {"type": "string",
-                                   "description": "what the page is, e.g. 'Rabattfreigabe 24.01. inbox'"}},
+                                   "description": "what the page is, e.g. 'approval message in archive'"}},
         ["label"]),
     _fn("note", "Save facts you have verified, so you keep them when old page reads are shortened. Be exact: "
         "copy ids, numbers, dates and wording.", {"text": {"type": "string"}}, ["text"]),
@@ -159,7 +159,7 @@ async def investigate(tab, system: str, mission: str, finish_schema: dict, deadl
     check(result, evidence) -> (result, problem): runs on finish, its model calls bounded by CHECK_TIMEOUT and the
     deadline; a problem sends the model back to work, a check that fails or runs out of time lets the result through.
     `warning` goes to the model `warn_at` seconds before the deadline. A finish forced by the deadline or the step
-    limit is marked `forced`: whatever it says, the agent did not finish its mission."""
+    limit, or sent after the warning, is marked `forced`: whatever it says, the agent did not finish its mission."""
     tools = BROWSER_TOOLS + (extra_tools or []) + [_fn(
         "finish", "Return your findings when the mission is done (or when told time is up: your best findings).",
         {"result": finish_schema}, ["result"])]
@@ -244,6 +244,9 @@ async def investigate(tab, system: str, mission: str, finish_schema: dict, deadl
                         log(tag, f"finish refused: {problem}")
                         messages.append({"role": "tool", "tool_call_id": call.id, "content": problem})
                         continue
+                if warned:  # told to stop: "best findings", not a finished mission (an ERP agent answered no_match
+                    log(tag, "finish after the time warning: marked forced")  # for a search it never completed)
+                    return {**result, "evidence": evidence, "forced": True}
                 return {**result, "evidence": evidence}
             try:
                 if name == "note":

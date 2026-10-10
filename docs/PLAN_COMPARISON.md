@@ -225,7 +225,7 @@ Luca's PR #5, merged after this analysis, changes several findings. The findings
 | F3 | partly: stages still wait for each other, but each one is cut hard |
 | F4 | partly: a phase's hard cut cancels slow calls; there is no bound inside a phase |
 | F7 | partly: rates written as text (`1 USD = x EUR`) are now parsed; ambiguous numbers are still guessed |
-| F16 | partly: a search cut by its hard deadline is omitted; one forced to finish before the cut can still claim no match |
+| F16 | fixed: a search cut by its hard deadline, forced to finish, or finishing after its time warning never counts as no match |
 | F19 | partly: the offsets are still fixed, but no stage can overrun its cut |
 | F20 | **fixed:** `finish` results that aren't JSON objects are refused |
 | F21 | **new, high:** `agent.py` awaits the role assignment outside `safe`; if the model can't assign the roles clearly, `resolvers.sites` raises and the run ends without an answer (T1.3, T1.12 → I3). **Fixed in I3:** `sites` never raises |
