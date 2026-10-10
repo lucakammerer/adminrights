@@ -39,7 +39,8 @@ async def login(task, tab, deadline):
     mission = f"""{login_line(tab.site)}
 Your part: log in to this ERP and get past every cookie, notice or unlock step until you reach its main screen
 (where materials can be searched). Then finish with {{"ok": true}}."""
-    return await llm.investigate(tab, system(task), mission, obj(ok=BOOL), deadline, "erp-login", max_steps=20)
+    return await llm.investigate(tab, system(task), mission, obj(ok=BOOL), deadline, "erp-login", max_steps=20,
+                                 effort=llm.NAV_EFFORT)
 
 
 async def extract(task, requirement: dict, chosen: dict, pages: list[str], asked: set | None = None) -> tuple[dict, str]:

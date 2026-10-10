@@ -14,7 +14,15 @@ from openai.lib.streaming.chat import ChatCompletionStreamState
 import paging
 
 MODEL = os.environ.get("AGENT_MODEL", "qwen3.8-flash-next")
+# "<provider>/<model>" runs on OpenRouter with the team secret OPENROUTER_API_KEY, through the run's proxy: no shared
+# queue (35-47 % of the hosted model's call time was queue wait) and published prices
+OPENROUTER = "/" in MODEL
+# Anthropic models cache only behind a breakpoint; this top-level one moves with the conversation
+CACHE = {"cache_control": {"type": "ephemeral"}} if MODEL.startswith("anthropic/") else {}
 STEP_EFFORT = os.environ.get("STEP_EFFORT", "low")  # reasoning per browser step; latency is mostly thinking tokens
+# Agents that only navigate and keep pages word for word: no thinking. A step took half the time on a probe; the
+# number-format rewriting that ruled out "none" happens only where a model copies values (ERP, submit, resolvers).
+NAV_EFFORT = os.environ.get("NAV_EFFORT", "none")
 KEEP_STEPS = 4  # tool results of the latest steps stay in full; older page reads shrink so the context stays small
 # Older reads shrink in batches, not every step: a shortened read changes the history, so the prompt cache only covers
 # what comes before it. Trimming each step re-sent the latest pages at full price on every call (50-64% of a run's
@@ -68,8 +76,12 @@ def client() -> AsyncOpenAI:
     global _client
     if _client is None:
         # no retries inside the SDK: they would multiply the timeout behind chat's back
-        _client = AsyncOpenAI(base_url=os.environ["QWEN_BASE_URL"], api_key=os.environ["QWEN_API_KEY"],
-                              timeout=CALL_TIMEOUT, max_retries=0)
+        if OPENROUTER:
+            proxy = os.environ.get("LLM_PROXY_URL")
+            url, key = (f"{proxy}/openrouter/v1" if proxy else "https://openrouter.ai/api/v1"), "OPENROUTER_API_KEY"
+        else:
+            url, key = os.environ["QWEN_BASE_URL"], "QWEN_API_KEY"
+        _client = AsyncOpenAI(base_url=url, api_key=os.environ[key], timeout=CALL_TIMEOUT, max_retries=0)
     return _client
 
 
@@ -77,7 +89,8 @@ async def reply(messages: list, tools: list | None, silence: float, **kwargs):
     """One streamed model reply, assembled like a non-streamed one; every read must bring a byte within `silence`. The
     snapshot, not get_final_completion: that raises on a reply cut at its length limit, which counted before."""
     stream = await client().chat.completions.create(model=MODEL, messages=messages, tools=tools, stream=True,
-                                                    stream_options={"include_usage": True}, timeout=silence, **kwargs)
+                                                    stream_options={"include_usage": True}, timeout=silence,
+                                                    **({"extra_body": CACHE} if CACHE else {}), **kwargs)
     state, chunks = ChatCompletionStreamState(), 0
     async with stream:
         async for chunk in stream:
@@ -221,12 +234,12 @@ async def page_status(tab) -> int:
 
 async def investigate(tab, system: str, mission: str, finish_schema: dict, deadline: float, tag: str,
                       extra_tools: list | None = None, handlers: dict | None = None, max_steps: int = 60,
-                      check=None, warn_at: float = 60, warning: str = FINISH_NOW) -> dict:
+                      check=None, warn_at: float = 60, warning: str = FINISH_NOW, effort: str = STEP_EFFORT) -> dict:
     """Let the model work the tab until it calls finish(result) or the deadline passes.
 
     check(result, evidence) -> (result, problem): runs on finish, its model calls bounded by CHECK_TIMEOUT and the
     deadline; a problem sends the model back to work, a check that fails or runs out of time lets the result through.
-    `warning` goes to the model `warn_at` seconds before the deadline. A finish forced by the deadline or the step
+    `warning` goes to the model `warn_at` seconds before the deadline; `effort` is the reasoning per step. A finish forced by the deadline or the step
     limit, or sent after the warning, is marked `forced`: whatever it says, the agent did not finish its mission."""
     tools = BROWSER_TOOLS + [FINISH] + (extra_tools or [])  # the same for every agent but submit's own extra tools
     try:  # like every tool, the first read never outlasts TOOL_TIMEOUT: a page that never returns can't eat the stage
@@ -312,7 +325,7 @@ async def investigate(tab, system: str, mission: str, finish_schema: dict, deadl
             break
         try:
             with limits(deadline):  # a step never eats the grace the forced finish below needs
-                reply = await chat(messages, tools, **({"reasoning_effort": STEP_EFFORT} if STEP_EFFORT else {}))
+                reply = await chat(messages, tools, **({"reasoning_effort": effort} if effort else {}))
         except Exception as error:  # noqa: BLE001  out of time or the model keeps failing: finish with what is kept
             log(tag, f"step failed: {type(error).__name__}: {str(error)[:200]}")
             break

@@ -36,4 +36,5 @@ search URL's shape is known, fetch independent searches and result pages in one 
 above is kept or its searches came back empty. Keep superseded and conditional records too (they are judged later);
 skip messages for other, merely similar references and the signing-TAN mails. {ALSO_KEEP} Finish with a one-line list
 of what you kept and the mailbox's own e-mail address (own_address) as shown on the site."""
-    return await llm.investigate(tab, system(task), mission, RESULT, deadline, "webmail", max_steps=60)
+    return await llm.investigate(tab, system(task), mission, RESULT, deadline, "webmail", max_steps=60,
+                                 effort=llm.NAV_EFFORT)
