@@ -36,7 +36,7 @@ that request (highest request number / newest), open it and finish with the TAN 
 
     rows = "\n".join(
         f"- position {p['position']}: material {p['material_number']} ({specs.get(p['position'], '')}), "
-        f"quantity {p['quantity']} Stück, unit price "
+        f"quantity {p['quantity']} pieces, unit price "
         f"{german(p['unit_price'])} EUR, lead time {p['lead_time_weeks']} weeks, base price {german(p['base_unit_price'])}, "
         f"surcharge per piece {german(p['surcharge_per_unit'])}, packaging per piece {german(p['packaging_per_unit'])}, "
         f"project bonus for the position {german(p['rebate_total'])}" for p in answer["positions"])
@@ -55,7 +55,7 @@ and end it with the page's next-step button. Choices that depend on each other (
 each choice followed by its apply button. Pick options by the text the page shows (it may word a value differently
 than the specification above). Fields in collapsed sections are opened by the form tool. If a step fails, send the
 rest of that page again in one form call, with the failed step corrected. Never add extra positions, never skip a
-position unless it is listed to omit, never tick your own terms and conditions (AGB). Before you request the signing
+position unless it is listed to omit, never tick an option to add our own general terms and conditions. Before you request the signing
 TAN, call verify_summary on the summary page and correct what it reports. When the form asks for the signing TAN,
 request it once, then call get_tan with the portal's message (the newest request wins; a new request invalidates the
 old TAN; a TAN is valid for five minutes). Review the summary, then submit bindingly; the run ends when the bid is accepted.
