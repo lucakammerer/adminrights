@@ -1,7 +1,8 @@
 # Calculation
 
 No model. `agent/calc.py`: `facts` merges the agents' results, `compute` calculates. Every value a model supplied is read
-through `d`/`number`, so text like "7 pieces" or "3 weeks" cannot crash the run; `compute` runs outside `safe`.
+through `d`/`number`, so text like "7 pieces" or "3 weeks" cannot crash the run, and every object or list through
+`record`/`records`, so null, a string or a missing key counts as empty; `facts` and `compute` run outside `safe`.
 
 ## Rules
 
@@ -34,6 +35,7 @@ and bonus membership, allocation mass. Plus reference, discount, pool fee, bonus
 8. Total = Σ quantity × final price, to the cent. Plus a calculation trace (`trace`) for the logs; a position priced
    without its FX rate or metal index is marked `MISSING` there.
 
-Tests: `tests/test_calc.py` (public-1 golden test from `tests/fixtures/facts.json`, values written as text, parsing).
+Tests: `tests/test_calc.py` (public-1 golden test from `tests/fixtures/facts.json`, values written as text, model
+output in other shapes, parsing).
 
 Reported fields: base, surcharge per piece (mass + setup, before discount), packaging per piece, bonus per position.

@@ -102,6 +102,24 @@ class Edges(unittest.TestCase):
                          {"a": Decimal("0.33"), "b": Decimal("0.67")})
 
 
+class Shapes(unittest.TestCase):
+    def test_model_output_in_other_shapes_never_crashes(self):
+        """facts and compute run outside `safe`: a crash there loses an answer the run already found."""
+        requirements = {"positions": [{"position": "1", "final_quantity_pieces": 10}, {"final_quantity_pieces": 3}]}
+        priced = {"material_number": "M", "price_index_key": "X", "surcharge_mass": "1 kg",
+                  "price_condition": {"scales": [{"from_quantity": 1, "price_as_shown": "10"}, {"from_quantity": 5}]}}
+        cases = [
+            ({"positions": None, "discount": "5 %", "fx_rates": None, "metal_indices": []}, {"1": "text"}),
+            ({"positions": [{"carton_price": 1}, "text"]}, {"1": {"material_number": "M", "price_condition": []}}),
+            ({}, {"1": {"material_number": "M", "price_condition": {"scales": [{"price_as_shown": "10"}, "x"]}}}),
+            ({"project_bonus_bands": [{"from": 0}], "positions": [{"position": "1", "project_bonus_member": True,
+              "delivery_commitment": {"material_number": "M", "max_pieces": 99}}]}, {"1": priced}),
+        ]
+        for commercials, erp in cases:
+            with self.subTest(commercials=commercials, erp=erp):
+                calc.compute(calc.facts({}, requirements, commercials, erp))
+
+
 class Parsing(unittest.TestCase):
     def test_grams_to_kg(self):
         for text, kg in [("2125 g", 2.125), ("2.125 g", 2.125), ("2,125 g", 2.125), ("2125 Gramm", 2.125),

@@ -13,6 +13,15 @@ def d(value) -> Decimal:
     return Decimal(str(value if value is not None else 0))
 
 
+def record(value) -> dict:
+    """Models don't always keep the asked shape (null, a string, a list): what isn't an object counts as empty."""
+    return value if isinstance(value, dict) else {}
+
+
+def records(value) -> list[dict]:
+    return [v for v in value if isinstance(v, dict)] if isinstance(value, list) else []
+
+
 def cents(value: Decimal) -> Decimal:
     return value.quantize(CENT, rounding=ROUND_HALF_UP)
 
@@ -46,7 +55,7 @@ def bonus_credit(total: Decimal, bands: list[dict]) -> Decimal:
         high = d(band["to"]) if band.get("to") not in (None, "") else None
         portion = (min(total, high) if high is not None else total) - low
         if portion > 0:
-            credit += portion * d(band["percent"]) / 100
+            credit += portion * d(band.get("percent")) / 100
     return cents(credit)
 
 
@@ -111,7 +120,7 @@ def compute(facts: dict) -> dict:
         commitment = p.get("delivery_commitment") or {}
         ceiling = commitment.get("max_pieces", commitment.get("max_pooled_pieces"))
         if (commitment.get("material_number") or commitment.get("material")) == material and ceiling is not None \
-                and demand[material] <= d(ceiling):
+                and commitment.get("weeks") is not None and demand[material] <= d(ceiling):
             weeks = int(d(commitment["weeks"]))
         elif d(p.get("stock")) >= demand[material]:
             weeks = int(d(p["lead_time_stock_weeks"]))
@@ -167,7 +176,7 @@ def lookup(table: dict | None, *keys):
     def norm(key) -> str:
         return re.sub(r"[^0-9A-Z]", "", str(key or "").upper())
 
-    rates = {norm(k): v for k, v in (table or {}).items()}
+    rates = {norm(k): v for k, v in record(table).items()}
     wanted = [k for k in map(norm, keys) if k]
     for match in (lambda k, w: k == w, lambda k, w: k and (w in k or k in w)):
         for key in wanted:
@@ -178,15 +187,15 @@ def lookup(table: dict | None, *keys):
 
 
 def facts(tender, requirements, commercials, erp: dict) -> dict:
-    by_pos = {c["position"]: c for c in commercials.get("positions", [])}
+    by_pos = {c.get("position"): c for c in records(commercials.get("positions"))}
     positions = []
-    for req in requirements.get("positions") or []:
+    for req in records(requirements.get("positions")):
         key = req.get("position")
         if not key:
             continue
-        e = erp.get(key) or {}
+        e = record(erp.get(key))
         c = by_pos.get(key, {})
-        pc = e.get("price_condition") or {}
+        pc = record(e.get("price_condition"))
         fmt = pc.get("number_format") or ""
         currency = (pc.get("currency") or "EUR").upper()
         fx = None
@@ -196,8 +205,8 @@ def facts(tender, requirements, commercials, erp: dict) -> dict:
         positions.append({
             "position": key, "quantity_pieces": int(d(req.get("final_quantity_pieces"))),
             "material_number": e.get("material_number") or None, "no_match": e.get("no_match") is True,
-            "scales": [{"min_quantity": s["from_quantity"], "price": number(s["price_as_shown"], fmt)}
-                       for s in pc.get("scales") or []],
+            "scales": [{"min_quantity": s.get("from_quantity"), "price": number(s["price_as_shown"], fmt)}
+                       for s in records(pc.get("scales")) if s.get("price_as_shown") not in (None, "")],
             "price_unit": pc.get("price_unit_pieces") or 1, "currency": currency,
             "fx_eur_per_currency_unit": fx,
             "surcharge_mass_kg_per_piece": grams_to_kg(e.get("surcharge_mass") or 0),
@@ -207,7 +216,7 @@ def facts(tender, requirements, commercials, erp: dict) -> dict:
             "stock": e.get("available_stock_pieces") or 0,
             "lead_time_stock_weeks": e.get("lead_time_stock_weeks") or 0,
             "lead_time_production_weeks": e.get("lead_time_production_weeks") or 0,
-            "delivery_commitment": c.get("delivery_commitment"),
+            "delivery_commitment": record(c.get("delivery_commitment")),
             "pieces_per_carton": e.get("pieces_per_carton"), "carton_price": c.get("carton_price") or 0,
             "setup_pool_member": bool(c.get("setup_pool_member")),
             "allocation_mass": grams_to_kg(e.get("allocation_mass") or 0) * 1000,
@@ -216,6 +225,6 @@ def facts(tender, requirements, commercials, erp: dict) -> dict:
                                               ("metal index", e.get("surcharge_mass") and index is None)) if missing],
         })
     reference = commercials.get("tender_reference") or tender.get("tender_reference") or ""
-    return {"tender_reference": reference, "discount": commercials.get("discount") or {},
+    return {"tender_reference": reference, "discount": record(commercials.get("discount")),
             "positions": positions, "setup_pool_fee": commercials.get("setup_pool_fee") or 0,
-            "project_bonus_bands": commercials.get("project_bonus_bands") or []}
+            "project_bonus_bands": records(commercials.get("project_bonus_bands"))}
