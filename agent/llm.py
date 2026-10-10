@@ -11,10 +11,19 @@ from openai import AsyncOpenAI
 
 MODEL = os.environ.get("AGENT_MODEL", "anthropic/claude-haiku-5.5")
 OPENROUTER = "/" in MODEL  # "<provider>/<model>" runs on OpenRouter with the team secret OPENROUTER_API_KEY
-# Anthropic caches only behind a breakpoint; the top-level one moves with the conversation
+# Anthropic caches only behind a breakpoint; the top-level one moves with the conversation. Only the tool loop sends
+# it: a request that carries it has every uncached token written to the cache at 1.25× the input price, which pays off
+# only when a later call reads them back, and no call reads a one-off ask_json back
 CACHE = {"extra_body": {"cache_control": {"type": "ephemeral"}}} if MODEL.startswith("anthropic/") else {}
 STEP_EFFORT = os.environ.get("STEP_EFFORT", "low")  # reasoning per browser step; latency is mostly thinking tokens
-KEEP_STEPS = 4  # tool results of the latest steps stay in full; older page reads shrink so the context stays small
+# The loop's history only grows, so each call reads all of it but the newest step from the cache (a tenth of the input
+# price). Shortening older page reads on every step rewrote the history right behind them, and every call paid for
+# the latest pages again as cache writes: on 2026-10-10 a third of a Haiku run's prompt came from the cache and 17 % of
+# its cost were writes nothing read. Once the prompt passes COMPACT_AT (estimated tokens), the reads older than the last
+# KEEP_STEPS steps shrink at once: one rewrite, and every call stays far below Haiku 5.5's 100k-token price step (5×).
+KEEP_STEPS = 4
+COMPACT_AT = 60_000
+CHARS_PER_TOKEN = 3  # of page text, JSON and tool schemas (about 3 on a measured first prompt)
 # one model call; a slower one is retried while its deadline allows. Qwen steps took 20-90 s under load (a tender
 # finish 132 s: a cut call starts over, so the cap sits above the slowest calls seen); Haiku's slowest took 17 s
 CALL_TIMEOUT = 45 if OPENROUTER else 180
@@ -68,7 +77,7 @@ def client() -> AsyncOpenAI:
 
 def send(messages: list, tools: list | None, limit: float, kwargs: dict) -> asyncio.Future:
     call = asyncio.ensure_future(client().chat.completions.create(model=MODEL, messages=messages, tools=tools,
-                                                                  timeout=limit, **CACHE, **kwargs))
+                                                                  timeout=limit, **kwargs))
     call.add_done_callback(lambda c: c.cancelled() or c.exception())  # a dropped call's failure stays quiet
     return call
 
@@ -122,7 +131,8 @@ def parse_object(text: str) -> dict | None:
 
 async def ask_json(system: str, user: str, effort: str | None = None) -> dict:
     """One reasoning call that must answer with a JSON object. effort="low" suits copying values out of pages: several
-    times faster, while switching thinking off entirely made the model rewrite number formats."""
+    times faster, while switching thinking off entirely made the model rewrite number formats. Sent without CACHE: no
+    later call reads its prompt back, so a cache write would only add a quarter to its input price."""
     messages = [{"role": "system", "content": system}, {"role": "user", "content": user}]
     extra = {"reasoning_effort": effort} if effort else {}
     for _ in range(3):
@@ -143,26 +153,29 @@ def _fn(name: str, description: str, properties: dict | None = None, required: l
 
 REF = {"ref": {"type": "integer", "description": "the number in [n:...] on the last page read"}}
 BROWSER_TOOLS = [
-    _fn("read", "Read the current page again (text with [n:control] refs). Use offset to continue a long page.",
+    _fn("read", "Read the current page again (text with [n:control] refs). The other page tools already return the "
+        "page they lead to: read only to look again in a later turn, or with offset to continue a long page.",
         {"offset": {"type": "integer"}}),
-    _fn("goto", "Open a URL (absolute, or relative to the current page).", {"url": {"type": "string"}}, ["url"]),
-    _fn("click", "Click a link, button, summary, menu item or tab by its ref.", REF, ["ref"]),
-    _fn("fill", "Type text into an input or textarea by ref (replaces its value). For a slider, the value.",
-        {**REF, "text": {"type": "string"}}, ["ref", "text"]),
-    _fn("select", "Choose an option of a select by its visible label.", {**REF, "option": {"type": "string"}},
-        ["ref", "option"]),
-    _fn("check", "Tick (checked=true) or untick a checkbox or radio button by ref.",
+    _fn("goto", "Open a URL (absolute, or relative to the current page) and return the page.",
+        {"url": {"type": "string"}}, ["url"]),
+    _fn("click", "Click a link, button, summary, menu item or tab by its ref and return the page it leads to.", REF,
+        ["ref"]),
+    _fn("fill", "Type text into an input or textarea by ref (replaces its value); for a slider, the value. Returns "
+        "the page.", {**REF, "text": {"type": "string"}}, ["ref", "text"]),
+    _fn("select", "Choose an option of a select by its visible label; returns the page.",
+        {**REF, "option": {"type": "string"}}, ["ref", "option"]),
+    _fn("check", "Tick (checked=true) or untick a checkbox or radio button by ref; returns the page.",
         {**REF, "checked": {"type": "boolean"}}, ["ref"]),
-    _fn("press", "Press a key on the focused element, e.g. Enter, Escape, Tab.", {"key": {"type": "string"}},
-        ["key"]),
-    _fn("back", "Go back in the browser history."),
+    _fn("press", "Press a key on the focused element, e.g. Enter, Escape, Tab; returns the page.",
+        {"key": {"type": "string"}}, ["key"]),
+    _fn("back", "Go back in the browser history and return the page."),
     _fn("form", "Work through a form in one go: steps run in order, each waits for the page to settle. A step is "
         "{\"field\": \"<label>\", \"value\": \"...\"} (fills an input, picks a select option by its text, or "
         "ticks a checkbox with true/false) or {\"click\": \"<button label>\"}. Labels are the visible labels, so "
         "steps survive page reloads (e.g. pick a value, click 'apply selection', pick the next value). A control "
         "without a usable label: {\"ref\": n, \"value\": \"...\"}, or {\"ref\": n} to click it; refs hold only "
         "until the page reloads. Fields in collapsed sections are opened first. Stops at the first failing step and "
-        "says why.",
+        "says why. Returns the page after the last step.",
         {"steps": {"type": "array", "items": {"type": "object", "properties": {
             "field": {"type": "string"}, "value": {"type": "string"}, "click": {"type": "string"},
             "ref": {"type": "integer"}}}}}, ["steps"]),
@@ -188,6 +201,16 @@ SHORTENED = "\n[older page read shortened: what you noted is kept; read it again
 # six Q&A pages 35 times)
 SHORTENED_KEPT = ("\n[older page read shortened; the page is kept word for word and the analyst reads it in full, so "
                   "don't open it again just to copy its values]")
+# Tools whose result is the tab's page after them (Tab.act). A read later in the same turn would add that page to the
+# history a second time (the submit agent did so on 18 of its 20 steps on 2026-10-10), so it gets a pointer instead.
+PAGE_ACTIONS = {"goto", "click", "fill", "select", "check", "press", "back", "form"}
+SHOWN = ("Not read again: the result of {} above shows this page as it is now. Read it in a later turn to look again, "
+         "or with an offset to continue a long page.")
+
+
+def size(messages: list, tools: list) -> int:
+    """A request's prompt in estimated tokens (its characters / CHARS_PER_TOKEN)."""
+    return len(json.dumps([messages, tools], ensure_ascii=False, default=str)) // CHARS_PER_TOKEN
 
 
 async def page_status(tab) -> int:
@@ -206,7 +229,10 @@ async def investigate(tab, system: str, mission: str, finish_schema: dict, deadl
     check(result, evidence) -> (result, problem): runs on finish, its model calls bounded by CHECK_TIMEOUT and the
     deadline; a problem sends the model back to work, a check that fails or runs out of time lets the result through.
     `warning` goes to the model `warn_at` seconds before the deadline. A finish forced by the deadline or the step
-    limit, or sent after the warning, is marked `forced`: whatever it says, the agent did not finish its mission."""
+    limit, or sent after the warning, is marked `forced`: whatever it says, the agent did not finish its mission.
+
+    The history only grows, so the prompt cache serves every call but its newest step; past COMPACT_AT the page reads
+    older than KEEP_STEPS steps shrink at once."""
     tools = BROWSER_TOOLS + (extra_tools or []) + [_fn(
         "finish", "Return your findings when the mission is done (or when told time is up: your best findings).",
         {"result": finish_schema}, ["result"])]
@@ -219,6 +245,7 @@ async def investigate(tab, system: str, mission: str, finish_schema: dict, deadl
     messages = [{"role": "system", "content": system},
                 {"role": "user", "content": mission + "\n\nThe page now:\n" + page}]
     steps: list[list[dict]] = []
+    compacted = 0  # steps before this one have their page reads shortened already
     evidence: list[str] = []
     if (stage := KEPT.get()) is not None:
         stage.append(evidence)
@@ -257,7 +284,8 @@ async def investigate(tab, system: str, mission: str, finish_schema: dict, deadl
             break
         try:
             with limits(deadline):  # a step never eats the grace the forced finish below needs
-                reply = await chat(messages, tools, **({"reasoning_effort": STEP_EFFORT} if STEP_EFFORT else {}))
+                reply = await chat(messages, tools, **CACHE,
+                                   **({"reasoning_effort": STEP_EFFORT} if STEP_EFFORT else {}))
         except Exception as error:  # noqa: BLE001  out of time or the model keeps failing: finish with what is kept
             log(tag, f"step failed: {type(error).__name__}: {str(error)[:200]}")
             break
@@ -270,6 +298,7 @@ async def investigate(tab, system: str, mission: str, finish_schema: dict, deadl
             continue
         results: list[dict] = []
         steps.append(results)
+        shown = ""  # the tool of this turn whose result shows the page as it is now
         for call in message.tool_calls:
             name = call.function.name
             try:
@@ -313,27 +342,35 @@ async def investigate(tab, system: str, mission: str, finish_schema: dict, deadl
                     output = await asyncio.wait_for(keep(args), limit)
                 elif handler:
                     output = await asyncio.wait_for(handler(args), limit)
+                elif name == "read" and shown and not args.get("offset"):
+                    output = SHOWN.format(shown)
                 elif name == "read":
                     output = await asyncio.wait_for(tab.read(int(args.get("offset") or 0)), limit)
                 else:
                     output = await asyncio.wait_for(tab.act(name, args), limit)
+                    shown = name if name in PAGE_ACTIONS else shown
             except Exception as error:  # noqa: BLE001  the model sees the error and decides what to do
                 output = f"Error: {type(error).__name__}: {str(error)[:500]}"
+                shown = ""  # what the page shows now is only known if it can be read
                 try:
                     output += "\n\n" + await asyncio.wait_for(tab.read(), 15)
+                    shown = name
                 except Exception:  # noqa: BLE001
                     pass
             entry = {"role": "tool", "tool_call_id": call.id, "content": output}
             messages.append(entry)
             results.append(entry)
-        for old in (entry for results in steps[:-KEEP_STEPS] for entry in results):
-            if len(old["content"]) > 400:
+        older = [entry for results in steps[compacted:-KEEP_STEPS] for entry in results if len(entry["content"]) > 400]
+        if older and size(messages, tools) > COMPACT_AT:  # one rewrite of the history instead of one per step
+            for old in older:
                 old["content"] = old["content"][:300] + (SHORTENED_KEPT if old["content"].startswith(KEPT_PREFIX)
                                                          else SHORTENED)
+            compacted = len(steps) - KEEP_STEPS
+            log(tag, f"prompt past {COMPACT_AT} tokens: {len(older)} older page reads shortened at once")
     messages.append({"role": "user", "content": "Stop now and call finish with your best findings."})
     log(tag, "finish forced (deadline or step limit)")
     try:
-        reply = await chat(messages, tools, tool_choice={"type": "function", "function": {"name": "finish"}})
+        reply = await chat(messages, tools, tool_choice={"type": "function", "function": {"name": "finish"}}, **CACHE)
     except Exception as error:  # noqa: BLE001  out of time: what was kept still counts
         log(tag, f"forced finish failed: {type(error).__name__}")
         return {"evidence": evidence, "forced": True}

@@ -3,7 +3,7 @@
 Turns the Atira "From RFQ to bid" tender into one signed bid. Models do the navigating and deciding; code only reads
 pages, keeps what the models select and does the brief's arithmetic.
 
-1. **Investigate** (parallel, one browser each): a Qwen tool-loop works the tender portal, the supplier portal and
+1. **Investigate** (parallel, one browser each): a model tool loop works the tender portal, the supplier portal and
    the mailbox, keeping the pages it judges relevant as evidence; a fourth logs in to the ERP.
 2. **Resolve**: two model calls apply the brief's rules to the kept evidence: final quantities and governing
    requirements, and the commercial keys (discount, clause groups, tariffs, commitments, pool, bonus, FX, index).
@@ -20,7 +20,7 @@ pages, keeps what the models select and does the brief's arithmetic.
 | `agents/<name>/` | One folder per agent: `agent.py` (mission, schema, `run`) and `README.md` (its docs) |
 | `agents/common.py` | Shared system prompt, brief context, brief parser (reference, mail records), schema helpers |
 | `validate.py` | Checks in code on what the models found (material attributes) |
-| `llm.py` | The tool loop on the hosted Qwen |
+| `llm.py` | The model tool loop and calls: Claude Haiku 5.5 on OpenRouter by default, the loop prompt-cached |
 | `browser.py`, `reader.js` | Browser tools; pages as accessible text with control refs |
 | `calc.py` | Facts assembly and the bid arithmetic |
 | `run.py`, `browsers.py` | Run contract and browsers (starter kit) |

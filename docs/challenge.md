@@ -18,10 +18,13 @@ they win.
 
 ## Models
 
-| Model | Price (simulated) | Limit | Use |
+| Model | Price | Limit | Use |
 | --- | --- | --- | --- |
-| Qwen3.8-Flash-Next | $0.15/M in, $0.016/M cached, $0.47/M out | 32 concurrent per team | everything |
-| Cloudflare Clef | $0.24/M in | 16 concurrent per team | unused; only if measurably faster |
+| Claude Haiku 5.5 (OpenRouter, team key) | OpenRouter's reported cost: $0.10/M in, $0.125/M written to the cache, $0.01/M read from it, $0.50/M out; 5× once a prompt passes 100k tokens | OpenRouter's | everything (`AGENT_MODEL` default) |
+| Qwen3.8-Flash-Next | simulated: $0.15/M in, $0.016/M cached, $0.47/M out | 32 concurrent per team | fallback (`AGENT_MODEL=qwen3.8-flash-next`) |
+| Cloudflare Clef | simulated: $0.24/M in | 16 concurrent per team | unused; only if measurably faster |
+
+A run's input tokens leave out its cache reads: a prompt is its input tokens plus its cache reads.
 
 ## Scoring (bid)
 

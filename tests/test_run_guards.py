@@ -1,6 +1,6 @@
 """The guards that keep a run going to a signed bid: model calls end on the wall clock even when the server trickles
-bytes, a cut agent hands on the pages it kept, the requirements resolver gets a backup attempt, and a malformed
-resolver answer or broken facts never end the run without an answer.
+bytes, a cut agent hands on the pages it kept, the requirements resolver gets a backup attempt (and a twin only on the
+hosted Qwen), and a malformed resolver answer or broken facts never end the run without an answer.
 
 Run from the repo root: uv run --project agent --no-sync python -m unittest discover -s tests -v
 """
@@ -216,6 +216,23 @@ class Requirements(unittest.TestCase):
             return {"positions": [{"position": "2"}]}
         self.assertEqual(self.run_with(answers, backup), [{"position": "1"}])
         self.assertEqual(started, [])
+
+    def test_requirements_ask_once_on_openrouter_twice_on_the_hosted_qwen(self):
+        """On OpenRouter both copies answered within a second and both were billed; chat hedges a call that hangs."""
+        asked = []
+
+        async def ask_json(system, question, effort=None):
+            asked.append(question)
+            return {"positions": []}
+        real = llm.ask_json, llm.OPENROUTER
+        try:
+            llm.ask_json = ask_json
+            for openrouter, copies in ((True, 1), (False, 2)):
+                llm.OPENROUTER, asked[:] = openrouter, []
+                asyncio.run(agent.resolvers.requirements({"brief": "# Task"}, {}, {}, {}))
+                self.assertEqual(len(asked), copies)
+        finally:
+            llm.ask_json, llm.OPENROUTER = real
 
     def test_malformed_answers_give_no_positions(self):
         self.assertEqual(agent.positions({"result": []}), [])

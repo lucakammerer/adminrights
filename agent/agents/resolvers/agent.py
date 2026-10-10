@@ -103,9 +103,13 @@ For every tender position, work out:
 JSON: {{"positions": [{{"position": "...", "final_quantity_pieces": 0, "quantity_reasoning": "...",
 "requirement": "the requirement id the position refers to", "bore_mm": 0, "stroke_mm": 0, "pressure_bar": 0, "mounting": "...", "certification": "...",
 "catalogue_group": "...", "requirement_reasoning": "..."}}]}}"""
-    llm.log("requirements", f"asking twice with {len(question)} chars, effort {effort}")  # its size drives the critical path
-    # it holds up the ERP phase, and one hosted call in a few hangs until its timeout: the faster of two answers
-    return await first(llm.ask_json(RESOLVE, question, effort=effort), llm.ask_json(RESOLVE, question, effort=effort))
+    # It holds up the ERP phase. The hosted Qwen hangs on one call in a few until its timeout: there the faster of two
+    # answers counts. On OpenRouter both copies answered within a second and both were billed (+2 % of a run's cost),
+    # while chat already asks again alongside a call that has no reply after HEDGE_AFTER.
+    copies = 1 if llm.OPENROUTER else 2
+    llm.log("requirements", f"asking {'once' if copies == 1 else 'twice'} with {len(question)} chars, "
+            f"effort {effort}")  # its size drives the critical path
+    return await first(*(llm.ask_json(RESOLVE, question, effort=effort) for _ in range(copies)))
 
 
 async def commercials(task, tender, mail, others: list[dict] | None = None) -> dict:
