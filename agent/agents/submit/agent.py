@@ -68,7 +68,7 @@ The bid is calculated. Your part: enter and sign it on this tender portal, follo
 The bidder's own mailbox address, if a contact e-mail is asked for: {contact or 'unknown'}.
 Bid ({answer['decision']}), tender {answer['tender_reference']}, discount {german(answer['discount_percent'])} %,
 total net {german(answer['total_net'])} EUR (net; a displayed gross amount with VAT is not it):
-{rows or '(no positions: no bid)'}
+{rows or ('(none to enter)' if omitted else '(no positions: no bid)')}
 {f"Unfinished positions to omit with the form's omit option (partial submission): {', '.join(omitted)}" if omitted else ''}
 Enter every value exactly (German number format, two decimals), one entry per position; positions may come in any
 order, so check which position each page is for. Each model step costs time: enter a whole position, or any other

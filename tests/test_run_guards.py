@@ -266,6 +266,13 @@ class Bid(unittest.TestCase):
         # since #34 a position with its material but no usable prices is submitted with its other fields
         self.assertEqual([(p["position"], p["material_number"]) for p in result["answer"]["positions"]], [("1", "M")])
 
+    def test_no_requirements_omit_the_tender_positions(self):
+        # both requirements calls lost: an empty answer made the submit agent file a waiver
+        tender = {**self.TENDER, "positions": [{"position": "01.01", "quantity": 24}, {"position": "01.02"}]}
+        result = agent.bid(tender, {"positions": []}, self.COMMERCIALS, {})
+        self.assertEqual(result["answer"]["decision"], "bid")
+        self.assertEqual(result["omitted"], ["01.01", "01.02"])
+
     def test_broken_commercials_still_give_an_answer(self):
         requirements = {"positions": [{"position": "1", "final_quantity_pieces": 2}]}
         commercials = {"positions": [{"no position key": True}]}

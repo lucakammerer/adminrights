@@ -118,7 +118,10 @@ def bid(tender: dict, requirements: dict, commercials: dict, erp: dict) -> dict:
         llm.log("facts", json.dumps(facts, ensure_ascii=False))
         return calc.compute(facts)
 
-    rows = requirements["positions"]
+    # no requirements at all (both resolver calls lost): the bill of quantities' positions, each omitted as unfinished,
+    # so the bid is a partial one; without them the submit agent filed a waiver
+    rows = requirements["positions"] or [{"position": p["position"]} for p in tender.get("positions") or []
+                                         if isinstance(p, dict) and p.get("position")]
     try:
         return compute(rows, erp)
     except Exception as error:  # noqa: BLE001
