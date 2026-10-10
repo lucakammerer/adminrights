@@ -21,7 +21,7 @@ you as a coding agent; humans read `README.md`.
 ## Where things live
 
 - `agent/` is the package; only it gets uploaded, the agent READMEs included, so they must hold no public-1 values
-  either. Everything outside (`docs/`, `eval/`, `bench/`) stays local.
+  either. Everything outside (`docs/`, `eval/`, `tools/`, `bench/`) stays local.
 - `agent/agent.py`: orchestration only (`main`: phases, deadlines, data flow)
 - `agent/agents/<name>/`: one folder per agent with `agent.py` (mission, schema, `run`) and `README.md` (its
   documentation); `agent/agents/common.py`: shared system prompt, brief context, schema helpers
@@ -29,7 +29,23 @@ you as a coding agent; humans read `README.md`.
 - `agent/browser.py`, `agent/reader.js`: browser tools; a page as text with `[n:kind "label"]`
 - `agent/calc.py`: facts assembly (`facts`) and the bid arithmetic (`compute`)
 - `agent/run.py`, `agent/browsers.py`: run contract and browsers (starter kit)
-- `docs/`: what spans agents (challenge, architecture, rules, calc), start at `docs/README.md`
+- `docs/`: what spans agents: `RULES.md` (every rule we are judged by), `IMPLEMENTATION_PLAN.md` (the system, the
+  target, the backlog), `challenge.md`, `calc.md`; start at `docs/README.md`
+- `eval/`: reference answers, the scorer `compare.py` and public-1 data; `tools/`: dev helpers (`dev-env.sh`)
+
+## Who owns what
+
+Three owners, one KPI each ([plan §14](docs/IMPLEMENTATION_PLAN.md#14-work-split-and-timeline)); file owners in
+[`.github/CODEOWNERS`](.github/CODEOWNERS) review every change to their files.
+
+- **Efficiency, Finn:** cost × time. `agent.py`, `budget.py`, `llm.py`, `agents/submit/`, `agent.json`.
+- **Generalization, Yazan:** works on unseen sites. `browser.py`, `reader.js`, `agents/common.py`, the four site
+  agents, `tools/stress/`.
+- **Quality & Release, Luca:** score 100, every run signs, audit clean; runs test runs and submits.
+  `calc.py`, `numbers.py`, `validate.py`, `select.py`, `agents/resolvers/`, `tests/`, `eval/`, `tools/`, `bench/`, `docs/`.
+
+Every PR reports dry-run score, run time and cost and may not lower the score. Nothing runs while a scored submission
+runs.
 
 ## Commands
 
@@ -38,7 +54,7 @@ atira models proxy                                  # terminal 1, keep it open
 cd agent && eval "$(atira scout --env)"             # terminal 2: scouting logins, model variables
 HEADLESS=1 uv run --no-sync python agent.py         # one local run, never counts
 atira test-run .                                    # sandbox, points per field, not on the leaderboard
-atira submit .                                      # only after Luca approves
+atira submit .                                      # only after Luca approves and docs/RULES.md §9 holds
 ```
 
 ## Glossary
