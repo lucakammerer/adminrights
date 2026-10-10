@@ -102,6 +102,16 @@ class Edges(unittest.TestCase):
                          {"a": Decimal("0.33"), "b": Decimal("0.67")})
 
 
+class NoMatch(unittest.TestCase):
+    def test_no_match_without_evidence_is_unfinished_not_no_bid(self):
+        """run_1a7115a6522f64a1: an ERP agent out of time claimed no match after two steps, nothing kept: no_bid."""
+        requirements = {"positions": [{"position": "1", "final_quantity_pieces": 10}]}
+        claimed = calc.compute(calc.facts({}, requirements, {}, {"1": {"no_match": True, "evidence": []}}))
+        self.assertEqual((claimed["answer"]["decision"], claimed["omitted"]), ("bid", ["1"]))
+        shown = calc.compute(calc.facts({}, requirements, {}, {"1": {"no_match": True, "evidence": ["result list"]}}))
+        self.assertEqual(shown["answer"]["decision"], "no_bid")
+
+
 class Shapes(unittest.TestCase):
     def test_model_output_in_other_shapes_never_crashes(self):
         """facts and compute run outside `safe`: a crash there loses an answer the run already found."""

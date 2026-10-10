@@ -16,7 +16,8 @@ match exactly, and keep every page holding its facts. If there is none, report t
 - `login`: login, output `{ok}`.
 - `run`: input is one requirement from `resolvers.requirements` (5 attributes + `catalogue_group`).
   Agent output `{material_number, no_match, why}`. `no_match` is true only after every candidate was checked and
-  none qualifies (→ `no_bid`); an empty result without it means the search didn't finish (→ position omitted).
+  none qualifies and the group's result pages are kept (→ `no_bid`); an empty result without it, or a `no_match`
+  without kept pages (`calc.facts`), means the search didn't finish (→ position omitted).
 - `extract`: turns that into `RESULT`: status, attributes, `available_stock_pieces` (unrestricted only),
   stock and production lead times, `pieces_per_carton`, `allocation_mass`, `surcharge_mass`, `price_index_key`,
   `setup_fee`, `price_condition` (validity, currency, FX key, price unit, number format, scales as shown).

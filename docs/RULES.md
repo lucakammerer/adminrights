@@ -125,7 +125,8 @@ per position, checked in code; `no_bid` needs a completed search (the group's re
 candidate compared) and an independent confirmation. An unfinished search is never "no match" (4.1).
 Traps: look-alike materials that differ in one attribute or only in status.
 Gather erp · Decide `erp.run`, `calc` · ⚠️ a search cut by its hard deadline, forced to finish, or finishing after its
-time warning never reports no match (F9, F16 → I1); a no match is not yet backed by evidence of every candidate (I1, I11) · Check: validate tests with look-alike, blocked and unfinished candidates
+time warning never reports no match (F9, F16 → I1), nor does one without kept pages (`calc.facts`); a no match is not
+yet backed by evidence of every candidate (I1, I11) · Check: validate tests with look-alike, blocked and unfinished candidates
 
 **4 · Unit price.** Take the price condition **valid at `S`** (both validity endpoints inclusive), normalize it by its
 **price unit** (per 1 or per n pieces), and choose the scale with the **highest minimum quantity ≤ the position's

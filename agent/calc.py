@@ -204,7 +204,9 @@ def facts(tender, requirements, commercials, erp: dict) -> dict:
         index = lookup(commercials.get("metal_indices"), e.get("price_index_key"))
         positions.append({
             "position": key, "quantity_pieces": int(d(req.get("final_quantity_pieces"))),
-            "material_number": e.get("material_number") or None, "no_match": e.get("no_match") is True,
+            # no match needs the searched result list kept (rule 3): one claimed without evidence is unfinished
+            "material_number": e.get("material_number") or None,
+            "no_match": e.get("no_match") is True and bool(e.get("evidence")),
             "scales": [{"min_quantity": s.get("from_quantity"), "price": number(s["price_as_shown"], fmt)}
                        for s in records(pc.get("scales")) if s.get("price_as_shown") not in (None, "")],
             "price_unit": pc.get("price_unit_pieces") or 1, "currency": currency,

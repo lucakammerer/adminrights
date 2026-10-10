@@ -18,7 +18,8 @@ and bonus membership, allocation mass. Plus reference, discount, pool fee, bonus
 
 ## compute
 
-1. Any position the ERP agent reported as `no_match`: `no_bid`, no positions, total 0; a conditional approval → 0 %.
+1. Any position the ERP agent reported as `no_match` with kept pages (`facts` drops one without evidence: rule 3
+   needs the result list): `no_bid`, no positions, total 0; a conditional approval → 0 %.
    Positions without material or a quantity are unfinished: left out of the answer and returned as `omitted`, so the
    submit agent omits them in the form (rule 9). A material without prices is still submitted: its base price (and
    the bonus of a bonus member) is left out of the row, everything else is calculated, and its unit price lacks the
