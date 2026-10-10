@@ -71,14 +71,47 @@ async def first(*jobs):
             job.cancel()
 
 
-async def requirements(task, tender, spec, mail, effort: str = "medium") -> dict:
-    # Only the technical release and messages about the tender's positions (a clarification kept in the mailbox on a
-    # dataset that splits its information differently) matter here; every other mail would slow this critical-path
-    # call. The technical release is known from this run's brief (subject, sender); a brief that names none gets all mail.
+# How a requirement's governing values are found: shared by `specs` and `requirements`, so the ERP searches started
+# from `specs` look for what `requirements` decides.
+GOVERNING = """the current revision's requirement, with the latest applicable scoped technical
+  amendments (only those naming that revision and requirement, only the named attributes); if the stroke is a usable
+  stroke, add twice the per-end reserve of its key from the latest technical release for that revision to get the
+  nominal stroke."""
+SPEC_JSON = ('"bore_mm": 0, "stroke_mm": 0, "pressure_bar": 0, "mounting": "...", "certification": "...",\n'
+             '"catalogue_group": "..."')
+
+
+def technical(task, mail, tender=None) -> dict:
+    """Only the technical release and messages about the tender's positions (a clarification kept in the mailbox on a
+    dataset that splits its information differently) matter for the requirements; every other mail would slow the
+    call. The technical release is known from this run's brief (subject, sender); a brief that names none gets all
+    kept mail."""
     pages = mail.get("evidence", [])
     records = technical_records(task["brief"])
-    ids = [str(p.get("position")) for p in tender.get("positions") or [] if isinstance(p, dict) and p.get("position")]
-    technical = {"evidence": [page for page in pages if mentions(page, records) or names_position(page, ids)] or pages}
+    ids = [str(p.get("position")) for p in (tender or {}).get("positions") or []
+           if isinstance(p, dict) and p.get("position")]
+    return {"evidence": [page for page in pages if mentions(page, records) or names_position(page, ids)] or pages}
+
+
+async def specs(task, spec, mail, effort: str = "medium") -> dict:
+    """The governing requirements without the tender, so the ERP searches can start before the tender agent is done.
+    `requirements` decides the same values again for every position; the searches are matched to its answer."""
+    question = f"""{context(task)}
+
+Evidence from the supplier portal:
+{evidence(spec)}
+
+Technical releases from the mailbox:
+{evidence(technical(task, mail))}
+
+Decide from the pages kept as evidence: the agents' own summaries above them can be incomplete or wrong.
+For every requirement of the current revision, work out the governing requirement: {GOVERNING}
+JSON: {{"requirements": [{{"requirement": "the requirement id", {SPEC_JSON}, "requirement_reasoning": "..."}}]}}"""
+    llm.log("specs", f"asking with {len(question)} chars, effort {effort}")
+    return await llm.ask_json(RESOLVE, question, effort=effort)
+
+
+async def requirements(task, tender, spec, mail, effort: str = "medium") -> dict:
     question = f"""{context(task)}
 
 Evidence from the tender portal:
@@ -88,7 +121,7 @@ Evidence from the supplier portal:
 {evidence(spec)}
 
 Technical releases and messages about the positions from the mailbox:
-{evidence(technical)}
+{evidence(technical(task, mail, tender))}
 
 Decide from the pages kept as evidence: the agents' own summaries above them can be incomplete or wrong.
 For every tender position, work out:
@@ -96,13 +129,9 @@ For every tender position, work out:
   pieces with the governing revision's pieces per set when the unit is a set. A withdrawn answer counts as if it had
   never been given: the latest change that is not withdrawn still applies, even when it is older than the withdrawn
   one. List every quantity clarification for the position in quantity_reasoning before you decide;
-- the governing requirement: the current revision's requirement, with the latest applicable scoped technical
-  amendments (only those naming that revision and requirement, only the named attributes); if the stroke is a usable
-  stroke, add twice the per-end reserve of its key from the latest technical release for that revision to get the
-  nominal stroke.
+- the governing requirement: {GOVERNING}
 JSON: {{"positions": [{{"position": "...", "final_quantity_pieces": 0, "quantity_reasoning": "...",
-"requirement": "the requirement id the position refers to", "bore_mm": 0, "stroke_mm": 0, "pressure_bar": 0, "mounting": "...", "certification": "...",
-"catalogue_group": "...", "requirement_reasoning": "..."}}]}}"""
+"requirement": "the requirement id the position refers to", {SPEC_JSON}, "requirement_reasoning": "..."}}]}}"""
     llm.log("requirements", f"asking twice with {len(question)} chars, effort {effort}")  # its size drives the critical path
     # it holds up the ERP phase, and one hosted call in a few hangs until its timeout: the faster of two answers
     return await first(llm.ask_json(RESOLVE, question, effort=effort), llm.ask_json(RESOLVE, question, effort=effort))

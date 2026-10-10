@@ -1,6 +1,6 @@
 # Resolvers
 
-`ask_json` calls without a browser: `sites`, `requirements`, `commercials`.
+`ask_json` calls without a browser: `sites`, `specs`, `requirements`, `commercials`.
 
 ## Mission
 
@@ -11,12 +11,16 @@ means. The output is typed facts for `calc`, which does all the arithmetic.
 
 - `sites`: 11, 19 (roles judged from the brief, never from site names).
 - `requirements`: 1, 2, 13, 14, 17, 20.
+- `specs`: the governing-requirement part of `requirements` (the same `GOVERNING` text).
 - `commercials`: 5, 12, 16, 21, 22, 23, 24, 25, 26, 28.
 
 ## Input / output
 
 - `sites`: brief and the run's websites (id and URL, no logins) → one website per role: `tender_portal`,
   `supplier_portal`, `erp`, `webmail`.
+- `specs`: brief, evidence from the supplier portal agent and the technical mail (as for `requirements`) → per
+  requirement of the current revision `requirement`, `bore_mm`, `stroke_mm`, `pressure_bar`, `mounting`,
+  `certification`, `catalogue_group`, `requirement_reasoning`.
 - `requirements`: brief, evidence from the tender and supplier portal agents, and the kept mail pages of the technical
   release (the records `common.technical_records` finds in the brief's technical rule, matched by subject or sender,
   `common.mentions`) and mail naming a tender position (`common.names_position`: a clarification kept in the mailbox);
@@ -35,20 +39,26 @@ means. The output is typed facts for `calc`, which does all the arithmetic.
 
 ## Implementation
 
-`agent.py` `sites`, `requirements`, `commercials`; system prompt `RESOLVE` in `agents/common.py`; `agent/llm.py`
+`agent.py` `sites`, `specs`, `requirements`, `commercials`; system prompt `RESOLVE` in `agents/common.py`; `agent/llm.py`
 `ask_json` (JSON mode, up to 3 attempts).
 
 - `sites` runs first, while the browsers connect, effort low. The run's submission target is the tender portal; the
   model assigns the other roles (two attempts of at most `SITES_TIMEOUT` seconds each, the second asking only for the
   roles still open; answers that aren't one of the websites are ignored); a role still open gets a remaining website
   by elimination. It never fails the run.
-- `requirements` runs after phase 1, effort medium, and is on the critical path: the ERP agents wait for it. It asks
-  twice at once and takes the first answer (`first`), because one hosted call in a few hangs until its timeout. It gets
-  only the technical mail because all mail doubles its time (66 s instead of 34 s on public-1). Prompt: tender
-  quantity replaced by the latest dated clarification, a withdrawn answer as if never given (an older change it
-  replaced applies again), sets into pieces; decided from the kept pages, not the agents' summaries; the current
-  revision's requirement plus only the amendments naming exactly that revision and requirement; a usable stroke plus
-  2 × the reserve from the latest technical release.
+- `specs` runs as soon as the supplier portal and webmail agents are done, effort medium, while the tender agent is
+  still working: the ERP searches start from its answer, not from `requirements`. It is skipped when the tender agent
+  is done first (or no specification was kept): `requirements` then starts at once and a second call would only
+  compete with it. Its governing-requirement text
+  (`GOVERNING`) and value schema (`SPEC_JSON`) are the ones `requirements` uses, so both decide the same values.
+- `requirements` runs after phase 1, effort medium, alongside the ERP searches; `agent.main` matches its positions to
+  the searches by their values and searches the values `specs` missed. Without an answer from `specs` it is on the
+  critical path again: the ERP agents wait for it. It asks twice at once and takes the first answer (`first`), because
+  one hosted call in a few hangs until its timeout. It gets only the technical mail because all mail doubles its time
+  (66 s instead of 34 s on public-1). Prompt: tender quantity replaced by the latest dated clarification, a withdrawn
+  answer as if never given (an older change it replaced applies again), sets into pieces; decided from the kept
+  pages, not the agents' summaries; the current revision's requirement plus only the amendments naming exactly that
+  revision and requirement; a usable stroke plus 2 × the reserve from the latest technical release.
 - `commercials` starts with `requirements` and runs alongside the ERP phase (through `sweep.commercials_with_sweep`,
   which looks for facts it left open), effort medium; only `calc.facts` waits
   for it. Prompt: exact reference, authorized sender, latest record up to the scenario date, newer replaces older,

@@ -1,6 +1,7 @@
 """The guards that keep a run going to a signed bid: model calls end on the wall clock even when the server trickles
-bytes, a cut agent hands on the pages it kept, the requirements resolver gets a backup attempt, and a malformed
-resolver answer or broken facts never end the run without an answer.
+bytes, a cut agent hands on the pages it kept, the resolvers get a backup attempt, the early ERP searches match the
+requirements however a model wrote the values, and a malformed resolver answer or broken facts never end the run
+without an answer.
 
 Run from the repo root: uv run --project agent --no-sync python -m unittest discover -s tests -v
 """
@@ -228,6 +229,47 @@ class Requirements(unittest.TestCase):
         # calc.facts matches requirements and commercials by the position as written: "10" would miss 10
         self.assertEqual(agent.positions({"positions": [{"position": 10}]}), [{"position": 10}])
 
+
+class EarlySearches(unittest.TestCase):
+    def test_same_values_written_differently_share_one_search(self):
+        a = {"bore_mm": 80, "stroke_mm": 200.0, "pressure_bar": "160", "mounting": "Schwenkauge",
+             "certification": "EN 1493", "catalogue_group": "GR-1"}
+        b = {"bore_mm": "80.0", "stroke_mm": 200, "pressure_bar": 160, "mounting": "schwenkauge ",
+             "certification": "en1493", "catalogue_group": "gr-1", "position": "1", "final_quantity_pieces": 5}
+        self.assertEqual(agent.spec_key(a), agent.spec_key(b))
+        self.assertNotEqual(agent.spec_key(a), agent.spec_key({**a, "stroke_mm": 250}))
+        self.assertEqual(agent.spec_key({}), agent.spec_key({k: None for k in agent.SPEC_KEYS}))
+
+    def test_specs_rows_name_something_to_search(self):
+        self.assertEqual(agent.governing(None), [])
+        self.assertEqual(agent.governing({"requirements": "none"}), [])
+        self.assertEqual(agent.governing({"requirements": [{"requirement": "A", "bore_mm": None}, "x",
+                                                           {"requirement": "B", "catalogue_group": "G"}]}),
+                         [{"requirement": "B", "catalogue_group": "G"}])
+
+    def test_cancelling_a_resolver_stops_both_attempts(self):
+        stopped = []
+
+        async def hangs():
+            try:
+                await asyncio.sleep(100)
+            except asyncio.CancelledError:
+                stopped.append(1)
+                raise
+
+        async def scenario():
+            real = agent.BACKUP_AFTER
+            agent.BACKUP_AFTER = 0.1
+            try:
+                job = asyncio.create_task(agent.resolve("test", lambda effort: hangs(), time.time() + 5,
+                                                        agent.governing))
+                await asyncio.sleep(0.3)  # both attempts run
+                job.cancel()
+                await asyncio.sleep(0.1)
+            finally:
+                agent.BACKUP_AFTER = real
+        asyncio.run(scenario())
+        self.assertEqual(stopped, [1, 1])
 
 class Bid(unittest.TestCase):
     TENDER = {"tender_reference": "REF"}
