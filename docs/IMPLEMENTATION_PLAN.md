@@ -145,7 +145,9 @@ Every browser agent is the same loop; agents differ only in mission, result sche
 - **Submission** (`agents/submit`): one model agent with the `form` tool and German number formatting; before the TAN
   `verify_summary` checks unit prices and total on the summary page in code; `get_tan`
   runs in the mail tab; guardrails in the mission (no extra positions, omit only listed ones, never tick our own terms,
-  one TAN request). One `form` call per page, a configurator's dependent choices each followed by its apply button.
+  one TAN request). One `form` call per page or position, a configurator's dependent choices each followed by its
+  apply button, sent without reading their options first (`form` matches an option by text, beginning or part, and a
+  step without a match stops with the page's options).
   First watchdog slice: `SIGN_BY` (180 s) before its deadline the agent is told to omit what isn't entered, request the
   TAN and sign, instead of the generic "call finish" (which once ended a run unsigned with 4 positions entered).
 
