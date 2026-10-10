@@ -1,6 +1,6 @@
 """Continuous test runs: every new head of origin/p1/* and origin/p2/* is merged onto the base (origin/main plus this
-checkout's HEAD) in a scratch worktree, passes the free gates, then goes to `atira test-run`. Finished runs are scored
-with eval/compare.py and appended to bench/RUNS.md. Nothing is pushed. One call is one tick; /loop repeats it.
+branch's pushed head) in a scratch worktree, passes the free gates, then goes to `atira test-run`. Finished runs are
+scored with eval/compare.py and appended to bench/RUNS.md. Nothing is pushed. One call is one tick; cron repeats it.
 
 usage: python tools/ci.py            # one tick
        python tools/ci.py --dry-run  # everything except starting test runs
@@ -48,7 +48,8 @@ def candidates() -> list[tuple[str, list[str]]]:
     """(name, refs merged onto origin/main), in priority order: base, each branch, all branches together."""
     heads = sh("git", "for-each-ref", "--format=%(refname:short)", "refs/remotes/origin").split()
     branches = sorted(h for h in heads if h.removeprefix("origin/").startswith(BRANCHES))
-    base = [sh("git", "rev-parse", "HEAD")]
+    # the pushed head of this branch when it tracks one (a server clone only fetches), else the local HEAD
+    base = [sh("git", "rev-parse", "@{upstream}", check=False) or sh("git", "rev-parse", "HEAD")]
     out = [("base", base)] + [(b.removeprefix("origin/"), base + [b]) for b in branches]
     return out + [("all", base + branches)] * (len(branches) > 1)
 
@@ -75,7 +76,7 @@ def gates(path: Path) -> list[str]:
     if subprocess.run([sys.executable, str(ROOT / "tools/audit_package.py"), "--agent", str(path / "agent"), *logs],
                       capture_output=True).returncode:
         failed.append("audit")
-    tests = subprocess.run(["uv", "run", "--project", str(ROOT / "agent"), "--no-sync", "python", "-m", "unittest",
+    tests = subprocess.run(["uv", "run", "--project", str(ROOT / "agent"), "python", "-m", "unittest",
                             "discover", "-s", "tests"], cwd=path, capture_output=True, text=True)
     if tests.returncode:
         failed.append("tests: " + (re.findall(r"^(?:FAIL|ERROR): (\S+)", tests.stderr, re.M) or ["see unittest"])[0])

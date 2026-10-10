@@ -5,9 +5,9 @@ How a change gets from a branch to a submission. Only Luca starts test runs and 
 ## Branches and the test loop
 
 Finn pushes to `p1/<topic>`, Yazan to `p2/<topic>`, each started from main. `tools/ci.py` runs every 5 minutes
-(`python tools/ci.py`, one tick; a session loop repeats it):
+on the server `luca-kammerer` from a clone of the release branch (`python tools/ci.py`, one tick):
 
-1. Fetch. Candidates, in order: the base (origin/main plus Luca's local commits), each `p1/*` and `p2/*` head
+1. Fetch. Candidates, in order: the base (origin/main plus the release branch's pushed head), each `p1/*` and `p2/*` head
    merged onto the base, and all of them together once there are two or more. A merge conflict is reported to the
    owner, never resolved by the loop.
 2. Skip what was tested: the key is the git tree of `agent/`, the only part that gets uploaded.
@@ -18,6 +18,16 @@ Finn pushes to `p1/<topic>`, Yazan to `p2/<topic>`, each started from main. `too
    added to `bench/RUNS.md`. The outcome column is filled by hand: which phase lost the points and whose code it is.
 
 Nothing is pushed. A branch that beats the base goes to main by PR after Luca's yes.
+
+### Running the loop
+
+- Needs git with read access to origin, `atira` on the PATH and signed in for the team (`atira login`), `uv` and
+  Python ≥ 3.10. No environment variables. The tests sync `agent/.venv` on first use.
+- State outside git: `bench/.ci/state.json` (tested `agent/` trees and their runs, runs still open) and
+  `bench/.ci/logs/` (run logs; the audit also reads them). Without them a fresh clone tests the current base once
+  more and doesn't collect runs that another machine started.
+- Rows it adds to `bench/RUNS.md` stay in that clone until committed.
+- Cron, never two ticks at once: `*/5 * * * * cd <clone> && flock -n bench/.ci/lock python3 tools/ci.py >> bench/.ci/ci.log 2>&1`
 
 ## Tools
 
