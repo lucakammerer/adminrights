@@ -64,7 +64,7 @@ with found true and the TAN exactly as the message writes it, never with a TAN y
         except Exception as error:  # noqa: BLE001  a slow page: the agent opens the mailbox itself
             llm.log("tan", f"start page failed: {type(error).__name__}")
         found = await llm.investigate(mail_tab, SYSTEM, mission, obj(found=BOOL, tan=STR, request=STR, subject=STR),
-                                      min(deadline - TAN_ENTRY, time.time() + TAN_TIME), "tan", max_steps=12,
+                                      min(deadline - TAN_ENTRY, time.time() + TAN_TIME), "tan", max_steps=16,
                                       check=check, warn_at=TAN_WARN, warning=TAN_HURRY)
         found.pop("evidence", None)
         if usable(found):
