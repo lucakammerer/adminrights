@@ -2,13 +2,34 @@
 import asyncio
 import json
 import os
+import re
 import time
+from contextlib import contextmanager
+from contextvars import ContextVar
 
 from openai import AsyncOpenAI
 
 MODEL = os.environ.get("AGENT_MODEL", "qwen3.8-flash-next")
 STEP_EFFORT = os.environ.get("STEP_EFFORT", "low")  # reasoning per browser step; latency is mostly thinking tokens
 KEEP_STEPS = 4  # tool results of the latest steps stay in full; older page reads shrink so the context stays small
+CALL_TIMEOUT = 120  # one model call; a slower one is retried while its deadline allows (steps took 20-90 s under load)
+CHECK_TIMEOUT = 60  # one model call inside a finish check (ERP extract: 13-21 s); one hung call cost a position
+
+# The time by which every model call in this task must be over (set by agent.safe for each stage) and the longest
+# one call may take. Calls end on their own HTTP timeout: a phase cut must never wait for a cancelled call.
+UNTIL: ContextVar[float] = ContextVar("until", default=float("inf"))
+CAP: ContextVar[float] = ContextVar("cap", default=CALL_TIMEOUT)
+
+
+@contextmanager
+def limits(until: float, cap: float | None = None):
+    """Model calls inside end by `until` (never later than the stage allows) and take at most `cap` each."""
+    tokens = [(UNTIL, UNTIL.set(min(UNTIL.get(), until)))] + ([(CAP, CAP.set(cap))] if cap else [])
+    try:
+        yield
+    finally:
+        for var, token in reversed(tokens):
+            var.reset(token)
 
 _client = None
 T0 = time.time()
@@ -21,19 +42,26 @@ def log(tag: str, text: str):
 def client() -> AsyncOpenAI:
     global _client
     if _client is None:
-        _client = AsyncOpenAI(base_url=os.environ["QWEN_BASE_URL"], api_key=os.environ["QWEN_API_KEY"], timeout=360)
+        # no retries inside the SDK: they would multiply the timeout behind chat's back
+        _client = AsyncOpenAI(base_url=os.environ["QWEN_BASE_URL"], api_key=os.environ["QWEN_API_KEY"],
+                              timeout=CALL_TIMEOUT, max_retries=0)
     return _client
 
 
 async def chat(messages: list, tools: list | None = None, **kwargs):
+    """One model reply, each attempt bounded by CAP and all of them by UNTIL; raises TimeoutError when time is up."""
     for attempt in range(6):
+        left = UNTIL.get() - time.time() - 1
+        if left < 3:
+            raise TimeoutError("no time left for a model call")
         try:
-            return await client().chat.completions.create(model=MODEL, messages=messages, tools=tools, **kwargs)
+            return await client().chat.completions.create(model=MODEL, messages=messages, tools=tools,
+                                                          timeout=min(CAP.get(), left), **kwargs)
         except Exception as error:  # noqa: BLE001  the hosted model may hiccup: retry like any provider
             if attempt == 5:
                 raise
             print(f"[llm] retry after {type(error).__name__}: {str(error)[:200]}", flush=True)
-            await asyncio.sleep(2 + 3 * attempt)
+            await asyncio.sleep(min(2 + 3 * attempt, max(0.0, UNTIL.get() - time.time() - 5)))
 
 
 def parse_object(text: str) -> dict | None:
@@ -84,10 +112,13 @@ BROWSER_TOOLS = [
     _fn("form", "Work through a form in one go: steps run in order, each waits for the page to settle. A step is "
         "{\"field\": \"<label>\", \"value\": \"...\"} (fills an input, picks a select option by its text, or "
         "ticks a checkbox with true/false) or {\"click\": \"<button label>\"}. Labels are the visible labels, so "
-        "steps survive page reloads (e.g. pick a value, click 'apply selection', pick the next value). Stops at the "
-        "first failing step and says why.",
+        "steps survive page reloads (e.g. pick a value, click 'apply selection', pick the next value). A control "
+        "without a usable label: {\"ref\": n, \"value\": \"...\"}, or {\"ref\": n} to click it; refs hold only "
+        "until the page reloads. Fields in collapsed sections are opened first. Stops at the first failing step and "
+        "says why.",
         {"steps": {"type": "array", "items": {"type": "object", "properties": {
-            "field": {"type": "string"}, "value": {"type": "string"}, "click": {"type": "string"}}}}}, ["steps"]),
+            "field": {"type": "string"}, "value": {"type": "string"}, "click": {"type": "string"},
+            "ref": {"type": "integer"}}}}}, ["steps"]),
     _fn("fetch", "Read a same-site URL (e.g. a link's href, a document, a later results page) without leaving the "
         "current page. Faster than goto when you only need to read; returns text without refs; files and ZIPs are "
         "opened.", {"url": {"type": "string"}}, ["url"]),
@@ -102,11 +133,27 @@ BROWSER_TOOLS = [
 ]
 
 
+HTTP_STATUS = re.compile(r"Fetched \S+ \(HTTP (\d+)\)")
+FINISH_NOW = "Time is almost up: call finish now with your best findings."
+
+
+async def page_status(tab) -> int:
+    """HTTP status of the page the tab shows; 0 if the browser doesn't tell."""
+    try:
+        return int(await tab.page.evaluate("performance.getEntriesByType('navigation')[0]?.responseStatus || 0"))
+    except Exception:  # noqa: BLE001
+        return 0
+
+
 async def investigate(tab, system: str, mission: str, finish_schema: dict, deadline: float, tag: str,
                       extra_tools: list | None = None, handlers: dict | None = None, max_steps: int = 60,
-                      check=None) -> dict:
-    """check(result, evidence) -> (result, problem): runs on finish; a problem sends the model back to work."""
-    """Let the model work the tab until it calls finish(result) or the deadline passes."""
+                      check=None, warn_at: float = 60, warning: str = FINISH_NOW) -> dict:
+    """Let the model work the tab until it calls finish(result) or the deadline passes.
+
+    check(result, evidence) -> (result, problem): runs on finish, its model calls bounded by CHECK_TIMEOUT and the
+    deadline; a problem sends the model back to work, a check that fails or runs out of time lets the result through.
+    `warning` goes to the model `warn_at` seconds before the deadline. A finish forced by the deadline or the step
+    limit is marked `forced`: whatever it says, the agent did not finish its mission."""
     tools = BROWSER_TOOLS + (extra_tools or []) + [_fn(
         "finish", "Return your findings when the mission is done (or when told time is up: your best findings).",
         {"result": finish_schema}, ["result"])]
@@ -115,20 +162,44 @@ async def investigate(tab, system: str, mission: str, finish_schema: dict, deadl
     steps: list[list[dict]] = []
     evidence: list[str] = []
 
+    kept: dict[str, int] = {}  # page text -> evidence number, so a page kept twice reaches the analyst once
+
     async def keep(args):
+        """An error page is never evidence: retry a URL a few times, else tell the model it was not kept."""
         url = (args.get("url") or "").strip()
-        text = await tab.fetch(url) if url else await tab.read()
+        for attempt in range(3):
+            if url:
+                text = await tab.fetch(url)
+                match = HTTP_STATUS.match(text)
+                status = int(match.group(1)) if match else 0
+            else:
+                text, status = await tab.read(), await page_status(tab)
+            if status < 400 or not url or attempt == 2:
+                break
+            await asyncio.sleep(2 + 2 * attempt)
+        if status >= 400:
+            log(tag, f"evidence not kept: HTTP {status} {url or tab.page.url}")
+            return (f"Not kept: the page answered HTTP {status} (an error page, usually transient). Open it again and "
+                    f"keep it once it shows its content.\n{text[:1500]}")
+        if text in kept:
+            return f"Already kept as evidence #{kept[text]} (same content); not kept again."
         evidence.append(f"### {args.get('label', '')}\n{text}")
+        kept[text] = len(evidence)
         return f"Kept as evidence #{len(evidence)}.\n{text}"
     warned = False
     for step in range(max_steps):
         left = deadline - time.time()
-        if left < 60 and not warned:
-            messages.append({"role": "user", "content": "Time is almost up: call finish now with your best findings."})
+        if left < warn_at and not warned:
+            messages.append({"role": "user", "content": warning})
             warned = True
         if left < 0:
             break
-        reply = await chat(messages, tools, **({"reasoning_effort": STEP_EFFORT} if STEP_EFFORT else {}))
+        try:
+            with limits(deadline):  # a step never eats the grace the forced finish below needs
+                reply = await chat(messages, tools, **({"reasoning_effort": STEP_EFFORT} if STEP_EFFORT else {}))
+        except Exception as error:  # noqa: BLE001  out of time or the model keeps failing: finish with what is kept
+            log(tag, f"step failed: {type(error).__name__}: {str(error)[:200]}")
+            break
         message = reply.choices[0].message
         messages.append(message.model_dump(exclude_none=True))
         if message.content:
@@ -157,7 +228,12 @@ async def investigate(tab, system: str, mission: str, finish_schema: dict, deadl
                         continue
                 result = result or {}
                 if check and deadline - time.time() > 45:
-                    result, problem = await check(result, evidence)
+                    try:
+                        with limits(deadline, CHECK_TIMEOUT):
+                            result, problem = await check(result, evidence)
+                    except Exception as error:  # noqa: BLE001  out of time or no JSON: keep the finding unchecked
+                        log(tag, f"check skipped: {type(error).__name__}: {str(error)[:200]}")
+                        problem = ""
                     if problem:
                         log(tag, f"finish refused: {problem}")
                         messages.append({"role": "tool", "tool_call_id": call.id, "content": problem})
@@ -188,9 +264,14 @@ async def investigate(tab, system: str, mission: str, finish_schema: dict, deadl
                 old["content"] = (old["content"][:300] + "\n[older page read shortened: what you noted is kept; "
                                   "read it again if you need a value you did not note]")
     messages.append({"role": "user", "content": "Stop now and call finish with your best findings."})
-    reply = await chat(messages, tools, tool_choice={"type": "function", "function": {"name": "finish"}})
+    log(tag, "finish forced (deadline or step limit)")
+    try:
+        reply = await chat(messages, tools, tool_choice={"type": "function", "function": {"name": "finish"}})
+    except Exception as error:  # noqa: BLE001  out of time: what was kept still counts
+        log(tag, f"forced finish failed: {type(error).__name__}")
+        return {"evidence": evidence, "forced": True}
     for call in reply.choices[0].message.tool_calls or []:
         result = (parse_object(call.function.arguments or "{}") or {}).get("result")
         result = parse_object(result) if isinstance(result, str) else result
-        return {**(result or {}), "evidence": evidence}
-    return {"evidence": evidence}
+        return {**(result if isinstance(result, dict) else {}), "evidence": evidence, "forced": True}
+    return {"evidence": evidence, "forced": True}

@@ -5,6 +5,8 @@ import time
 import llm
 from agents.common import STR, SYSTEM, context, login_line, obj
 
+SIGN_BY = 180  # seconds before the deadline: stop entering, omit what is unfinished, sign (TAN look-up ~2 min)
+
 
 def german(value: float) -> str:
     return f"{value:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
@@ -37,13 +39,20 @@ total net {german(answer['total_net'])} EUR (net; a displayed gross amount with 
 {rows or '(no positions: no bid)'}
 {f"Unfinished positions to omit with the form's omit option (partial submission): {', '.join(omitted)}" if omitted else ''}
 Enter every value exactly (German number format, two decimals), one entry per position; positions may come in any
-order, so check which position each page is for. Use the form tool to fill a whole page (configurator choices with
-their apply buttons, quantity, prices, breakdown, lead time, then the next-step button) in one call. Never add extra
-positions, never skip a position unless it is listed to omit, never tick your own terms and conditions (AGB). When the form asks for the signing TAN,
+order, so check which position each page is for. Each model step costs time: fill a whole page with one form call
+and end it with the page's next-step button. Choices that depend on each other (a configurator) go into the same call,
+each choice followed by its apply button. Pick options by the text the page shows (it may word a value differently
+than the specification above). Fields in collapsed sections are opened by the form tool. If a step fails, send the
+rest of that page again in one form call, with the failed step corrected. Never add extra positions, never skip a
+position unless it is listed to omit, never tick your own terms and conditions (AGB). When the form asks for the signing TAN,
 request it once, then call get_tan with the portal's message (the newest request wins; a new request invalidates the
 old TAN; a TAN is valid for five minutes). Review the summary, then submit bindingly; the run ends when the bid is accepted.
 If a value is rejected, read the message and fix it. Finish with what the portal confirmed."""
     tools = [llm._fn("get_tan", "After requesting a TAN: look up the newest signing TAN in the bidder's mailbox.",
                      {"portal_message": {"type": "string", "description": "what the portal said about the request"}})]
+    hurry = ("Time is almost up and an unsigned bid scores nothing. Stop entering values: omit every position not "
+             "completely entered yet with the form's omit option, go to the summary, request the TAN unless you already "
+             "did, get it with get_tan, and submit the bid bindingly now. Call finish only after the portal accepted it.")
     return await llm.investigate(tab, SYSTEM, mission, obj(confirmation=STR), deadline, "submit",
-                                 extra_tools=tools, handlers={"get_tan": fetch_tan}, max_steps=70)
+                                 extra_tools=tools, handlers={"get_tan": fetch_tan}, max_steps=70,
+                                 warn_at=SIGN_BY, warning=hurry)
