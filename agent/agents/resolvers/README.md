@@ -17,8 +17,9 @@ means. The output is typed facts for `calc`, which does all the arithmetic.
 
 - `sites`: brief and the run's websites (id and URL, no logins) → one website per role: `tender_portal`,
   `supplier_portal`, `erp`, `webmail`.
-- `requirements`: brief, evidence from the tender and supplier portal agents, and the kept mail pages that mention
-  "techn" (the technical release of rule 21: Technikfreigabe, technik@, technical; all kept mail if none does) → per
+- `requirements`: brief, evidence from the tender and supplier portal agents, and the kept mail pages of the technical
+  release: the records `common.technical_records` finds in the brief's technical rule, matched by subject or sender
+  (`common.mentions`); all kept mail if the brief names none or no page matches → per
   position `final_quantity_pieces`, `requirement`, `bore_mm`, `stroke_mm`, `pressure_bar`, `mounting`,
   `certification`, `catalogue_group`, plus `quantity_reasoning` and `requirement_reasoning`.
 - `commercials`: brief, evidence from the tender portal and mail agents →

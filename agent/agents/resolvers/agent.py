@@ -3,7 +3,7 @@ import asyncio
 import json
 
 import llm
-from agents.common import RESOLVE, context, evidence
+from agents.common import RESOLVE, context, evidence, mentions, technical_records
 
 ROLES = {
     "tender_portal": "the public tender, its bill of quantities, the bidder Q&A and the bid submission",
@@ -71,9 +71,11 @@ async def first(*jobs):
 
 
 async def requirements(task, tender, spec, mail, effort: str = "medium") -> dict:
-    # Only the technical release matters here (rule 21 names it); every other mail would slow this critical-path call.
+    # Only the technical release matters here; every other mail would slow this critical-path call. Which record that
+    # is comes from this run's brief (its subject and sender); a brief that names none gets all kept mail.
     pages = mail.get("evidence", [])
-    technical = {"evidence": [page for page in pages if "techn" in page.lower()] or pages}
+    records = technical_records(task["brief"])
+    technical = {"evidence": [page for page in pages if mentions(page, records)] or pages}
     question = f"""{context(task)}
 
 Evidence from the tender portal:

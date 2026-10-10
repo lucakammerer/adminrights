@@ -42,6 +42,98 @@ def context(task: dict) -> str:
     return "The task brief (it contains the rules):\n" + brief
 
 
+def reference(brief: str) -> str:
+    """The tender reference: the first identifier the brief puts in parentheses (letters and digits, no spaces)."""
+    match = re.search(r"\(([A-Za-z0-9][\w./-]*\d[\w./-]*)\)", brief or "")
+    return match.group(1) if match else ""
+
+
+# What the brief says about mail records, read from this run's brief: never typed into a mission.
+LOCAL = re.compile(r"(?<![\w.+-])([A-Za-z0-9][\w.+-]*)@(?![\w-]+\.\w)")  # a sender's local part without its domain
+ADDRESS = re.compile(r"[\w.+-]+@([\w-]+(?:\.[\w-]+)+)")
+PAIR = re.compile(r"^([^\s/,;:()][^/,;:()]*?)\s*/\s*([A-Za-z0-9][\w.+-]*?)@?$")  # "Subject/localpart"
+NOUN = re.compile(r"\b([A-ZÄÖÜ][\w\-äöüß]+)\s+(?:messages?|mails?|e-mails?|records?)\b")
+ARTICLES = {"The", "A", "An", "This", "That", "Each", "Every", "Any", "Its", "Latest", "Newest", "Most", "Recent", "No"}
+TECHNICAL = re.compile(r"\btechnical\b|\bstroke\b|\breserve\b", re.I)
+
+
+def _units(brief: str) -> list[str]:
+    """The brief's paragraphs, bullets and numbered rules, without the logins."""
+    brief = re.sub(r"## Site access.*?(?=\n## |\Z)", "", brief, flags=re.S)
+    return [u.strip(" -*\t\n") for u in re.split(r"\n\s*\n|\n\s*[-*]\s+|\n(?=\s*\d+\.\s)", brief) if u.strip(" -*\t\n")]
+
+
+def _sentences(unit: str) -> list[str]:
+    return [s.strip() for s in re.split(r"(?<=[.!?])\s+(?=[A-ZÄÖÜ0-9])", unit) if s.strip()]
+
+
+def _subject(text: str) -> str:
+    """The subject in front of "/sender": its trailing capitalised words (prose before it is dropped), else its last
+    word."""
+    words = text.split()
+    tail: list[str] = []
+    for word in reversed(words):
+        if not re.match(r"[A-ZÄÖÜ0-9]", word):
+            break
+        tail.insert(0, word)
+    return " ".join(tail) or (words[-1] if words else "")
+
+
+def mail_records(brief: str) -> dict:
+    """The mail records the brief's rules name: {"records": [{"subject", "sender", "rule"}], "senders": [local parts],
+    "domain": the bidder's mailbox domain if the brief writes a full address}. A record has a subject, a sender's local
+    part or both; `rule` is the brief's sentence about it. Never raises: nothing found gives empty lists."""
+    try:
+        return _mail_records(brief or "")
+    except Exception:  # noqa: BLE001  an unexpected brief shape must never cost the run
+        return {"records": [], "senders": [], "domain": ""}
+
+
+def _mail_records(brief: str) -> dict:
+    records: list[dict] = []
+
+    def add(subject: str, sender: str, rule: str):
+        subject, sender = subject.strip(" .`'\""), sender.strip(" .`'\"@").lower()
+        for r in records:
+            if r["subject"].lower() == subject.lower() and r["sender"] == sender:
+                return
+        if subject or sender:
+            records.append({"subject": subject, "sender": sender, "rule": rule[:300]})
+
+    for unit in _units(brief):
+        for sentence in _sentences(unit):
+            items = [i.strip(" .") for i in re.split(r",|;|\band\b", sentence.rsplit(":", 1)[-1])]
+            pairs = [m for m in (PAIR.match(i) for i in items) if m]
+            if len(pairs) >= 2:  # a list like "Subject/sender, Subject/sender" (one alone is ordinary prose)
+                for m in pairs:
+                    add(_subject(m.group(1)), m.group(2), sentence)
+                continue
+            for local in LOCAL.findall(sentence):
+                subjects = [n for n in NOUN.findall(sentence) if n not in ARTICLES]
+                add(subjects[0] if subjects else "", local, sentence)
+    senders = list(dict.fromkeys(r["sender"] for r in records if r["sender"]))
+    domains = [d for d in ADDRESS.findall(brief) if "." in d]
+    return {"records": records, "senders": senders, "domain": domains[0] if domains else ""}
+
+
+def technical_records(brief: str) -> list[dict]:
+    """The mail records a technical rule of the brief names (the release that gives a usable stroke's reserve)."""
+    try:
+        records = mail_records(brief)["records"]
+        units = [u for u in _units(brief) if TECHNICAL.search(u)]
+        return [r for r in records if any((r["subject"] and r["subject"].lower() in u.lower())
+                                          or (r["sender"] and f"{r['sender']}@" in u.lower()) for u in units)]
+    except Exception:  # noqa: BLE001
+        return []
+
+
+def mentions(page: str, records: list[dict]) -> bool:
+    """Whether a kept page is one of these records: it names a record's subject or comes from its sender."""
+    low = page.lower()
+    return any((r["subject"] and r["subject"].lower() in low) or (r["sender"] and f"{r['sender']}@" in low)
+               for r in records)
+
+
 STR, INT, NUM, BOOL = {"type": "string"}, {"type": "integer"}, {"type": "number"}, {"type": "boolean"}
 
 

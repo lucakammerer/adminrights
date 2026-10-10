@@ -328,7 +328,7 @@ Same jobs and rules, different software, look, navigation, site names and data, 
 | Other site ids or names | roles and submission target from the run (I3) |
 | Other navigation and labels | model navigation over page text; generic prompts ✅ |
 | Information on other sites | gap sweep for missing facts and unresolved keys (I16) |
-| Other mail subjects | topics and senders from the brief (I12) |
+| Other mail subjects | topics and senders from the brief ✅ (I12) |
 | Other document formats | ZIP, CSV, TXT, HTML ✅; PDF (I17) |
 | Other number and date conventions | strict parsing with hints (I10); UTC comparison |
 | A no-bid scenario | unfinished ≠ no match (I1); no-bid gate (I11); mutation test with a blocked match |
@@ -418,7 +418,7 @@ Every item has exactly one owner. When it touches a file someone else owns (§14
 | --- | --- | --- | --- | --- | --- |
 | I10 | Strict numbers: a number's own format beats the hint ✅, thousands separators in grams ✅, text values ✅ (`tests/test_calc.py`); remaining: ambiguous forms refused (the agent re-reads); `Decimal` end to end | `numbers.py`, `calc.py` | parser tests incl. the probes in PLAN_COMPARISON §2.3 | 4, 22 | L |
 | I11 | ERP match check in code ✅ (`validate.material_mismatch` in the ERP `check`, `tests/test_validate.py`); no-bid gate ✅ (`main` `erp_search`: a `no_match` with ≥ 150 s left gets a second agent in a fresh tab; a material it finds wins); remaining: answer schema validated before signing | `agents/erp`, `validate.py`, `agents/submit` | tests with look-alike and blocked candidates | T1.6, 3, 7, 8 | L |
-| I12 | Mail topics and senders parsed from the brief; generic wording for the approval search | `agents/webmail` | no public mail subject in prompts | T0.11, 5, 10, 21 | Y |
+| I12 | ✅ Mail topics and senders parsed from the brief (`common.mail_records`, `tests/test_brief.py`); approval found by sender and meaning; technical release for `requirements` from the brief | `agents/webmail`, `agents/common.py`, `agents/resolvers` | no public mail subject in prompts | T0.11, 5, 10, 21 | Y |
 | I13 | Code-side retry of transient error pages; auto re-login; adaptive settle | `browser.py` | fewer model turns on the ERP in the dry-run log | T3.2 | Y |
 | I14 | ✅ Calculator tests (`tests/test_calc.py`): golden test, values written as text, allocation ties, band edges, inclusive ceilings and thresholds, shared stock | `tests/` | green | 4–9, 12, 15–18, 22–27 | L |
 | I15 | Loud failures instead of silent fallbacks (FX, metal index): tolerant key match and `MISSING` in the trace ✅; omitted positions per rule 9 ✅ (also when all are omitted); a material without prices is submitted with its other fields ✅ | `calc.py` | tests | 9, 22, 28 | L |

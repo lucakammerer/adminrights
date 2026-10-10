@@ -8,7 +8,7 @@ superseded and conditional approvals too, so the resolver can choose the valid o
 ## Rules
 
 Gathers for 5, 12, 16, 20, 21, 22, 23, 24, 25, 26, 28. The topics come from the brief (rule 21 names subjects and
-senders), not from public-1.
+senders), read at run time by `common.mail_records`, not from public-1.
 
 ## Input / output
 
@@ -19,9 +19,11 @@ senders), not from public-1.
 ## Implementation
 
 `agent.py` `run` → `llm.investigate`, tag `webmail`, at most 60 steps, phase 1 deadline.
-First searches the reference alone in each folder, then the reference plus one word of the subject the brief
-authorizes for each record kind still missing (mail search combines words with AND, as the brief says). The discount
-approval is identified by the sender the brief names and its meaning, never by a subject typed into the mission. Keeps each message via its own URL so sender,
+`wanted` lists the records this run's brief names, from `common.mail_records`: subject/sender pairs, senders named
+as `localpart@` with the subject the same sentence gives, and records with only a sender and a meaning (the discount
+approval). Nothing is typed into the mission; when the parser finds nothing, the mission tells the model to derive
+the records from the brief's rules. The model first searches the reference alone in each folder, then the reference
+plus one word of each subject still missing (mail search combines words with AND, as the brief says). Keeps each message via its own URL so sender,
 date and body are complete. Skips TAN mails; `get_tan` fetches those ([submit](../submit/README.md)).
 
 ## Pitfalls
@@ -31,5 +33,6 @@ date and body are complete. Skips TAN mails; `get_tan` fetches those ([submit](.
 
 ## Open
 
-- I12 will turn the brief-driven selection into a structured parser, so the resolver can receive the same record
-  identifiers without relying on wording in kept pages.
+- The parser reads the brief's English sentence shapes (lists of `Subject/sender`, `localpart@` mentions). A brief
+  worded very differently yields fewer records; the mission then falls back to the rules, and the reference-alone
+  search still finds every record for the reference.
