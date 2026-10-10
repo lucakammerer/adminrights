@@ -13,9 +13,9 @@ because ids and names differ between datasets. Two attempts, then the run fails 
 
 **Rules:** 1, 2, 13, 14, 17, 20.
 
-**Input:** brief and the evidence from the tender portal, supplier portal and mail agents. All kept mail goes in, not a
-keyword filter: the technical release may be named differently per dataset. It is on the critical path: the ERP agents
-wait for it.
+**Input:** brief, evidence from the tender and supplier portal agents, and the kept mail pages that mention "techn"
+(the technical release of rule 21: Technikfreigabe, technik@, technical); all kept mail if none does. It is on the
+critical path: the ERP agents wait for it, and all mail doubles its time (66 s instead of 34 s on public-1).
 
 **Output per position:** `final_quantity_pieces` (+ `quantity_reasoning`), `requirement`, `bore_mm`, `stroke_mm`,
 `pressure_bar`, `mounting`, `certification`, `catalogue_group` (+ `requirement_reasoning`).

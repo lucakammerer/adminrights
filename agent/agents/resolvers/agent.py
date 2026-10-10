@@ -30,6 +30,9 @@ JSON: {{{", ".join(f'"{role}": "<siteId>"' for role in ROLES)}}}"""
 
 
 async def requirements(task, tender, spec, mail, effort: str = "medium") -> dict:
+    # Only the technical release matters here (rule 21 names it); every other mail would slow this critical-path call.
+    pages = mail.get("evidence", [])
+    technical = {"evidence": [page for page in pages if "techn" in page.lower()] or pages}
     question = f"""{context(task)}
 
 Evidence from the tender portal:
@@ -38,8 +41,8 @@ Evidence from the tender portal:
 Evidence from the supplier portal:
 {evidence(spec)}
 
-Evidence from the mailbox (the technical release for the stroke reserve is among it):
-{evidence(mail)}
+Technical releases from the mailbox:
+{evidence(technical)}
 
 For every tender position, work out:
 - final_quantity_pieces: tender quantity, replaced by the latest dated clarification that changes it (ignore
