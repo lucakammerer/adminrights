@@ -1,19 +1,21 @@
 # Architecture
 
-Models gather and decide, code calculates. One run in `agent/agent.py` `main`:
+Models gather and decide, code calculates. Every agent is a folder `agent/agents/<name>/` with its code (`agent.py`)
+and its documentation (`README.md`); `agent/agents/common.py` holds what they share. One run in `agent/agent.py`
+`main`:
 
 ```
 main (budget = min(time left, 19 min), end = start + budget)
  ├─ Phase 1, parallel, one browser each, deadline end − 9 min
- │   tender · spec · mail · erp-login
+ │   tender.run · spec.run · mail.run · erp.login
  ├─ Phase 2, parallel, no browser
- │   resolve_requirements · resolve_commercials
+ │   resolvers.requirements · resolvers.commercials
  ├─ Phase 3, parallel in ERP tabs, deadline end − 6 min
- │   run_erp_position per distinct requirement
+ │   erp.run per distinct requirement
  ├─ Phase 4, code
- │   build_facts → calc.compute
+ │   calc.facts → calc.compute
  └─ Phase 5, deadline end − 20 s
-     run_submit (+ get_tan in the mail tab)
+     submit.run (+ get_tan in the mail tab)
 ```
 
 With fewer than 4 browsers, `main` opens the remaining sites as tabs in browser 1.
@@ -27,7 +29,7 @@ Every browser agent is the same loop. Agents differ only in mission, result sche
   per read, the rest via `offset`.
 - **Tools:** `read`, `goto`, `click`, `fill`, `select`, `check`, `press`, `back`, `form` (a whole form page by
   visible labels), `fetch` (read a URL without navigating; opens PDFs and ZIPs), `save_evidence`, `note`, `finish`.
-- **Evidence:** `save_evidence` keeps a page word for word. Only this evidence reaches the resolvers and `extract_erp`.
+- **Evidence:** `save_evidence` keeps a page word for word. Only this evidence reaches the resolvers and `erp.extract`.
 - **Small context:** tool results of the last 4 steps stay in full (`KEEP_STEPS`); older ones are cut to 300
   characters. Whatever the agent wants to keep, it pins with `note`.
 - **`check`:** optional validator on `finish`. If it reports a problem, `finish` is refused and the agent keeps
@@ -35,7 +37,7 @@ Every browser agent is the same loop. Agents differ only in mission, result sche
 - **Time:** 60 s before the deadline the agent is told to finish now; after that `finish` is forced via `tool_choice`.
 - **Model:** `AGENT_MODEL`, default Qwen3.8-Flash-Next via `QWEN_BASE_URL`. `chat` retries up to 6 times.
 
-The shared system prompt `SYSTEM` in `agent/agent.py` describes the websites' traps in general terms: cookie walls,
+The shared system prompt `SYSTEM` in `agent/agents/common.py` describes the websites' traps in general terms: cookie walls,
 popups with a misleading "continue", fake toolbars, unlock sliders, outdated versions first, paging, 503s, number
 formats. It names no site and no value.
 
@@ -46,11 +48,12 @@ evidence; output is a fixed JSON schema stated in the prompt.
 
 ## Logs
 
-`main` prints one line per phase: `[tender]`, `[spec]`, `[mail]`, `[requirements]`, `[commercials]`, `[erp]`,
-`[facts]`, `[calc]`, `[answer]`, `[submit]`. Every agent step appears as `[tag] n: tool {args}`.
+Every line goes through `llm.log` as `[tag  123s] ...` with the seconds since start. `main` prints one line per phase
+(`tender`, `spec`, `mail`, `requirements`, `commercials`, `erp`, `facts`, `calc`, `answer`, `submit`); every agent
+step appears as `[tag  123s] n: tool {args}`.
 
 ## Timing
 
 The first full local run took 1088 s and never submitted: phase 1 ran to its deadline, the ERP phase to end − 6 min,
 and the submit agent (about 275 s on its own) ran out of time. Phases wait for each other although the ERP search only
-needs the spec result. Lines carry no timestamps yet, so per-phase times have to be inferred.
+needs the spec result.

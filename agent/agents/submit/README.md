@@ -17,7 +17,7 @@ bindingly. Without a submission the run scores 0.
 
 ## Implementation
 
-- `agent/agent.py` `run_submit` → `llm.investigate`, tag `submit`, at most 70 steps, deadline end − 20 s.
+- `agent.py` `run` → `llm.investigate`, tag `submit`, at most 70 steps, deadline end − 20 s.
   Values in German format with two decimals (`german`). Whole form pages in one `form` call.
 - Extra tool `get_tan`: starts its own `investigate` in the mail tab, tag `tan`, at most 12 steps, at most 2 min.
   Finds the newest TAN mail for the request just made.

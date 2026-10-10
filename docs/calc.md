@@ -1,12 +1,12 @@
 # Calculation
 
-No model. `agent/agent.py` `build_facts` merges the results, `agent/calc.py` `compute` calculates.
+No model. `agent/calc.py`: `facts` merges the agents' results, `compute` calculates.
 
 ## Rules
 
 3 (no bid), 4, 6, 7, 8, 15, 16, 18, 22–27.
 
-## build_facts
+## facts
 
 Per position, from requirement, commercial terms and ERP: quantity, material, scales (parsed in the condition's
 number format, `number`), price unit, currency and rate, surcharge mass in kg (`grams_to_kg`) × metal index, setup fee
@@ -31,5 +31,5 @@ Reported fields: base, surcharge per piece (mass + setup, before discount), pack
 
 ## Open
 
-- Step 1 doesn't distinguish "no material" from "ERP agent failed" (see [erp.md](erp.md#open)). In the second case
+- Step 1 doesn't distinguish "no material" from "ERP agent failed" (see [ERP agent](../agent/agents/erp/README.md#open)). In the second case
   the position should be omitted instead of `no_bid`; a no bid in a bid scenario loses almost all position points.

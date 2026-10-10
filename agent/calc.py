@@ -1,4 +1,5 @@
 """The brief's bid arithmetic over facts the models established. No website values live here: only the rules."""
+import re
 from decimal import ROUND_FLOOR, ROUND_HALF_UP, Decimal
 from math import ceil
 
@@ -116,3 +117,65 @@ def compute(facts: dict) -> dict:
     return {"answer": {"tender_reference": reference, "decision": "bid", "currency": "EUR",
                        "discount_percent": float(percent), "positions": answer_rows, "total_net": float(cents(total))},
             "trace": "\n".join(trace)}
+
+
+def number(text, fmt: str = "") -> float:
+    """A number as shown, in its locale: de-DE uses a decimal comma, en-US a decimal point."""
+    s = re.sub(r"[^\d,.\-]", "", str(text))
+    if not s:
+        return 0.0
+    german = "de" in fmt.lower() if fmt else ("," in s and ("." not in s or s.rfind(",") > s.rfind(".")))
+    if german:
+        s = s.replace(".", "").replace(",", ".")
+    else:
+        s = s.replace(",", "")
+    return float(s)
+
+
+def grams_to_kg(text) -> float:
+    value = number(text, "de-DE" if re.search(r"\d,\d", str(text)) else "en-US")
+    return value / 1000 if re.search(r"\bg\b|g/", str(text)) and "kg" not in str(text) else value
+
+
+def facts(tender, requirements, commercials, erp: dict) -> dict:
+    by_pos = {c["position"]: c for c in commercials.get("positions", [])}
+    positions = []
+    for req in requirements["positions"]:
+        key = req["position"]
+        e = erp.get(key) or {}
+        c = by_pos.get(key, {})
+        pc = e.get("price_condition") or {}
+        fmt = pc.get("number_format") or ""
+        currency = (pc.get("currency") or "EUR").upper()
+        fx = None
+        if currency != "EUR":
+            fx = (commercials.get("fx_rates") or {}).get(pc.get("fx_key") or "")
+            if fx is None and len(commercials.get("fx_rates") or {}) == 1:
+                fx = next(iter(commercials["fx_rates"].values()))
+        index = (commercials.get("metal_indices") or {}).get(e.get("price_index_key") or "")
+        if index is None and len(commercials.get("metal_indices") or {}) == 1:
+            index = next(iter(commercials["metal_indices"].values()))
+        positions.append({
+            "position": key, "quantity_pieces": int(req["final_quantity_pieces"]),
+            "material_number": e.get("material_number") or None,
+            "scales": [{"min_quantity": s["from_quantity"], "price": number(s["price_as_shown"], fmt)}
+                       for s in pc.get("scales") or []],
+            "price_unit": pc.get("price_unit_pieces") or 1, "currency": currency,
+            "fx_eur_per_currency_unit": fx,
+            "surcharge_mass_kg_per_piece": grams_to_kg(e.get("surcharge_mass") or 0),
+            "metal_index_eur_per_kg": index or 0,
+            "setup_fee": float(c.get("setup_fee") or 0) + number(e.get("setup_fee") or 0),
+            "discount_applies_to": c.get("discount_applies_to") or "base",
+            "stock": e.get("available_stock_pieces") or 0,
+            "lead_time_stock_weeks": e.get("lead_time_stock_weeks") or 0,
+            "lead_time_production_weeks": e.get("lead_time_production_weeks") or 0,
+            "delivery_commitment": c.get("delivery_commitment"),
+            "pieces_per_carton": e.get("pieces_per_carton"), "carton_price": c.get("carton_price") or 0,
+            "setup_pool_member": bool(c.get("setup_pool_member")),
+            "allocation_mass": grams_to_kg(e.get("allocation_mass") or 0) * 1000,
+            "project_bonus_member": bool(c.get("project_bonus_member")),
+        })
+    reference = commercials.get("tender_reference") or tender.get("tender_reference") or ""
+    return {"tender_reference": reference, "discount": commercials.get("discount") or {},
+            "positions": positions, "setup_pool_fee": commercials.get("setup_pool_fee") or 0,
+            "project_bonus_bands": commercials.get("project_bonus_bands") or []}

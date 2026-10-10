@@ -15,10 +15,12 @@ pages, keeps what the models select and does the brief's arithmetic.
 
 | File | What it does |
 | --- | --- |
-| `agent.py` | Missions, analysts, orchestration |
+| `agent.py` | Orchestration: phases, deadlines, data flow |
+| `agents/<name>/` | One folder per agent: `agent.py` (mission, schema, `run`) and `README.md` (its docs) |
+| `agents/common.py` | Shared system prompt, brief context, schema helpers |
 | `llm.py` | The tool loop on the hosted Qwen |
 | `browser.py`, `reader.js` | Browser tools; pages as accessible text with control refs |
-| `calc.py` | The bid arithmetic |
+| `calc.py` | Facts assembly and the bid arithmetic |
 | `run.py`, `browsers.py` | Run contract and browsers (starter kit) |
 
 ```sh

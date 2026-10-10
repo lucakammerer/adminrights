@@ -3,7 +3,7 @@
 Two `ask_json` calls without a browser, in parallel after phase 1. They apply the rules to the evidence and return
 typed facts for `calc`. This is where interpretation happens: which record is valid, what a clause means.
 
-## resolve_requirements
+## requirements
 
 **Rules:** 1, 2, 13, 14, 17, 20.
 
@@ -18,7 +18,7 @@ typed facts for `calc`. This is where interpretation happens: which record is va
   named attributes.
 - Usable stroke: add 2 × the reserve from the latest technical release for that revision to the stroke.
 
-## resolve_commercials
+## commercials
 
 **Rules:** 5, 12, 16, 21, 22, 23, 24, 25, 26, 28.
 
@@ -37,12 +37,12 @@ older, future-dated records never apply. Without a condition group, `base` appli
 
 ## Implementation
 
-`agent/agent.py` `resolve_requirements`, `resolve_commercials`, system prompt `RESOLVE`. `agent/llm.py` `ask_json`:
+`agent.py` `requirements`, `commercials`; system prompt `RESOLVE` in `agents/common.py`. `agent/llm.py` `ask_json`:
 JSON mode, up to 3 attempts.
 
 ## Open
 
 - Both depend on a single model call. A mistake here hits many fields at once. The `*_reasoning` fields in the logs
   are the first place to debug.
-- `build_facts` falls back to the only available value when an FX or metal index key doesn't match. With several
+- `calc.facts` falls back to the only available value when an FX or metal index key doesn't match. With several
   indices that can assign the wrong one.

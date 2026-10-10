@@ -20,13 +20,16 @@ you as a coding agent; humans read `README.md`.
 
 ## Where things live
 
-- `agent/` is the package; only it gets uploaded. Everything outside (`docs/`, `eval/`, `bench/`) stays local.
-- `agent/agent.py`: agent missions, resolvers, orchestration (`main`)
+- `agent/` is the package; only it gets uploaded, the agent READMEs included, so they must hold no public-1 values
+  either. Everything outside (`docs/`, `eval/`, `bench/`) stays local.
+- `agent/agent.py`: orchestration only (`main`: phases, deadlines, data flow)
+- `agent/agents/<name>/`: one folder per agent with `agent.py` (mission, schema, `run`) and `README.md` (its
+  documentation); `agent/agents/common.py`: shared system prompt, brief context, schema helpers
 - `agent/llm.py`: the one tool loop (`investigate`) and `ask_json`
 - `agent/browser.py`, `agent/reader.js`: browser tools; a page as text with `[n:kind "label"]`
-- `agent/calc.py`: the bid arithmetic
+- `agent/calc.py`: facts assembly (`facts`) and the bid arithmetic (`compute`)
 - `agent/run.py`, `agent/browsers.py`: run contract and browsers (starter kit)
-- `docs/`: rules and implementation per agent, start at `docs/README.md`
+- `docs/`: what spans agents (challenge, architecture, rules, calc), start at `docs/README.md`
 
 ## Commands
 
@@ -44,7 +47,7 @@ atira submit .                                      # only after Luca approves
 - **Brief:** the task with the 29 bid rules, delivered per run. Source of truth for the rules.
 - **Agent:** one `investigate` loop with its own mission and result schema on one tab.
 - **Resolver:** one `ask_json` call without a browser that applies the rules to kept evidence.
-- **Evidence:** a page kept word for word. Only evidence reaches the resolvers and `extract_erp`.
+- **Evidence:** a page kept word for word. Only evidence reaches the resolvers and `erp.extract`.
 - **Test run / submission:** a test run shows points per field and doesn't count; a submission is reviewed and
   scored. The *latest* passed submission goes into the final, not the best one.
 

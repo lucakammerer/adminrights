@@ -7,15 +7,20 @@ What the system *is*: rules, architecture and every agent. How it came to be liv
 | [challenge.md](challenge.md) | Challenge frame: time, models, scoring, fair play |
 | [architecture.md](architecture.md) | Phases, deadlines, data flow, the tool loop |
 | [rules.md](rules.md) | The 29 bid rules: who implements them, where in the code, status |
-| [agents/tender.md](agents/tender.md) | Tender portal: positions and Q&A |
-| [agents/spec.md](agents/spec.md) | Supplier portal: current revision and requirements |
-| [agents/mail.md](agents/mail.md) | Mailbox: approvals and condition mails |
-| [agents/erp.md](agents/erp.md) | ERP: login, material per requirement, fact extraction |
-| [agents/resolvers.md](agents/resolvers.md) | Requirements and commercial terms from the evidence |
-| [agents/calc.md](agents/calc.md) | The arithmetic |
-| [agents/submit.md](agents/submit.md) | Configurator, TAN, signing |
+| [calc.md](calc.md) | Facts assembly and the arithmetic |
 
-## Every agent file has the same sections
+Each agent documents itself next to its code, in `agent/agents/<name>/README.md`:
+
+| Agent | Contents |
+| --- | --- |
+| [tender](../agent/agents/tender/README.md) | Tender portal: positions and Q&A |
+| [spec](../agent/agents/spec/README.md) | Supplier portal: current revision and requirements |
+| [mail](../agent/agents/mail/README.md) | Mailbox: approvals and condition mails |
+| [erp](../agent/agents/erp/README.md) | ERP: login, material per requirement, fact extraction |
+| [resolvers](../agent/agents/resolvers/README.md) | Requirements and commercial terms from the evidence |
+| [submit](../agent/agents/submit/README.md) | Configurator, TAN, signing |
+
+## Every agent README has the same sections
 
 1. **Mission:** what the agent has to achieve, in two sentences
 2. **Rules:** which bid rules (numbers from [rules.md](rules.md)) it covers

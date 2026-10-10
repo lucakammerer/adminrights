@@ -13,14 +13,14 @@ senders), not from public-1.
 ## Input / output
 
 - Input: brief, mailbox login.
-- Output `MAIL_RESULT`: `kept` (one line on what was kept), `own_address` (the mailbox's own address, for the contact
+- Output `RESULT`: `kept` (one line on what was kept), `own_address` (the mailbox's own address, for the contact
   field in the configurator), `other_relevant_facts`, plus `evidence`. The actual content is the evidence.
 
 ## Implementation
 
-`agent/agent.py` `run_mail` → `llm.investigate`, tag `mail`, at most 60 steps, phase 1 deadline.
+`agent.py` `run` → `llm.investigate`, tag `mail`, at most 60 steps, phase 1 deadline.
 Always searches "reference + one topic word", because search combines words with AND. Keeps each message via its own
-URL so sender, date and body are complete. Skips TAN mails; `get_tan` fetches those ([submit.md](submit.md)).
+URL so sender, date and body are complete. Skips TAN mails; `get_tan` fetches those ([submit](../submit/README.md)).
 
 ## Pitfalls
 
