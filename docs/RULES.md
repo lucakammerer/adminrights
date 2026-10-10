@@ -58,7 +58,7 @@ include it.
 | T0.8 | MUST NOT start browsers in the sandbox: use the ones in `CDP_URLS` (≤ 4, `"browsers"` in `agent.json`); tabs and contexts are free. No dev scripts that launch a browser inside the package. | `browsers.connect` launches only without `CDP_URLS` |
 | T0.9 | MUST NOT attack the platform, the websites, the sandbox or other teams; MUST NOT share scored-run data. | team agreement |
 | T0.10 | MUST NOT address the AI reviewer to steer its verdict. Plain, honest docs are fine. | review |
-| T0.11 | Facts the brief states for every scenario (company, VAT id, mailbox local parts, authorized subjects and senders, submission steps) MAY be used, and SHOULD be read from the run's brief at run time rather than typed into code. | ⚠️ mail topics fixed in the mission (F10 → I12) |
+| T0.11 | Facts the brief states for every scenario (company, VAT id, mailbox local parts, authorized subjects and senders, submission steps) MAY be used, and SHOULD be read from the run's brief at run time rather than typed into code. | ⚠️ the mail mission derives searches from the brief; structured parsing for the resolver remains I12 |
 
 ## 3. T1: Hard (run validity and eligibility)
 
@@ -138,7 +138,8 @@ calc tests (I10, I14)
 **5 · Discount.** `LATEST(discount approval, sales director)` for exactly `T`; none → 0 %. Conditions: 16.
 Traps: approvals for look-alike references; requests from our own mailbox; reviews that are explicitly no approval;
 superseded approvals; draft blocks inside messages; inbox and archive.
-Gather webmail · Decide `resolvers.commercials` · ⚠️ search wording taken from a public mail subject (F10 → I12) · Check:
+Gather webmail · Decide `resolvers.commercials` · ⚠️ search wording comes from the brief at run time; I12 still needs
+structured parsing for the resolver · Check:
 dry-run score; select tests (I18)
 
 **6 · Lead time.** The from-stock lead time when **available** (unrestricted) stock covers the pooled demand (15);
@@ -168,8 +169,8 @@ Check: calc tests, short-budget dry run
 candidates' attributes. Empty or over-broad searches list nothing: narrow to ≤ 20 hits. Mail search ANDs its words:
 use the reference plus one subject or topic; read inbox **and** archive, every result page. Helpers may extract opened
 pages and page through chosen result sets; sites and positions may be investigated in parallel.
-Gather erp, webmail · Decide missions · ⚠️ each agent looks only on "its" site (F11 → I16); fixed mail topics (F10 → I12)
-· Check: gap-sweep test (I16)
+Gather erp, webmail · Decide missions · ⚠️ each agent looks only on "its" site (F11 → I16); I12 still needs structured
+brief parsing for the resolver · Check: gap-sweep test (I16)
 
 **11 · Agent requirement.** See T0.3 and T0.4.
 

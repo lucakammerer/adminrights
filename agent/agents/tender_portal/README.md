@@ -19,7 +19,7 @@ packaging tariff, delivery commitment, setup pool). Decisions happen in [resolve
 ## Implementation
 
 `agent.py` `run` → `llm.investigate`, tag `tender-portal`, at most 45 steps, phase 1 deadline.
-Registers interest ("Teilnahme bekunden") if documents are behind it. Keeps the bill of quantities and every Q&A page
+Registers interest (the step the brief's Submission section names) if documents are behind it. Keeps the bill of quantities and every Q&A page
 with `save_evidence`.
 
 ## Pitfalls

@@ -106,7 +106,7 @@ BROWSER_TOOLS = [
         ["ref", "option"]),
     _fn("check", "Tick (checked=true) or untick a checkbox or radio button by ref.",
         {**REF, "checked": {"type": "boolean"}}, ["ref"]),
-    _fn("press", "Press a key on the focused element, e.g. Enter, Escape, F4, Tab.", {"key": {"type": "string"}},
+    _fn("press", "Press a key on the focused element, e.g. Enter, Escape, Tab.", {"key": {"type": "string"}},
         ["key"]),
     _fn("back", "Go back in the browser history."),
     _fn("form", "Work through a form in one go: steps run in order, each waits for the page to settle. A step is "
@@ -126,7 +126,7 @@ BROWSER_TOOLS = [
         "page, a Q&A page, a material record). Give its URL (a link target or results page) or leave it empty for the "
         "current page. The analyst reads exactly what you keep, so keep every page that holds facts the rules need, "
         "and nothing unrelated.", {"url": {"type": "string"}, "label": {"type": "string",
-                                   "description": "what the page is, e.g. 'Rabattfreigabe 24.01. inbox'"}},
+                                   "description": "what the page is, e.g. 'approval message in archive'"}},
         ["label"]),
     _fn("note", "Save facts you have verified, so you keep them when old page reads are shortened. Be exact: "
         "copy ids, numbers, dates and wording.", {"text": {"type": "string"}}, ["text"]),

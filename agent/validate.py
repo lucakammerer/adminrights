@@ -3,12 +3,14 @@ import re
 
 from calc import number
 
-NONE = {"", "keine", "keinegefordert", "ohne", "none", "nonerequired", "no", "n/a", "na"}
+NONE = re.compile(r"(none|no|n/?a|kein\w*|ohne|nicht|entf\w*|-+)$|(none|no|kein\w*|ohne|nicht)\b", re.I)  # words for "none"
 
 
 def _text(value) -> str:
-    text = re.sub(r"[^0-9a-zäöüß]", "", str(value or "").lower())
-    return "" if text in NONE else text
+    """The attribute as comparable letters and digits; empty when the page says there is none (in any wording that
+    starts with a word for "none", e.g. "none required")."""
+    raw = str(value or "").strip()
+    return "" if not raw or NONE.match(raw) else re.sub(r"[^0-9a-zäöüß]", "", raw.lower())
 
 
 def material_mismatch(requirement: dict, found: dict) -> list[str]:

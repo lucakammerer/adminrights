@@ -101,7 +101,7 @@ Resolve, by the brief's rules (exact reference, authorized sender, latest record
 newer replaces older, future-dated records never apply):
 - discount: the latest director approval for this exact reference: percent and, if it is conditional, its minimum
   undiscounted net order value (else null);
-- per position: which Konditionsgruppe applies and therefore whether the discount applies to "base",
+- per position: which condition group (the brief's term) applies and therefore whether the discount applies to "base",
   "base_and_surcharge" or "none" (no group: "base"); the packaging tariff in EUR per carton; the delivery commitment
   assigned to it (material number, max pooled pieces, weeks) or null; whether it is a setup-pool member; whether it
   is a project-bonus member; any ordinary setup fee in EUR stated for it (else 0);
