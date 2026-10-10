@@ -83,6 +83,7 @@ For every tender position, work out:
 JSON: {{"positions": [{{"position": "...", "final_quantity_pieces": 0, "quantity_reasoning": "...",
 "requirement": "the requirement id the position refers to", "bore_mm": 0, "stroke_mm": 0, "pressure_bar": 0, "mounting": "...", "certification": "...",
 "catalogue_group": "...", "requirement_reasoning": "..."}}]}}"""
+    llm.log("requirements", f"asking with {len(question)} chars, effort {effort}")  # its size drives the critical path
     return await llm.ask_json(RESOLVE, question, effort=effort)
 
 
@@ -113,4 +114,5 @@ JSON: {{"tender_reference": "the exact reference", "discount": {{"percent": 0, "
 "fx_rates": {{"<FX key>": 0.0}}, "metal_indices": {{"<index key>": 0.0}}, "setup_pool_fee": 0,
 "project_bonus_bands": [{{"from": 0, "to": null, "percent": 0}}]}}
 Every amount, rate and percent is a plain JSON number (decimal point, no units)."""
+    llm.log("commercials", f"asking with {len(question)} chars")
     return await llm.ask_json(RESOLVE, question, effort="medium")
