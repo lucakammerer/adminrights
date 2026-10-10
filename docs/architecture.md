@@ -61,6 +61,4 @@ step appears as `[tag  123s] n: tool {args}`.
 
 ## Timing
 
-The first full local run took 1088 s and never submitted: phase 1 ran to its deadline, the ERP phase to end − 6 min,
-and the submit agent (about 275 s on its own) ran out of time. Phases wait for each other although the ERP search only
-needs the customer portal result.
+Measured per test run in `bench/RUNS.md`: where the time went and which phase lost the points.

@@ -43,10 +43,8 @@ atira submit .                                      # only after Luca approves
 
 ## Branches and test runs
 
-Person 1 pushes to `p1/<topic>`, Person 2 to `p2/<topic>`. `python bench/ci.py` (one tick, repeated by a loop)
-merges every new head onto main in a scratch worktree, runs the free gates (compile, leak check, calc replay against
-`bench/fixtures/facts.json`) and starts a test run, at most 2 at once and never while a submission runs. Results land
-in `bench/RUNS.md`. Nothing is pushed: merges to main go through a PR after Luca's yes.
+Push to `p1/<topic>` (Person 1) or `p2/<topic>` (Person 2), started from main. `bench/ci.py` tests every new head
+within minutes; results land in `bench/RUNS.md`. Details and the submission gate: `docs/release.md`.
 
 ## Glossary
 

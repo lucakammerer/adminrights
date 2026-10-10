@@ -10,9 +10,10 @@ through `d`/`number`, so text like "7 pieces" or "3 weeks" cannot crash the run;
 ## facts
 
 Per position, from requirement, commercial terms and ERP: quantity, material, scales (parsed in the condition's
-number format, `number`), price unit, currency and rate, surcharge mass in kg (`grams_to_kg`) × metal index, setup fee
-from mail and ERP, discount rule, stock, lead times, delivery commitment, carton size and price, pool and bonus
-membership, allocation mass. Plus reference, discount, pool fee, bonus bands.
+number format, `number`), price unit, currency and rate (`lookup`: FX key first, then currency), surcharge mass in kg
+(`grams_to_kg`) × metal index (`lookup` by index key), setup fee from mail and ERP, discount rule, stock, lead times,
+delivery commitment, carton size and price, pool and bonus membership, allocation mass. Plus
+reference, discount, pool fee, bonus bands.
 
 ## compute
 

@@ -8,6 +8,7 @@ What the system *is*: rules, architecture and every agent. How it came to be liv
 | [architecture.md](architecture.md) | Phases, deadlines, data flow, the tool loop |
 | [rules.md](rules.md) | The 29 bid rules: who implements them, where in the code, status |
 | [calc.md](calc.md) | Facts assembly and the arithmetic |
+| [release.md](release.md) | Test loop, gates, run log, submission gate |
 
 Each agent documents itself next to its code, in `agent/agents/<name>/README.md`:
 

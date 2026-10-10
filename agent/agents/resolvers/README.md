@@ -56,5 +56,5 @@ JSON mode, up to 3 attempts.
 
 - Both depend on a single model call. A mistake here hits many fields at once. The `*_reasoning` fields in the logs
   are the first place to debug.
-- `calc.facts` falls back to the only available value when an FX or metal index key doesn't match. With several
-  indices that can assign the wrong one.
+- A foreign-currency price whose FX key matches no rate is priced 1:1 (`calc.lookup` returns nothing). The key
+  match itself is tolerant (case, spaces, dashes, one key containing the other).

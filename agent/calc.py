@@ -151,6 +151,22 @@ def grams_to_kg(text) -> float:
     return number(s, "de-DE" if re.search(r"\d,\d", s) else "en-US")
 
 
+def lookup(table: dict | None, *keys):
+    """A rate by its key as two models wrote it ("FX 6282" vs "fx-6282 (USD)"): exact match first, then one key
+    containing the other; a table with a single rate needs no key."""
+    def norm(key) -> str:
+        return re.sub(r"[^0-9A-Z]", "", str(key or "").upper())
+
+    rates = {norm(k): v for k, v in (table or {}).items()}
+    wanted = [k for k in map(norm, keys) if k]
+    for match in (lambda k, w: k == w, lambda k, w: k and (w in k or k in w)):
+        for key in wanted:
+            for k, v in rates.items():
+                if match(k, key):
+                    return v
+    return next(iter(rates.values())) if len(rates) == 1 else None
+
+
 def facts(tender, requirements, commercials, erp: dict) -> dict:
     by_pos = {c["position"]: c for c in commercials.get("positions", [])}
     positions = []
@@ -163,12 +179,8 @@ def facts(tender, requirements, commercials, erp: dict) -> dict:
         currency = (pc.get("currency") or "EUR").upper()
         fx = None
         if currency != "EUR":
-            fx = (commercials.get("fx_rates") or {}).get(pc.get("fx_key") or "")
-            if fx is None and len(commercials.get("fx_rates") or {}) == 1:
-                fx = next(iter(commercials["fx_rates"].values()))
-        index = (commercials.get("metal_indices") or {}).get(e.get("price_index_key") or "")
-        if index is None and len(commercials.get("metal_indices") or {}) == 1:
-            index = next(iter(commercials["metal_indices"].values()))
+            fx = lookup(commercials.get("fx_rates"), pc.get("fx_key"), currency)
+        index = lookup(commercials.get("metal_indices"), e.get("price_index_key"))
         positions.append({
             "position": key, "quantity_pieces": int(d(req["final_quantity_pieces"])),
             "material_number": e.get("material_number") or None, "no_match": e.get("no_match") is True,
