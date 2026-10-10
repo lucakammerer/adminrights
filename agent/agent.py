@@ -24,12 +24,13 @@ from browser import Tab
 
 
 CUT: set[str] = set()  # stages cut at their deadline: their task may still hold its tab for a moment
-# The requirements call took 52-184 s on 2026-10-10 (~16k tokens in). It runs until the ERP searches have
-# ERP_SEARCH_MIN left: an answer after that leaves them no search, and every position would be omitted anyway. After a
-# phase 1 that ran to its cut, that leaves requirements only 90 s (the budgets must make room, I4). A low-effort
-# attempt joins once the first has run BACKUP_AFTER seconds.
+# Specifications plus technical releases give the ERP search keys before the tender agent completes. The later
+# requirements resolver is still authoritative: a tender clarification can change a key, in which case that position
+# receives its own search and unused early searches are stopped. Without an early search, requirements must leave the
+# ERP agents ERP_SEARCH_MIN seconds. A low-effort resolver attempt joins after BACKUP_AFTER seconds.
 ERP_SEARCH_MIN = 60
 BACKUP_AFTER = 60
+SPEC_KEYS = ("bore_mm", "stroke_mm", "pressure_bar", "mounting", "certification", "catalogue_group")
 OPEN_TIMEOUT = 20  # seconds to open a new tab on a site's start page (pages load in 1-5 s)
 
 
@@ -90,22 +91,49 @@ def positions(requirements) -> list[dict]:
     return [r for r in rows if isinstance(r, dict) and named(r.get("position"))] if isinstance(rows, list) else []
 
 
-async def resolve_requirements(inputs: tuple, until: float) -> list[dict]:
-    """The requirements resolver's positions by `until`. One call may use the whole window (a cut call would only be
-    asked again); if the first attempt has no answer after BACKUP_AFTER seconds, a low-effort one runs alongside and
-    counts only when the first brings nothing."""
+def governing(answer) -> list[dict]:
+    """The early-specs rows that contain at least one ERP search key."""
+    rows = answer.get("requirements") if isinstance(answer, dict) else None
+    return [r for r in rows if isinstance(r, dict) and any(r.get(k) not in (None, "") for k in SPEC_KEYS)] \
+        if isinstance(rows, list) else []
+
+
+def spec_key(row: dict) -> tuple:
+    """The ERP-relevant values in a stable form, so 200 and 200.0 (or case/space variants) share one search."""
+    def normal(value) -> str:
+        text = "".join(str("" if value is None else value).split()).casefold()
+        try:
+            return repr(float(text))
+        except ValueError:
+            return text
+    return tuple(normal(row.get(k)) for k in SPEC_KEYS)
+
+
+async def resolve(tag: str, ask, until: float, rows) -> list[dict]:
+    """Use the first valid resolver answer, with a low-effort hedge only after the normal call has had time to answer."""
+    if until <= time.time():
+        llm.log(tag, "no time left for a resolver call")
+        return []
     cap = until - time.time()
-    first = start(resolvers.requirements(*inputs), until, cap)
-    await asyncio.wait({first}, timeout=max(0.0, min(BACKUP_AFTER, cap)))
-    answered = first.done() and not first.cancelled() and first.exception() is None and positions(first.result())
-    backup = None if answered else start(resolvers.requirements(*inputs, effort="low"), until, cap)
-    rows = positions(await safe("requirements", first, until))
-    if rows or backup is None:
-        if backup:
-            backup.cancel()
-        return rows
-    llm.log("requirements", "first attempt brought nothing: taking the low-effort one")
-    return positions(await safe("requirements", backup, until))
+    first, backup = start(ask("medium"), until, cap), None
+    try:
+        await asyncio.wait({first}, timeout=max(0.0, min(BACKUP_AFTER, cap)))
+        answered = first.done() and not first.cancelled() and first.exception() is None and rows(first.result())
+        backup = None if answered else start(ask("low"), until, cap)
+        found = rows(await safe(tag, first, until))
+        if found or backup is None:
+            return found
+        llm.log(tag, "first attempt brought nothing: taking the low-effort one")
+        return rows(await safe(tag, backup, until))
+    finally:
+        for job in (first, backup):
+            if job:
+                job.cancel()
+
+
+async def resolve_requirements(inputs: tuple, until: float) -> list[dict]:
+    """The authoritative position requirements by `until`."""
+    return await resolve("requirements", lambda effort: resolvers.requirements(*inputs, effort=effort), until, positions)
 
 
 def bid(tender: dict, requirements: dict, commercials: dict, erp: dict) -> dict:
@@ -165,6 +193,7 @@ async def fresh(tab: Tab) -> Tab:
 
 
 async def main() -> int:
+    CUT.clear()  # local tests may run main more than once in one interpreter; a previous run's cut is never relevant
     started = time.time()
     task, token = contract.load_run()
     budget = min(contract.seconds_left(task), 19 * 60)
@@ -190,35 +219,16 @@ async def main() -> int:
             tabs[role] = Tab(page, entry)
 
         phase1 = end - 10 * 60  # agents wrap up here; hard cut 30 s later
-        tender, spec, mail, _ = await asyncio.gather(
+        tender_job, spec_job, mail_job, login_job = (asyncio.create_task(job) for job in (
             safe("tender-portal", tender_portal.run(task, tabs["tender_portal"], phase1), phase1 + 30),
             safe("supplier-portal", supplier_portal.run(task, tabs["supplier_portal"], phase1), phase1 + 30),
             safe("webmail", webmail.run(task, tabs["webmail"], phase1), phase1 + 30),
-            safe("erp-login", erp_agent.login(task, tabs["erp"], phase1), phase1 + 30))
-        llm.log("tender-portal", json.dumps(tender, ensure_ascii=False)[:3000])
-        llm.log("supplier-portal", json.dumps(spec, ensure_ascii=False)[:3000])
-        llm.log("webmail", json.dumps(mail, ensure_ascii=False)[:4000])
+            safe("erp-login", erp_agent.login(task, tabs["erp"], phase1), phase1 + 30)))
 
         erp_end = end - 6 * 60  # leaves the submission six minutes
-        async def sweep_tabs():  # the other websites are idle while the ERP searches run: tabs of their own for a sweep
-            return {role: await fresh(tabs[role]) for role in ("tender_portal", "supplier_portal", "webmail")}
-
-        # only calc needs it; one call may use the whole window, a cut call would only be asked again. Commercial facts
-        # it leaves open are looked for on the other websites until the ERP searches are done (I16).
-        erp_done = asyncio.Event()
-        commercials_job = start(sweep.commercials_with_sweep(task, tender, mail, [spec], sweep_tabs, erp_end + 30,
-                                                             erp_done), erp_end + 30, erp_end + 30 - time.time())
         erp_search_end = erp_end - 30 - erp_agent.FINISH_GRACE  # where each ERP agent's own search must end
-        requirements = {"positions": await resolve_requirements((task, tender, spec, mail),
-                                                                erp_search_end - ERP_SEARCH_MIN)}
-        llm.log("requirements", json.dumps(requirements, ensure_ascii=False))
-
         erp_tab = tabs["erp"]
-
-        spec_keys = ("bore_mm", "stroke_mm", "pressure_bar", "mounting", "certification", "catalogue_group")
-        distinct: dict[tuple, dict] = {}
-        for r in requirements["positions"]:
-            distinct.setdefault(tuple(str(r.get(k)) for k in spec_keys), {k: r.get(k) for k in spec_keys})
+        searches: dict[tuple, tuple[str, asyncio.Task]] = {}
 
         async def erp_search(req, first):
             tab = erp_tab if first and "erp-login" not in CUT else await fresh(erp_tab)
@@ -232,12 +242,81 @@ async def main() -> int:
                     return second
             return result
 
-        async def erp_for(key, req, first):
-            return key, await safe(f"erp:{req.get('catalogue_group')}", erp_search(req, first), erp_end)
+        def search(row: dict):
+            """Start one ERP search per distinct governing requirement."""
+            if (key := spec_key(row)) not in searches:
+                requirement = {k: row.get(k) for k in SPEC_KEYS}
+                searches[key] = (f"erp:{requirement.get('catalogue_group')}",
+                                 start(erp_search(requirement, not searches), erp_end))
 
-        found = dict(await asyncio.gather(*(erp_for(k, r, i == 0) for i, (k, r) in enumerate(distinct.items()))))
+        async def search_early():
+            """Search the specification-derived requirements while the tender agent is still collecting Q&A."""
+            spec, mail = await asyncio.gather(spec_job, mail_job)
+            if not spec.get("evidence"):
+                llm.log("specs", "no specification kept: early ERP searches wait for requirements")
+                return
+            if tender_job.done():
+                llm.log("specs", "tender agent already done: requirements decides the search keys")
+                return
+            rows = await resolve("specs", lambda effort: resolvers.specs(task, spec, mail, effort),
+                                 erp_search_end - ERP_SEARCH_MIN, governing)
+            llm.log("specs", json.dumps(rows, ensure_ascii=False))
+            await login_job
+            for row in rows:
+                search(row)
+
+        early = asyncio.create_task(search_early())
+        early.add_done_callback(lambda task: task.cancelled() or task.exception())
+        tender, spec, mail, _ = await asyncio.gather(tender_job, spec_job, mail_job, login_job)
+        llm.log("tender-portal", json.dumps(tender, ensure_ascii=False)[:3000])
+        llm.log("supplier-portal", json.dumps(spec, ensure_ascii=False)[:3000])
+        llm.log("webmail", json.dumps(mail, ensure_ascii=False)[:4000])
+
+        async def sweep_tabs():  # other websites are idle while ERP searches run: use tabs of their own for a sweep
+            return {role: await fresh(tabs[role]) for role in ("tender_portal", "supplier_portal", "webmail")}
+
+        # Only calc needs commercial facts. The existing sweep may improve them while the ERP searches run, but its
+        # first answer remains usable if it is stopped when calc becomes ready.
+        erp_done = asyncio.Event()
+        commercials_job = start(sweep.commercials_with_sweep(task, tender, mail, [spec], sweep_tabs, erp_end + 30,
+                                                             erp_done), erp_end + 30, erp_end + 30 - time.time())
+        requirements_job = asyncio.create_task(resolve_requirements((task, tender, spec, mail), erp_end))
+        requirements_cut = erp_search_end - ERP_SEARCH_MIN
+        # A completed early resolver may start searches while requirements runs. Until then the resolver must preserve
+        # the ERP window; after at least one early search exists, it may use the full ERP stage.
+        while not requirements_job.done():
+            until = erp_end if searches else requirements_cut
+            if time.time() >= until:
+                break
+            waiting = {requirements_job}
+            if not early.done():
+                waiting.add(early)
+            await asyncio.wait(waiting, timeout=max(0.0, until - time.time()), return_when=asyncio.FIRST_COMPLETED)
+            if early.done() and not searches:
+                break
+        requirements = {"positions": await safe("requirements", requirements_job,
+                                                  erp_end if searches else requirements_cut, [])}
+        early.cancel()  # after authoritative positions arrive, a late specs answer cannot help
+        llm.log("requirements", json.dumps(requirements, ensure_ascii=False))
+
+        early_searches = len(searches)
+        for row in requirements["positions"]:
+            if spec_key(row) in searches:
+                continue
+            if time.time() >= erp_search_end:
+                llm.log("erp", f"{row['position']}: no time left to search its requirement")
+                continue
+            if early_searches:
+                llm.log("erp", f"{row['position']}: requirement differs from early searches: searching now")
+            search(row)
+        needed = [key for key in dict.fromkeys(map(spec_key, requirements["positions"])) if key in searches]
+        for key, (tag, job) in searches.items():
+            if key not in needed and not job.done():
+                job.cancel()
+                llm.log(tag, "no position needs this early search: stopped")
+        found = dict(zip(needed, await asyncio.gather(*(safe(*searches[key], erp_end) for key in needed))))
         erp_done.set()  # a sweep still looking for commercial facts stops: calc must not wait for it
-        erp = {r["position"]: found[tuple(str(r.get(k)) for k in spec_keys)] for r in requirements["positions"]}
+        erp = {row["position"]: found[spec_key(row)] for row in requirements["positions"] if spec_key(row) in found}
         llm.log("erp", json.dumps(erp, ensure_ascii=False)[:4000])
         commercials = await safe("commercials", commercials_job, erp_end + 30)
         llm.log("commercials", json.dumps(commercials, ensure_ascii=False))
@@ -255,7 +334,7 @@ async def main() -> int:
                 llm.log("submit", f"posting the answer failed: {type(error).__name__}: {str(error)[:300]}")
             return 0
 
-        specs = {r["position"]: ", ".join(f"{k} {r.get(k)}" for k in spec_keys) for r in requirements["positions"]}
+        specs = {r["position"]: ", ".join(f"{k} {r.get(k)}" for k in SPEC_KEYS) for r in requirements["positions"]}
         # a phase-1 agent that was cut may still be acting on its tab: the submission then works in a tab of its own
         portal = await fresh(tabs["tender_portal"]) if "tender-portal" in CUT else tabs["tender_portal"]
         mailbox = await fresh(tabs["webmail"]) if "webmail" in CUT else tabs["webmail"]

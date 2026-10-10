@@ -63,6 +63,25 @@ class ResolverRouting(unittest.TestCase):
         self.assertIn("quantity now 12 pieces", question)
         self.assertNotIn("newsletter", question)
 
+    def test_resolvers_do_not_treat_browser_summaries_as_evidence(self):
+        """The structured browser result drives orchestration only; evidence remains the analyst's sole source."""
+        llm.ask_json = asked = Asked({"positions": []})
+        tender = {**TENDER, "title": "UNTRUSTED TENDER SUMMARY"}
+        spec = {**SPEC, "current_revision": "UNTRUSTED SPEC SUMMARY"}
+        mail = {**MAIL, "kept": "UNTRUSTED MAIL SUMMARY"}
+        asyncio.run(resolvers.requirements(TASK, tender, spec, mail))
+        question = "\n".join(asked.questions)
+        self.assertNotIn("UNTRUSTED TENDER SUMMARY", question)
+        self.assertNotIn("UNTRUSTED SPEC SUMMARY", question)
+        self.assertNotIn("UNTRUSTED MAIL SUMMARY", question)
+
+    def test_early_specs_uses_only_technical_mail_before_tender_positions_exist(self):
+        llm.ask_json = asked = Asked({"requirements": []})
+        asyncio.run(resolvers.specs(TASK, SPEC, MAIL))
+        question = asked.questions[0]
+        self.assertIn("reserve 5 mm", question)
+        self.assertNotIn("quantity now 12 pieces", question)
+
     def test_commercials_get_a_record_found_on_another_website(self):
         llm.ask_json = asked = Asked({})
         asyncio.run(resolvers.commercials(TASK, TENDER, MAIL, [SPEC]))

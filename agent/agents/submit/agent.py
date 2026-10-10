@@ -3,7 +3,7 @@ import json
 import time
 
 import llm
-from agents.common import BOOL, STR, SYSTEM, context, login_line, obj
+from agents.common import BOOL, STR, login_line, obj, system
 
 SIGN_BY = 180  # seconds before the deadline: stop entering, omit what is unfinished, sign (TAN look-up ~2 min)
 
@@ -32,7 +32,7 @@ number / newest), open it and finish with found true and the TAN exactly as writ
             await mail_tab.page.goto(mail_tab.site["url"], wait_until="domcontentloaded", timeout=15000)
         except Exception as error:  # noqa: BLE001  a slow page: the agent opens the mailbox itself
             llm.log("tan", f"start page failed: {type(error).__name__}")
-        found = await llm.investigate(mail_tab, SYSTEM, mission, obj(found=BOOL, tan=STR, request=STR, subject=STR),
+        found = await llm.investigate(mail_tab, system(task), mission, obj(found=BOOL, tan=STR, request=STR, subject=STR),
                                       min(deadline, time.time() + 120), "tan", max_steps=12, check=check)
         found.pop("evidence", None)
         return json.dumps(found, ensure_ascii=False)
@@ -55,9 +55,7 @@ number / newest), open it and finish with found true and the TAN exactly as writ
         f"quantity {p['quantity']} pieces, unit price {german(p['unit_price'])} EUR, lead time {p['lead_time_weeks']} weeks, "
         + ", ".join(f"{label} {german(p[key])}" if key in p else f"{label} left blank (unknown)"
                     for key, label in optional) for p in answer["positions"])
-    mission = f"""{context(task)}
-
-{login_line(tab.site)}
+    mission = f"""{login_line(tab.site)}
 The bid is calculated. Your part: enter and sign it on this tender portal, following the brief's Submission section.
 The bidder's own mailbox address, if a contact e-mail is asked for: {contact or 'unknown'}.
 Bid ({answer['decision']}), tender {answer['tender_reference']}, discount {german(answer['discount_percent'])} %,
@@ -86,6 +84,6 @@ If a value is rejected, read the message and fix it. Finish with what the portal
     hurry = ("Time is almost up and an unsigned bid scores nothing. Stop entering values: omit every position not "
              "completely entered yet with the form's omit option, go to the summary, request the TAN unless you already "
              "did, get it with get_tan, and submit the bid bindingly now. Call finish only after the portal accepted it.")
-    return await llm.investigate(tab, SYSTEM, mission, obj(confirmation=STR), deadline, "submit",
+    return await llm.investigate(tab, system(task), mission, obj(confirmation=STR), deadline, "submit",
                                  extra_tools=tools, handlers={"get_tan": fetch_tan, "verify_summary": verify_summary}, max_steps=70,
                                  warn_at=SIGN_BY, warning=hurry)

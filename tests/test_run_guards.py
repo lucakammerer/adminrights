@@ -59,6 +59,77 @@ class HardCallBound(unittest.TestCase):
         self.assertLess(asyncio.run(scenario()), 10)  # the server would have answered after 20 s
 
 
+def chunk(delta: dict, finish: str | None = None) -> dict:
+    return {"id": "x", "object": "chat.completion.chunk", "created": 0, "model": "m",
+            "choices": [{"index": 0, "delta": delta, "finish_reason": finish}]}
+
+
+TOOL_STREAM = [chunk({"role": "assistant", "content": ""}),
+               chunk({"tool_calls": [{"index": 0, "id": "c1", "type": "function",
+                                      "function": {"name": "finish", "arguments": '{"result": {"material'}}]}),
+               chunk({"tool_calls": [{"index": 0, "function": {"arguments": '_number": "synthetic"}}'}}]}),
+               chunk({}, "tool_calls")]
+
+
+def streaming(replies: list, silent_first: bool = False):
+    """A tiny stream server: optionally its first request receives no bytes at all."""
+    requests = []
+
+    async def serve(reader, writer):
+        await reader.readuntil(b"\r\n\r\n")
+        requests.append(1)
+        try:
+            if silent_first and len(requests) == 1:
+                await asyncio.sleep(60)
+            body = b"".join(b"data: %s\n\n" % json.dumps(chunk).encode() for chunk in replies[len(requests) - 1]) + \
+                b"data: [DONE]\n\n"
+            writer.write(b"HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nContent-Length: %d\r\n\r\n%s"
+                         % (len(body), body))
+            await writer.drain()
+        except (ConnectionError, asyncio.CancelledError):
+            pass
+        finally:
+            writer.close()
+    return serve, requests
+
+
+def ask_stream(serve, silence: float = 30, **limits):
+    async def scenario():
+        server = await asyncio.start_server(serve, "127.0.0.1", 0)
+        real_client, real_silence = llm._client, llm.SILENCE
+        llm._client = AsyncOpenAI(base_url=f"http://127.0.0.1:{server.sockets[0].getsockname()[1]}/v1",
+                                  api_key="k", max_retries=0)
+        llm.SILENCE = silence
+        began = time.time()
+        try:
+            with llm.limits(time.time() + limits.get("within", 30)):
+                return await llm.chat([{"role": "user", "content": "x"}]), time.time() - began
+        finally:
+            llm._client, llm.SILENCE = real_client, real_silence
+            server.close()
+    return asyncio.run(scenario())
+
+
+class StuckCallAskedAgain(unittest.TestCase):
+    def test_a_silent_request_is_retried_before_the_stage_cap(self):
+        serve, requests = streaming([None, TOOL_STREAM], silent_first=True)
+        reply, seconds = ask_stream(serve, silence=1)
+        self.assertEqual(len(requests), 2)
+        self.assertLess(seconds, 10)
+        call = reply.choices[0].message.tool_calls[0]
+        self.assertEqual((call.id, call.function.name), ("c1", "finish"))
+        self.assertEqual(json.loads(call.function.arguments), {"result": {"material_number": "synthetic"}})
+
+    def test_a_streamed_completion_has_the_plain_completion_shape(self):
+        serve, _ = streaming([[chunk({"role": "assistant", "content": "{\"a\""}),
+                              chunk({"content": ": 1}"}, "length")]])
+        reply, _ = ask_stream(serve)
+        message = reply.choices[0].message
+        self.assertEqual(llm.parse_object(message.content), {"a": 1})
+        self.assertEqual(message.model_dump(exclude_none=True), {"role": "assistant", "content": "{\"a\": 1}"})
+        self.assertIsNone(message.tool_calls)
+
+
 class FakeTab:
     async def read(self, offset=0):
         return "a page"
@@ -240,8 +311,9 @@ class Bid(unittest.TestCase):
         result = agent.bid(self.TENDER, requirements, self.COMMERCIALS, erp)
         self.assertEqual(result["answer"]["decision"], "bid")
         self.assertEqual(result["answer"]["tender_reference"], "REF")
+        # Rule 9 still permits a known material without a usable base-price scale: calc submits the position with its
+        # known quantity, surcharge, packaging and lead time fields. Only the malformed quantity is unfinished.
         self.assertEqual(result["omitted"], ["2"])
-        # since #34 a position with its material but no usable prices is submitted with its other fields
         self.assertEqual([(p["position"], p["material_number"]) for p in result["answer"]["positions"]], [("1", "M")])
 
     def test_broken_commercials_still_give_an_answer(self):

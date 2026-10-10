@@ -21,13 +21,14 @@ flowchart LR
 
   evidence[("📄 Kept<br/>evidence")]
 
-  subgraph P2["2 · Interpret · ⏱ −8 min"]
-    req["🧠 Requirements<br/>quantities · specs"]
+  subgraph P2["2 · Interpret · dependency-safe"]
+    specs["🧠 Specs (early)<br/>governing keys"]
+    req["🧠 Requirements<br/>authoritative quantities · specs"]
     com["🧠 Commercials<br/>discount · fees"]
   end
 
   subgraph P3["3 · Materials · ⏱ −6 min"]
-    erp["🏭 ERP search<br/>one tab per spec<br/>no match checked twice"]
+    erp["🏭 ERP search<br/>starts from early specs<br/>no match checked twice"]
     sweepnode["🔎 Gap sweep<br/>open commercial facts<br/>on the other sites"]
   end
 
@@ -41,8 +42,9 @@ flowchart LR
 
   roles --> tender & supplier & mail & login
   tender & supplier & mail --> evidence
+  supplier & mail --> specs --> erp
   evidence --> req & com
-  req --> erp
+  req -->|reuse, add or stop searches| erp
   login -. session .-> erp
   erp --> calc
   com -. facts left open .-> sweepnode -. until ERP is done .-> calc

@@ -61,7 +61,7 @@ Status: ✅ in the code · ⚠️ in the code with a known gap · ❌ missing. "
 | --- | --- | --- |
 | T1.1 | `agent.json` valid: `setup`, `run`, `models` ⊆ hosted ids, `browsers` an integer 1–4. | ✅ |
 | T1.2 | `setup` finishes in < 5 min; it has network but no credentials. | ✅ (`uv sync`) |
-| T1.3 | **Always answer before `expires_at`.** No answer = 0 and ineligible. Every stage gets its own budget when it starts (never negative), model calls are bounded by it, and a watchdog signs what is entered. | ⚠️ hard phase cuts since PR #5 bound every stage; no start-time budgets or watchdog yet; before the cuts, the dry run answered only at 1029 s (I2, I4, I6) |
+| T1.3 | **Always answer before `expires_at`.** No answer = 0 and ineligible. Every stage gets its own budget when it starts (never negative), model calls are bounded by it, and a watchdog signs what is entered. | ⚠️ hard cuts and silent-call retries bound model work; specs-derived ERP searches now overlap gathering. Start-time budgets and a code watchdog remain (I4, I6). |
 | T1.4 | **Eligibility = the exact tender reference:** from the brief, confirmed on the portal, invisible characters removed; never a look-alike (suffix or other number). | ✅ |
 | T1.5 | Exactly one binding submission; it ends the run. | ✅ |
 | T1.6 | The answer matches the run's `answer_schema` (read from the run, not copied). | ⚠️ not validated before signing (→ I11) |

@@ -71,14 +71,43 @@ async def first(*jobs):
             job.cancel()
 
 
-async def requirements(task, tender, spec, mail, effort: str = "medium") -> dict:
-    # Only the technical release and messages about the tender's positions (a clarification kept in the mailbox on a
-    # dataset that splits its information differently) matter here; every other mail would slow this critical-path
-    # call. The technical release is known from this run's brief (subject, sender); a brief that names none gets all mail.
+GOVERNING = """the current revision's requirement, with the latest applicable scoped technical amendments (only those
+  naming that revision and requirement, only the named attributes); if the stroke is a usable stroke, add twice the
+  per-end reserve of its key from the latest technical release for that revision to get the nominal stroke"""
+SPEC_JSON = ('"bore_mm": 0, "stroke_mm": 0, "pressure_bar": 0, "mounting": "...", "certification": "...",\n'
+             '"catalogue_group": "..."')
+
+
+def technical(task, mail, position_ids: list[str] | None = None) -> dict:
+    """The technical release, plus position mail only when the tender gives us positions to route by."""
     pages = mail.get("evidence", [])
     records = technical_records(task["brief"])
+    ids = position_ids or []
+    kept = [page for page in pages if mentions(page, records) or (ids and names_position(page, ids))]
+    return {"evidence": kept or pages}
+
+
+async def specs(task, spec, mail, effort: str = "medium") -> dict:
+    """The specification-derived ERP search keys, available before tender positions and quantities are resolved."""
+    question = f"""{context(task)}
+
+Evidence from the supplier portal:
+{evidence(spec)}
+
+Technical releases from the mailbox:
+{evidence(technical(task, mail))}
+
+Decide only from the pages kept as evidence. For every requirement of the current revision, work out the governing
+requirement: {GOVERNING}.
+JSON: {{"requirements": [{{"requirement": "the requirement id", {SPEC_JSON}, "requirement_reasoning": "..."}}]}}"""
+    llm.log("specs", f"asking with {len(question)} chars, effort {effort}")
+    return await llm.ask_json(RESOLVE, question, effort=effort)
+
+
+async def requirements(task, tender, spec, mail, effort: str = "medium") -> dict:
+    # Position mail can matter on datasets that place clarifications in the mailbox. It is added only after the tender
+    # agent supplies ids, so the early `specs` call remains independent of the tender agent.
     ids = [str(p.get("position")) for p in tender.get("positions") or [] if isinstance(p, dict) and p.get("position")]
-    technical = {"evidence": [page for page in pages if mentions(page, records) or names_position(page, ids)] or pages}
     question = f"""{context(task)}
 
 Evidence from the tender portal:
@@ -88,21 +117,17 @@ Evidence from the supplier portal:
 {evidence(spec)}
 
 Technical releases and messages about the positions from the mailbox:
-{evidence(technical)}
+{evidence(technical(task, mail, ids))}
 
-Decide from the pages kept as evidence: the agents' own summaries above them can be incomplete or wrong.
+Decide only from the pages kept as evidence; browser-agent summaries are not evidence.
 For every tender position, work out:
 - final_quantity_pieces: tender quantity, replaced by the latest dated clarification that changes it, converted to
   pieces with the governing revision's pieces per set when the unit is a set. A withdrawn answer counts as if it had
   never been given: the latest change that is not withdrawn still applies, even when it is older than the withdrawn
   one. List every quantity clarification for the position in quantity_reasoning before you decide;
-- the governing requirement: the current revision's requirement, with the latest applicable scoped technical
-  amendments (only those naming that revision and requirement, only the named attributes); if the stroke is a usable
-  stroke, add twice the per-end reserve of its key from the latest technical release for that revision to get the
-  nominal stroke.
+- the governing requirement: {GOVERNING}.
 JSON: {{"positions": [{{"position": "...", "final_quantity_pieces": 0, "quantity_reasoning": "...",
-"requirement": "the requirement id the position refers to", "bore_mm": 0, "stroke_mm": 0, "pressure_bar": 0, "mounting": "...", "certification": "...",
-"catalogue_group": "...", "requirement_reasoning": "..."}}]}}"""
+"requirement": "the requirement id the position refers to", {SPEC_JSON}, "requirement_reasoning": "..."}}]}}"""
     llm.log("requirements", f"asking twice with {len(question)} chars, effort {effort}")  # its size drives the critical path
     # it holds up the ERP phase, and one hosted call in a few hangs until its timeout: the faster of two answers
     return await first(llm.ask_json(RESOLVE, question, effort=effort), llm.ask_json(RESOLVE, question, effort=effort))
@@ -122,7 +147,7 @@ Evidence from the tender portal:
 Messages from the sales mailbox:
 {evidence(mail)}
 {extra}
-Decide from the pages kept as evidence: the agents' own summaries above them can be incomplete or wrong.
+Decide only from the pages kept as evidence; browser-agent summaries are not evidence.
 Resolve, by the brief's rules (exact reference, authorized sender, latest record no later than the scenario date,
 newer replaces older, future-dated records never apply):
 - discount: the latest director approval for this exact reference: percent and, if it is conditional, its minimum

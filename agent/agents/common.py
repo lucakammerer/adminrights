@@ -53,6 +53,15 @@ def context(task: dict) -> str:
     return "The task brief (it contains the rules):\n" + brief
 
 
+def system(task: dict) -> str:
+    """The common browser-agent prefix.
+
+    The brief is identical for every browser agent in a run, so placing it beside the shared website rules gives the
+    model provider a stable prompt prefix. Per-site credentials and missions remain in the user message.
+    """
+    return SYSTEM + "\n\n" + context(task)
+
+
 def reference(brief: str) -> str:
     """The tender reference: the first identifier the brief puts in parentheses (no spaces, with a digit), preferring
     one with letters or separators over a bare number such as a year."""
@@ -175,8 +184,13 @@ def arr(item) -> dict:
 
 
 def evidence(result: dict) -> str:
-    rest = {k: v for k, v in result.items() if k != "evidence"}
-    return json.dumps(rest, ensure_ascii=False) + "\n\nPages kept as evidence:\n" + "\n\n".join(result.get("evidence", []))
+    """Evidence available to a resolver, without an agent's untrusted summary.
+
+    Resolvers decide facts solely from pages saved verbatim. The structured browser-agent result stays available to
+    orchestration (for example, to route mail by a tender position) but repeating it here costs context and could
+    cause the analyst to prefer a mistaken summary over the source page.
+    """
+    return "Pages kept as evidence:\n" + "\n\n".join(result.get("evidence", []))
 
 
 RESOLVE = """You are the bid analyst. Apply the brief's rules exactly to the evidence the website agents collected.

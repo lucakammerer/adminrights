@@ -72,6 +72,19 @@ class Investigate(unittest.TestCase):
         llm.chat = chat
         self.assertEqual(self.run_agent(300)["material_number"], "M")
 
+    def test_finish_schema_is_in_the_mission_so_browser_tools_stay_shared(self):
+        seen = []
+
+        async def chat(messages, tools=None, **_):
+            seen.append((messages, tools))
+            return finish({})
+        llm.chat = chat
+        self.run_agent(300)
+        message, tools = seen[0]
+        finish_tool = next(t for t in tools if t["function"]["name"] == "finish")
+        self.assertEqual(finish_tool["function"]["parameters"]["properties"]["result"]["type"], "object")
+        self.assertIn('"type": "object"', message[1]["content"])
+
     def test_a_hung_tool_ends_at_the_deadline_with_a_forced_finish(self):
         """run_1a7115a6522f64a1: a fetch hung until the stage cut and the tender agent's kept pages were lost."""
         async def chat(*_, **__):
