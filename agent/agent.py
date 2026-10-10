@@ -23,9 +23,11 @@ from browser import Tab
 
 
 CUT: set[str] = set()  # stages cut at their deadline: their task may still hold its tab for a moment
-# The requirements call took 52-184 s on 2026-10-10 (~16k tokens in): it gets that long even after a phase 1 that ran
-# to its cut, and a low-effort attempt joins once the first has run BACKUP_AFTER seconds.
-REQUIREMENTS_TIME = 210
+# The requirements call took 52-184 s on 2026-10-10 (~16k tokens in). It runs until the ERP searches have
+# ERP_SEARCH_MIN left: an answer after that leaves them no search, and every position would be omitted anyway. After a
+# phase 1 that ran to its cut, that leaves requirements only 90 s (the budgets must make room, I4). A low-effort
+# attempt joins once the first has run BACKUP_AFTER seconds.
+ERP_SEARCH_MIN = 60
 BACKUP_AFTER = 60
 
 
@@ -76,10 +78,14 @@ async def safe(tag: str, job, until: float, fallback=None, cap: float | None = N
 
 
 def positions(requirements) -> list[dict]:
-    """The resolver's positions that name a position: a malformed answer must not end the run."""
+    """The resolver's rows that name a position: a malformed answer must not end the run. The position keeps its type
+    as written, because calc.facts matches it against the commercials resolver's rows."""
+    def named(position) -> bool:
+        return (isinstance(position, str) and bool(position.strip())) or \
+            (isinstance(position, (int, float)) and not isinstance(position, bool))
+
     rows = requirements.get("positions") if isinstance(requirements, dict) else None
-    return [{**r, "position": str(r["position"])} for r in rows if isinstance(r, dict) and
-            isinstance(r.get("position"), (str, int)) and str(r["position"]).strip()] if isinstance(rows, list) else []
+    return [r for r in rows if isinstance(r, dict) and named(r.get("position"))] if isinstance(rows, list) else []
 
 
 async def resolve_requirements(inputs: tuple, until: float) -> list[dict]:
@@ -184,8 +190,9 @@ async def main() -> int:
         erp_end = end - 6 * 60  # leaves the submission six minutes
         # only calc needs it; one call may use the whole window, a cut call would only be asked again
         commercials_job = start(resolvers.commercials(task, tender, mail), erp_end + 30, erp_end + 30 - time.time())
-        requirements_end = min(max(end - 8 * 60, time.time() + REQUIREMENTS_TIME), erp_end - 60)
-        requirements = {"positions": await resolve_requirements((task, tender, spec, mail), requirements_end)}
+        erp_search_end = erp_end - 30 - erp_agent.FINISH_GRACE  # where each ERP agent's own search must end
+        requirements = {"positions": await resolve_requirements((task, tender, spec, mail),
+                                                                erp_search_end - ERP_SEARCH_MIN)}
         llm.log("requirements", json.dumps(requirements, ensure_ascii=False))
 
         erp_tab = tabs["erp"]

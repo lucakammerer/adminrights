@@ -72,7 +72,8 @@ Phase 0, no browser
     resolvers.sites: a model assigns each website its role from the brief (names and ids differ per dataset)
 Phase 1, parallel, one browser each, wrap-up at end − 10 min, hard cut 30 s later
     tender_portal.run · supplier_portal.run · webmail.run · erp.login
-Phase 2, no browser, hard cut end − 8 min but at least REQUIREMENTS_TIME (210 s) after phase 1, never past end − 7 min
+Phase 2, no browser, hard cut end − 8 min, so the ERP searches keep ERP_SEARCH_MIN (60 s) before their own end at
+end − 7 min; after a phase 1 that ran to its cut, requirements gets only 90 s
     resolvers.requirements (a low-effort attempt joins after BACKUP_AFTER, 60 s, and counts only when the first brings
     nothing; resolvers.commercials starts too and runs alongside phase 3); a resolver call may use its whole window
 Phase 3, ERP tabs in parallel, hard cut end − 6 min (a cut search → its positions are omitted)

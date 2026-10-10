@@ -21,7 +21,7 @@ flowchart LR
 
   evidence[("📄 Kept<br/>evidence")]
 
-  subgraph P2["2 · Interpret · ⏱ −8 min, ≥ 3.5 min"]
+  subgraph P2["2 · Interpret · ⏱ −8 min"]
     req["🧠 Requirements<br/>quantities · specs"]
     com["🧠 Commercials<br/>discount · fees"]
   end

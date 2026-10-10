@@ -139,8 +139,13 @@ class Requirements(unittest.TestCase):
     def test_malformed_answers_give_no_positions(self):
         self.assertEqual(agent.positions({"result": []}), [])
         self.assertEqual(agent.positions({"positions": "none"}), [])
-        self.assertEqual(agent.positions({"positions": [{"bore_mm": 50}, "x", {"position": 2}]}),
-                         [{"position": "2"}])
+        self.assertEqual(agent.positions({"positions": [{"bore_mm": 50}, "x", {"position": True}, {"position": " "},
+                                                        {"position": 2}, {"position": 1.1}, {"position": "01.01"}]}),
+                         [{"position": 2}, {"position": 1.1}, {"position": "01.01"}])
+
+    def test_positions_keep_their_type_for_calc(self):
+        # calc.facts matches requirements and commercials by the position as written: "10" would miss 10
+        self.assertEqual(agent.positions({"positions": [{"position": 10}]}), [{"position": 10}])
 
 
 class Bid(unittest.TestCase):
