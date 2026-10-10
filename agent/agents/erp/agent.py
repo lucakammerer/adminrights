@@ -65,9 +65,8 @@ Your part: find the material for one requirement in this ERP. Requirement: {json
 1. Search by the requirement's catalogue group (the brief says how records are found) and read every result page.
 2. Compare each candidate's bore, stroke, pressure, mounting and certification with the requirement: all must be
    exactly equal. The material must be active/released, not blocked (the site may show that in German or as a status
-   code). If you checked every candidate and none qualifies, keep every result page of the catalogue group with
-   save_evidence, then finish with material_number empty, no_match true and say why; a no match without the kept
-   result list counts as unfinished.
+   code). If you checked every candidate and none qualifies, finish with material_number empty, no_match true and say
+   why.
 3. For the chosen material, keep with save_evidence every page that shows its facts: pieces per carton, allocation
    mass, surcharge mass, price index key, technical data, status, lead times (from stock and production), the stock
    by storage location / stock type, and the price condition valid on the scenario date including its quantity-scale
