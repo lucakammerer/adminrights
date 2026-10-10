@@ -2,13 +2,13 @@
 import re
 
 import llm
-from agents.common import STR, NUM, SYSTEM, arr, context, login_line, obj
+from agents.common import INT, STR, NUM, SYSTEM, arr, context, login_line, obj
 
 
 RESULT = obj(
     tender_reference=STR, title=STR,
     positions=arr(obj(position=STR, description=STR, quantity=NUM, unit=STR)),
-    clarifications=arr(obj(number=STR, date=STR, question=STR, answer=STR)),
+    clarifications=arr(obj(number=STR, date=STR, evidence=INT)),
     other_relevant_facts=STR)
 
 
@@ -21,9 +21,11 @@ Your part: on this tender portal, find the tender in the brief (exact reference{
 If its documents need an expression of interest (the brief's Submission section names that step), give it. Collect:
 1. the bill of quantities: every position with its id, description, quantity and unit exactly as written (pieces,
    sets, ...);
-2. every bidder Q&A / clarification (all pages), each with its number, date, question and full answer, word for word:
-   they change quantities, withdraw earlier answers, and assign keys (the condition groups, tariffs, delivery
-   commitments, setup pools, project bonus the brief's rules name, technical amendments to specification revisions);
+2. every bidder Q&A / clarification (all pages), kept with save_evidence so its full question and answer reach the
+   analyst word for word: they change quantities, withdraw earlier answers, and assign keys (the condition groups,
+   tariffs, delivery commitments, setup pools, project bonus the brief's rules name, technical amendments to
+   specification revisions). In the result, list each one only with its number, date and the evidence number it is
+   kept as; don't copy the text, not into notes either (a kept page needs no note);
 3. anything else the brief's rules need that you find here (documents, ZIPs).
 Keep the bill of quantities and every Q&A page with save_evidence as you read them.
 Do not start the bid submission yet. Finish with the result."""

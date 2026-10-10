@@ -3,7 +3,8 @@
 ## Mission
 
 Find the tender with the exact reference from the brief in the tender portal and keep everything the rules need from
-the portal: the bill of quantities and every bidder Q&A word for word. It does not start the bid submission.
+the portal: the bill of quantities and every bidder Q&A, kept word for word as evidence. It does not start the bid
+submission.
 
 ## Rules
 
@@ -14,7 +15,9 @@ packaging tariff, delivery commitment, setup pool). Decisions happen in [resolve
 
 - Input: brief (up to "## Site access"), portal login, reference taken from the brief by regex.
 - Output `RESULT`: `tender_reference`, `title`, `positions[]` (`position`, `description`, `quantity`, `unit`),
-  `clarifications[]` (`number`, `date`, `question`, `answer`), `other_relevant_facts`, plus `evidence`.
+  `clarifications[]` (`number`, `date`, `evidence`: the number it is kept as), `other_relevant_facts`, plus `evidence`.
+  The Q&A text reaches the resolvers only through the kept pages: copying it into `finish` cost output tokens and
+  made the agent reopen pages whose reads had been shortened.
 
 ## Implementation
 
