@@ -1,0 +1,16 @@
+name: release check
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - run: uv sync --project agent
+      - run: uv run --project agent --no-sync playwright install --with-deps --only-shell chromium
+      - run: bash tools/check_release.sh
