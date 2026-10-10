@@ -123,6 +123,13 @@ Every browser agent is the same loop; agents differ only in mission, result sche
 - **Tools:** `read`, `goto`, `click`, `fill`, `select`, `check`, `press`, `back`, `form` (a whole form by visible
   labels, survives reloads; `ref` steps for unlabeled controls; opens collapsed sections around a field), `fetch` (read a same-site URL without navigating; opens ZIPs and PDFs), `save_evidence`
   (keep a page word for word), `note` (pin verified facts), `finish`.
+- **Fewer steps:** `read`, `fetch` and `save_evidence` take `all_pages`: code follows the page links of the list the
+  model chose and returns (or keeps) every page in one call (`agent/paging.py`; another page of a list is a link that
+  differs from it in one number, up to 8 pages and 48,000 characters; the brief allows helpers to "paginate a
+  model-selected result set"). Of several page actions in one turn only the last one's result carries the page (the
+  others say what they did; a read that reports a download or dialog stays whole). A page the model has read is kept
+  without being shown again. Tools of one turn run in order, and the tool descriptions ask for `finish` in the turn of
+  the last `save_evidence`.
 - **Small context:** tool results of the last 4 steps stay in full (`KEEP_STEPS`); older ones shrink to 300 characters, and a
   shortened `save_evidence` result tells the model the page is kept in full for the analyst, so it doesn't reopen it
   to copy values (`llm.SHORTENED_KEPT`).
