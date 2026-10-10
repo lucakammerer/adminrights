@@ -25,8 +25,8 @@ packaging tariff, delivery commitment, setup pool). Decisions happen in [resolve
 `agent.py` `run` → `llm.investigate`, tag `tender-portal`, at most 45 steps, phase 1 deadline.
 Registers interest (the step the brief's Submission section names) if documents are behind it. Keeps the bill of
 quantities and every Q&A page with `save_evidence`. The mission
-ends with `common.ALSO_KEEP` (keep any other record the rules need found here: the private sites may split the
-information differently) and, except in the mailbox, `common.NOT_HERE` (finish early when the site doesn't hold the
+ends with `common.ALSO_KEEP` (keep any other record the rules need on a page opened anyway, never browse for one, finish
+when the part is done: the private sites may split the information differently) and, except in the mailbox, `common.NOT_HERE` (finish early when the site doesn't hold the
 part's records).
 
 ## Pitfalls

@@ -33,10 +33,11 @@ exactly what was asked, every value copied from the website."""
 
 # Every gathering mission ends with these: the private sites may split the information differently than the brief
 # suggests, so a record found on the "wrong" site is still kept, and a site without the part's records is left early.
-ALSO_KEEP = ("Records may sit on another website than the brief suggests: if this website also shows other records the "
-             "brief's rules need (bidder Q&A or clarifications, specification revisions, technical releases, approvals, "
-             "condition, tariff or rate messages), keep each one with save_evidence when you come across it; don't "
-             "search for them beyond your part.")
+ALSO_KEEP = ("Records may sit on another website than the brief suggests: if a page you open for your part anyway also "
+             "shows another record the brief's rules need (bidder Q&A or clarifications, specification revisions, "
+             "technical releases, approvals, condition, tariff or rate messages), keep it with save_evidence. Never "
+             "open, unlock, reload or re-keep pages to look for such records or to complete pages you already kept: "
+             "finish as soon as your part is done.")
 NOT_HERE = ("If this website does not hold what your part asks for, say so in other_relevant_facts and finish instead "
             "of searching on.")
 

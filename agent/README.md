@@ -8,7 +8,8 @@ pages, keeps what the models select and does the brief's arithmetic.
 2. **Resolve**: two model calls apply the brief's rules to the kept evidence: final quantities and governing
    requirements, and the commercial keys (discount, clause groups, tariffs, commitments, pool, bonus, FX, index).
 3. **Materials**: one ERP agent per distinct requirement picks the matching active material and keeps its pages;
-   a model reads the facts from those pages and the agent is sent back if any are missing.
+   a model reads the facts from those pages and the agent is sent back if any are missing. Meanwhile, commercial
+   facts the resolver left open are looked for on the other websites (gap sweep), only until the ERP agents are done.
 4. **Calculate**: `calc.py` applies the bid rules (scales, FX, clause discounts, shared stock, commitments,
    packaging, setup pool, project bonus, rounding).
 5. **Submit**: a model fills the portal's bid wizard and signs it with the TAN another model finds in the mailbox.
