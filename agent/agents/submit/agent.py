@@ -20,15 +20,11 @@ In this mailbox (you may already be logged in), find the newest signing-TAN mess
 {answer['tender_reference']}. The tender portal just said: "{args.get('portal_message', '')}". Search for it
 yourself: a list on the page may be left from an earlier search, and its newest message is not necessarily a TAN
 message. Pick only a message that gives a signing TAN for this tender, the one for that request (highest request
-number / newest). As soon as a list shows that message, open it (no broader search) and finish with found true and
-the TAN exactly as written."""
-
-        def valid(result) -> bool:  # one look-up finished with "Not captured — located in message ..." as its TAN
-            return bool(result.get("found")) and bool(re.fullmatch(r"\S{4,20}", str(result.get("tan") or "").strip()))
+number / newest), open it and finish with found true and the TAN exactly as written."""
 
         async def check(result, _evidence):
             """A look-up that found no TAN keeps searching instead of handing the portal a non-TAN."""
-            if valid(result):
+            if result.get("found") and str(result.get("tan") or "").strip():
                 return result, ""
             return result, ("Not done: no signing-TAN message found yet. Search the mailbox for it (newest first, "
                             "every folder), open it and finish with found true and its TAN.")
@@ -38,17 +34,26 @@ the TAN exactly as written."""
         except Exception as error:  # noqa: BLE001  a slow page: the agent opens the mailbox itself
             llm.log("tan", f"start page failed: {type(error).__name__}")
         found = await llm.investigate(mail_tab, SYSTEM, mission, obj(found=BOOL, tan=STR, request=STR, subject=STR),
-                                      min(deadline, time.time() + 120), "tan", max_steps=12, check=check, warn_at=30)
+                                      min(deadline, time.time() + 120), "tan", max_steps=12, check=check)
         found.pop("evidence", None)
-        found["found"] = valid(found)
         return json.dumps(found, ensure_ascii=False)
 
     async def verify_summary(_args):
-        """Read-back before signing (I6b): every unit price and the total as calculated must be on the summary."""
+        """Read-back before signing (I6b): every unit price and the total as calculated must be on the summary, and
+        the breakdown values too once the summary shows any of them (a run typed one position's bonus as 0)."""
         page = await tab.read() + await tab.read(14000)
+
+        def shows(value: str) -> bool:  # a whole number on the page: 0,50 is not inside 10,50
+            return re.search(rf"(?<![\d.,]){re.escape(value)}(?!\d)", page) is not None
+
         expected = {f"position {p['position']} unit price": german(p["unit_price"]) for p in answer["positions"]}
         expected["total net"] = german(answer["total_net"])
-        wrong = [f"{name} {value}" for name, value in expected.items() if value not in page]
+        breakdown = {f"position {p['position']} {label}": german(p[key]) for p in answer["positions"]
+                     for key, label in optional if p.get(key)}
+        if any(shows(value) for value in breakdown.values()):
+            expected |= breakdown
+        wrong = [f"{name} {value}" for name, value in expected.items() if not shows(value)]
+        llm.log("submit", f"verify_summary: {'; '.join(wrong) or 'all match'}")
         if not wrong:
             return "Every unit price and the total net match the calculated bid."
         return ("Not on this page as calculated: " + "; ".join(wrong) + ". Where the page shows a different value, "

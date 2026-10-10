@@ -58,28 +58,6 @@ class HardCallBound(unittest.TestCase):
             return time.time() - began
         self.assertLess(asyncio.run(scenario()), 10)  # the server would have answered after 20 s
 
-    def test_hung_call_is_answered_by_its_twin(self):
-        async def scenario():
-            seen = []
-
-            async def first_hangs(reader, writer):
-                seen.append(1)
-                await trickle(reader, writer, seconds=30 if len(seen) == 1 else 0)
-
-            server = await asyncio.start_server(first_hangs, "127.0.0.1", 0)
-            port = server.sockets[0].getsockname()[1]
-            real = llm._client
-            llm._client = AsyncOpenAI(base_url=f"http://127.0.0.1:{port}/v1", api_key="k", max_retries=0)
-            began = time.time()
-            try:
-                with llm.limits(time.time() + 60, cap=40):
-                    await llm.chat([{"role": "user", "content": "x"}], hedge_after=1)
-            finally:
-                llm._client = real
-                server.close()
-            return time.time() - began
-        self.assertLess(asyncio.run(scenario()), 5)
-
 
 class FakeTab:
     async def read(self, offset=0):

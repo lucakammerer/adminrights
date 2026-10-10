@@ -133,14 +133,15 @@ Every browser agent is the same loop; agents differ only in mission, result sche
   and keeps a page with the same content only once.
 - **`check` bounds:** its model calls take at most `CHECK_TIMEOUT` (60 s) each and end at the agent's deadline; a
   check that fails or runs out of time lets the result through unchecked.
-- **Model:** `AGENT_MODEL`, default the hosted Qwen; browser steps run with low reasoning effort (`STEP_EFFORT`);
-  `chat` tries up to 6 times, each attempt at most `CALL_TIMEOUT` (180 s; no SDK-internal retries) and all of them
-  bounded by the stage's `llm.UNTIL`, which `agent.safe`/`agent.start` set per stage; step calls end at the agent's
-  deadline so the forced `finish` keeps its grace. Both limits hold on the wall clock (`asyncio.wait`, the call is
-  dropped at its limit): the SDK's timeout only bounds the silence between bytes. A call still unanswered after
-  `HEDGE_AFTER` (30 s) gets one identical twin and the first answer wins (`first_reply`): single calls hang to their
-  cap while the next call answers in seconds. The commercials resolver twins after 120 s; the requirements resolver,
-  already asked twice, gets no twins.
+- **Model:** `AGENT_MODEL`, default Claude Haiku 5.5 on OpenRouter (any `<provider>/<model>` id; in a run through
+  `$LLM_PROXY_URL/openrouter/v1`, Anthropic prompts cached), `qwen3.8-flash-next` for the hosted Qwen; browser steps
+  run with low reasoning effort (`STEP_EFFORT`). `chat` tries up to 6 times, each attempt at most `CALL_TIMEOUT` (no
+  SDK-internal retries) and all of them bounded by the stage's `llm.UNTIL`, which `agent.safe`/`agent.start` set per
+  stage; step calls end at the agent's deadline so the forced `finish` keeps its grace. An attempt without a reply
+  after `HEDGE_AFTER` sends the same request again alongside and takes the first answer: hung calls never answer,
+  while a fresh one answers in seconds. Both limits hold on the wall clock (`asyncio.wait`, the call is dropped at its
+  limit): the SDK's timeout only bounds the silence between bytes. The commercials resolver twins after 120 s; the
+  requirements resolver, already asked twice, gets no twins.
 - **Cut agents keep their evidence:** every `investigate` registers its evidence list in `llm.KEPT`, one per stage
   (`agent.start`); a stage that is cut or fails hands those pages on, marked `forced`.
 - **Shared system prompt** `agents/common.py` `SYSTEM`: the sites' traps in general terms, no site and no value.
@@ -306,9 +307,9 @@ on disagreement it logs both, re-asks once, then the rule wins.
 
 | Use | Model | How |
 | --- | --- | --- |
-| Navigation and reading (tool loop) | hosted Qwen | native tool calls; parallel tool calls allowed |
-| Resolvers and ERP fact extraction | hosted Qwen | JSON mode, up to 3 attempts |
-| Prose → class (condition rules) | hosted Qwen | majority of 3 only if tests show errors (E4) |
+| Navigation and reading (tool loop) | Claude Haiku 5.5 | native tool calls; parallel tool calls allowed |
+| Resolvers and ERP fact extraction | Claude Haiku 5.5 | JSON mode, up to 3 attempts |
+| Prose → class (condition rules) | Claude Haiku 5.5 | majority of 3 only if tests show errors (E4) |
 | Cheap yes/no checks | Clef | not used; only if measurably faster (E5) |
 | Anything else | a frontier model via team secret | off; only behind a flag where it buys quality (E6) |
 
