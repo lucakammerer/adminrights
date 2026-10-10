@@ -1,13 +1,14 @@
 // Stress level S2 mutations (I24, I20, rule 19): rewrite a page the way another site would show the same facts.
 // Applied live by run_agents.py --mutate (each read-only page rewritten before the agent sees it) and offline by
-// tests/test_mutations.py (recorded pages). Called as (opts) => {relabelled, decoys, shuffled, reformatted}; opts.seed
-// makes every choice repeatable. It never changes a fact: labels get synonyms, numbers that carry an explicit locale
-// hint are rewritten in the other locale with the hint changed to match, menus are shuffled, hidden decoys are added.
+// tests/test_mutations.py (recorded pages). Called as (opts) => {relabelled, decoys, shuffled, rows, reformatted,
+// framed}; opts.seed makes every choice repeatable. It never changes a fact: labels get synonyms, numbers that carry an
+// explicit locale hint are rewritten in the other locale with the hint changed to match, menus and the rows of plain
+// data tables are shuffled, hidden decoys are added, and the main content moves into an extra same-origin frame.
 (opts) => {
   let seed = (opts && opts.seed) || 1
   const rand = () => ((seed = (seed * 16807) % 2147483647) / 2147483647)
   const doc = (opts && opts.doc) || document
-  const stats = { relabelled: 0, decoys: 0, shuffled: 0, reformatted: 0 }
+  const stats = { relabelled: 0, decoys: 0, shuffled: 0, rows: 0, reformatted: 0, framed: 0 }
 
   // 1. Labels: whole-word synonyms on controls, headings and table headers only (never in data cells).
   const SYNONYMS = {
@@ -53,6 +54,20 @@
     stats.shuffled++
   }
 
+  // 3b. Rows of plain data tables: their order is never what a value depends on (dates and ids are in the rows).
+  // Tables with form controls or row spans are left alone.
+  for (const body of doc.querySelectorAll("tbody")) {
+    const rows = [...body.children].filter((r) => r.tagName === "TR")
+    if (rows.length < 3 || body.querySelector("input, select, textarea, button, [rowspan]")) continue
+    if (new Set(rows.map((r) => r.children.length)).size !== 1) continue
+    for (let i = rows.length - 1; i > 0; i--) {
+      const j = Math.floor(rand() * (i + 1));
+      [rows[i], rows[j]] = [rows[j], rows[i]]
+    }
+    rows.forEach((r) => body.appendChild(r))
+    stats.rows++
+  }
+
   // 4. Hidden decoys (last, so they never change what the steps above match): a copy of a number-bearing text with other digits, hidden in one of four ways.
   const HIDE = [
     (e) => { e.className = "s2-hidden-rule" },
@@ -74,5 +89,18 @@
     stats.decoys++
   }
 
+  // 5. An extra same-origin frame around the main content (last, so the steps above changed the framed copy): the
+  // page's styles go with it; a page with a form keeps its content where it is.
+  const main = doc.querySelector("main") || doc.querySelector("article") || doc.body
+  if (opts && opts.frame !== false && main && !main.querySelector("form") && rand() < 0.7) {
+    const styles = [...doc.querySelectorAll("style, link[rel=stylesheet]")].map((e) => e.outerHTML).join("")
+    const frame = doc.createElement("iframe")
+    frame.setAttribute("title", "content")
+    frame.style.cssText = "width:100%;height:2000px;border:0"
+    const base = String((opts && opts.base) || doc.baseURI).replace(/"/g, "&quot;")  // links keep working, on the whole page
+    frame.srcdoc = `<!doctype html><html><head><base href="${base}" target="_top">${styles}</head><body>${main.innerHTML}</body></html>`
+    main.replaceChildren(frame)
+    stats.framed++
+  }
   return stats
 }

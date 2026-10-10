@@ -5,6 +5,7 @@ import difflib
 import io
 import re
 import zipfile
+from collections import Counter
 from pathlib import Path
 from urllib.parse import urljoin
 
@@ -69,6 +70,11 @@ RELOGINS = 3  # automatic logins per tab at most, so a rejected login never loop
 FETCH_ABORT = 40  # seconds without an answer before one in-page request is aborted
 FETCH_BUDGET = 45  # seconds after which a 5xx is no longer retried
 RELOAD_TIMEOUT = 15  # seconds per reload of an error page (two at most)
+# Page chrome: a line without a control that earlier reads of this tab showed at least this often. At the top and the
+# bottom of the page shown after an action it is left out (the model saw it before; it is 9-28 % of a page's text on
+# the recorded sites). Controls always stay, so every ref remains usable; evidence and explicit reads stay complete.
+CHROME_SEEN = 2
+CONTROL = re.compile(r"\[\d+:")
 
 
 class Tab:
@@ -81,6 +87,7 @@ class Tab:
         self.login_form = ""  # signature of the form the model typed this site's password into; seeing it again
         self.past_login = False  # after the tab got past it means the session expired (a TAN form never matches it)
         self.relogins = 0
+        self.lines: Counter = Counter()  # lines without controls -> how many reads of this tab showed them
         self.method = "GET"  # of the latest main-frame navigation: only a GET may be reloaded after a server error
         self.status = 0
         page.on("dialog", self._on_dialog)
@@ -165,7 +172,36 @@ class Tab:
             await self.settle()
             self.events.append("The session had expired: code logged in again with this site's credentials.")
 
-    async def read(self, offset: int = 0) -> str:
+    def compact(self, window: str, whole: bool) -> str:
+        """`window` without the page chrome at its top and, when it is the whole page, at its bottom."""
+        lines = window.split("\n")
+
+        def chrome(line: str) -> bool:
+            return not CONTROL.search(line) and not line.startswith("===") and self.lines[line.strip()] >= CHROME_SEEN
+
+        def edge(order) -> list[int]:
+            """Chrome lines from one end up to the page's own first content line; control lines are passed over."""
+            found = []
+            for i in order:
+                if chrome(lines[i]):
+                    found.append(i)
+                elif not CONTROL.search(lines[i]):
+                    break
+            return found
+
+        top = edge(range(len(lines)))
+        bottom = [i for i in edge(range(len(lines) - 1, -1, -1)) if i not in top] if whole else []
+        if len(top) + len(bottom) < 2:
+            return window
+        note = "[{} lines repeated from earlier pages of this site left out; read shows the full page]"
+        notes = {min(top): note.format(len(top))} if top else {}
+        if bottom:
+            notes[min(bottom)] = note.format(len(bottom))
+        dropped = set(top) | set(bottom)
+        return "\n".join(notes[i] if i in notes else line for i, line in enumerate(lines) if i in notes or i not in dropped)
+
+    async def read(self, offset: int = 0, compact: bool = False) -> str:
+        """The page as text from `offset`. compact (the page shown after an action): repeated page chrome left out."""
         await self.settle()
         await self.recover()
         result = await self.page.evaluate(f"({READER})({{}})")
@@ -182,6 +218,9 @@ class Tab:
             self.downloads.clear()
         head = f"URL: {self.page.url}\nTitle: {await self.page.title()}\n{events}\n"
         body = text[offset:offset + MAX_CHARS]
+        if compact and offset == 0:  # offsets stay those of the full text, so `read` with an offset continues it
+            body = self.compact(body, whole=len(text) <= MAX_CHARS)
+        self.lines.update({line.strip() for line in text.split("\n") if line.strip() and not CONTROL.search(line)})
         if len(text) > offset + MAX_CHARS:
             body += f"\n[... {len(text) - offset - MAX_CHARS} more chars: call read with offset={offset + MAX_CHARS}]"
         return head + body
@@ -248,7 +287,7 @@ class Tab:
                 await loc.set_checked(bool(args.get("checked", True)), timeout=5000, force=True)
             else:
                 return f"unknown action {action}"
-        return await self.read()
+        return await self.read(compact=True)
 
     async def form(self, steps: list[dict]) -> str:
         """Fill fields and press buttons by their visible label, in order, waiting for the page after each step."""
@@ -311,7 +350,7 @@ class Tab:
             except Exception as error:  # noqa: BLE001  stop at the first failing step, the model sees why
                 log.append(f"FAILED at {step}: {str(error)[:300]}")
                 break
-        return "Form steps: " + "; ".join(log) + "\n\n" + await self.read()
+        return "Form steps: " + "; ".join(log) + "\n\n" + await self.read(compact=True)
 
     async def fetch(self, url: str) -> str:
         """Read a same-origin URL through the logged-in page without navigating: text only, no refs. A server error

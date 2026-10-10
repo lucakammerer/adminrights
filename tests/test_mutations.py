@@ -1,5 +1,6 @@
 """Mutation tests (I20, rule 19): recorded pages rewritten the way another site would show the same facts
-(tools/stress/mutations.js: synonym labels, hidden decoys, shuffled menus, swapped number formats) must give the
+(tools/stress/mutations.js: synonym labels, hidden decoys, shuffled menus and table rows, swapped number formats,
+content moved into an extra frame) must give the
 reader the same facts and none of the decoys. No website and no model: headless Chromium, network blocked.
 
 Run from the repo root: uv run --project agent --no-sync python -m unittest discover -s tests -v
@@ -39,6 +40,8 @@ async def read_all(seeds: list[int | None]) -> dict:
             for seed in seeds:
                 await page.set_content(path.read_text(errors="ignore"), wait_until="domcontentloaded")
                 stats = await page.evaluate(f"({MUTATIONS})({{seed: {seed}}})") if seed else {}
+                await page.wait_for_function("[...document.querySelectorAll('iframe')].every(f => f.contentDocument &&"
+                                             " f.contentDocument.readyState === 'complete')")  # the extra frame loaded
                 out[(path.name, seed)] = ((await page.evaluate(f"({READER})({{}})"))["text"], stats)
         await browser.close()
     return out
