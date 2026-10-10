@@ -1,5 +1,5 @@
 {
-  "_about": "Intermediate facts of public-1 that the gathering agents and resolvers must establish (from eval/oracle.py, eval/derivation.md and eval/public-1/scouting-notes.md). Local test data only: never copy into agent/.",
+  "_about": "Intermediate facts of public-1 that the gathering agents and resolvers must establish (from eval/derivation.md and eval/public-1/scouting-notes.md). Local test data only: never copy into agent/.",
   "tender_reference": "VG-2027-7093",
   "requirements": {
     "01.01": {"final_quantity_pieces": 25, "bore_mm": 80, "stroke_mm": 200, "pressure_bar": 210, "catalogue_group": "GR-8923"},

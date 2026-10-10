@@ -22,13 +22,8 @@
 
 **MUST / MUST NOT** = no exceptions. **SHOULD** = default; a deviation needs a reason in the PR. **MAY** = free.
 Status: ✅ in the code · ⚠️ in the code with a known gap · ❌ missing. "In the code" is not "verified": verification is
-`eval/compare.py` on a dry run and the per-field points of a test run. `F#` = finding in
-[PLAN_COMPARISON.md](PLAN_COMPARISON.md) §2.6, `I#` = increment in [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) §12.
-
-**Last full dry run (2026-10-10, `main` `3accb38`):** the resolver outputs matched the reference for every rule they
-decide (1, 2, 5, 12–14, 16, 17, 20–26, 28); the run still failed on time (T1.3) and on rule 3 (a timed-out search
-became a no-bid). PR #5 has since added site roles from the brief and hard phase cuts; the statuses below
-include it.
+`eval/compare.py` on a dry run and the per-field points of a test run. `I#` = increment in
+[IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) §12. Measured runs: [`bench/RUNS.md`](../bench/RUNS.md).
 
 ---
 
@@ -66,7 +61,7 @@ include it.
 | --- | --- | --- |
 | T1.1 | `agent.json` valid: `setup`, `run`, `models` ⊆ hosted ids, `browsers` an integer 1–4. | ✅ |
 | T1.2 | `setup` finishes in < 5 min; it has network but no credentials. | ✅ (`uv sync`) |
-| T1.3 | **Always answer before `expires_at`.** No answer = 0 and ineligible. Every stage gets its own budget when it starts (never negative), model calls are bounded by it, and a watchdog signs what is entered. | ⚠️ hard phase cuts since PR #5 bound every stage; no start-time budgets or watchdog yet; before the cuts, the dry run answered only at 1029 s (F3, F4, F5, F19 → I2, I4, I6) |
+| T1.3 | **Always answer before `expires_at`.** No answer = 0 and ineligible. Every stage gets its own budget when it starts (never negative), model calls are bounded by it, and a watchdog signs what is entered. | ⚠️ hard phase cuts since PR #5 bound every stage; no start-time budgets or watchdog yet; before the cuts, the dry run answered only at 1029 s (I2, I4, I6) |
 | T1.4 | **Eligibility = the exact tender reference:** from the brief, confirmed on the portal, invisible characters removed; never a look-alike (suffix or other number). | ✅ |
 | T1.5 | Exactly one binding submission; it ends the run. | ✅ |
 | T1.6 | The answer matches the run's `answer_schema` (read from the run, not copied). | ⚠️ not validated before signing (→ I11) |
@@ -125,7 +120,7 @@ per position, checked in code; `no_bid` needs a completed search (the group's re
 candidate compared) and an independent confirmation. An unfinished search is never "no match" (4.1).
 Traps: look-alike materials that differ in one attribute or only in status.
 Gather erp · Decide `erp.run`, `calc` · ⚠️ a search cut by its hard deadline, forced to finish, or finishing after its
-time warning never reports no match (F9, F16 → I1), nor does one without kept pages (`calc.facts`); a no match is not
+time warning never reports no match (I1), nor does one without kept pages (`calc.facts`); a no match is not
 yet backed by evidence of every candidate (I1, I11) · Check: validate tests with look-alike, blocked and unfinished candidates
 
 **4 · Unit price.** Take the price condition **valid at `S`** (both validity endpoints inclusive), normalize it by its
@@ -133,7 +128,7 @@ yet backed by evidence of every candidate (I1, I11) · Check: validate tests wit
 final pieces** (per position, never the material's sum, 15). Converted by 22, this is `base_unit_price`. The approved
 discount applies to it per the position's clause (12) inside the final price (27).
 Traps: several conditions with different validity; price units other than 1; mixed number formats.
-Gather erp · Decide `erp.extract`, `calc` · ⚠️ ambiguous numbers guessed without a hint (F7 → I10) · Check: number and
+Gather erp · Decide `erp.extract`, `calc` · ⚠️ ambiguous numbers guessed without a hint (I10) · Check: number and
 calc tests (I10, I14)
 
 **5 · Discount.** `LATEST(discount approval, sales director)` for exactly `T`; none → 0 %. Conditions: 16.
@@ -162,15 +157,15 @@ keep their credit), and the bid must still be signed. Our policy: **omit a posit
 configured**; with a known material, submit it with every field we have, optional fields we don't know left blank,
 and keep rule 7. A missing active material is no_bid (3), never an omission; an unfinished search is an omission (or a
 retry), never no_bid.
-Gather erp · Decide `calc`, `submit` · ✅ a known material without prices is submitted, base and a dependent bonus blank; ⚠️ a cut search without a material is omitted; no watchdog (F5,
-F14 → I6, I15) ·
+Gather erp · Decide `calc`, `submit` · ✅ a known material without prices is submitted, base and a dependent bonus blank; ⚠️ a cut search without a material is omitted; no watchdog (I6,
+I15) ·
 Check: calc tests, short-budget dry run
 
 **10 · Finding records.** The spec names a catalogue group per requirement: search the ERP for it and compare the
 candidates' attributes. Empty or over-broad searches list nothing: narrow to ≤ 20 hits. Mail search ANDs its words:
 use the reference plus one subject or topic; read inbox **and** archive, every result page. Helpers may extract opened
 pages and page through chosen result sets; sites and positions may be investigated in parallel.
-Gather erp, webmail · Decide missions · ⚠️ each agent looks only on "its" site (F11 → I16: the sweep agent exists, its
+Gather erp, webmail · Decide missions · ⚠️ each agent looks only on "its" site (I16: the sweep agent exists, its
 stage in `main` is open); mail records parsed from the
 brief ✅ (I12) · Check: gap-sweep test (I16), `tests/test_brief.py`
 
@@ -227,13 +222,13 @@ Gather supplier_portal, webmail · Decide `resolvers.requirements` · ✅ · Che
 Devisenfixing/finanzen, Rüstpools/kalkulation, Projektbonus/finanzen; plus the director's approval (5),
 Konditionsregeln (12) and Preisindizes (28), both from kalkulation. Read from each run's brief by `common.mail_records` (T0.11, I12).
 Gather webmail · Decide `resolvers.commercials` · ⚠️ correct in the dry run, but nothing checks the model's selection
-(F6 → I18) · Check: select tests per trap category (§8)
+(I18) · Check: select tests per trap category (§8)
 
 **22 · Currency.** The valid condition names its currency and FX key. Normalize the price unit, choose the
 per-position scale (4), convert with EUR per currency unit from `LATEST(Devisenfixing, finanzen, key)`, and `r2`. This
 EUR value is `base_unit_price`, used in every later step (16, 26, 27).
 Gather erp, webmail · Decide `erp.extract`, `resolvers.commercials`, `calc` · ⚠️ an unmatched FX key silently takes the
-only rate (F8 → I15) · Check: calc tests (I14)
+only rate (I15) · Check: calc tests (I14)
 
 **23 · Packaging.** The Q&A assigns the tariff key; `LATEST(Verpackungstarife, logistik, key)` gives the price per
 started carton; the ERP gives pieces per carton. `cartons = ceil(final pieces / carton size)` **per position**, never
@@ -266,8 +261,8 @@ Gather – · Decide `calc` · ✅ · Check: calc golden test (I14)
 **28 · Metal indices.** `LATEST(Preisindizes, kalkulation)` for exactly `T`; if it lists validity windows, use the
 rate whose inclusive window contains `S`, not the last one listed. Mass surcharge per piece = surcharge mass (kg) ×
 that rate (the material's index key selects the index).
-Gather erp, webmail · Decide `resolvers.commercials` · ⚠️ an unmatched index key silently takes the only index (F8 →
-I15) · Check: dry-run score; select tests (I18)
+Gather erp, webmail · Decide `resolvers.commercials` · ⚠️ an unmatched index key silently takes the only index
+(I15) · Check: dry-run score; select tests (I18)
 
 **29 · Scoring.** The points per part and per position field: [challenge.md](challenge.md); what they imply: 4.2.
 

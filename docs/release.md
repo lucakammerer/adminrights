@@ -23,6 +23,8 @@ Nothing is pushed. A branch that beats main goes to main by PR after Luca's yes.
 
 - Needs git with read access to origin, `atira` on the PATH and signed in for the team (`atira login`), `uv` and
   Python ≥ 3.10. No environment variables. The tests sync `agent/.venv` on first use.
+- The browser tests need Playwright's Chromium for the pinned Playwright: after a Playwright bump, run
+  `uv run --project agent playwright install chromium` in the clone, or every candidate fails the gate.
 - State outside git: `bench/.ci/state.json` (tested `agent/` trees and their runs, runs still open) and
   `bench/.ci/logs/` (run logs; the audit also reads them). Without them a fresh clone tests the current main once
   more and doesn't collect runs that another machine started.
@@ -33,7 +35,7 @@ Nothing is pushed. A branch that beats main goes to main by PR after Luca's yes.
 
 | Tool | Use |
 | --- | --- |
-| `tools/check_release.sh` | Definition of Done check (RULES §9): audit, unit tests, `agent.json`; green = exit 0 |
+| `tools/check_release.sh` | Definition of Done check (RULES §9): audit, unit tests, `agent.json`; green = exit 0. GitHub Actions (`.github/workflows/release-check.yml`) runs it on every PR and push to main |
 | `eval/compare.py answer.json` | Points per field against the public-1 reference `eval/expected.json` |
 | `tools/rescore.py [run.log ...]` | The logged facts of past runs (default `bench/.ci/logs/`) through today's `calc.compute`, scored per run: a calc change checked without a test run (`facts` itself is not replayed) |
 | `tools/score.sh` | Local dry run against the scouting sites (`DRY_RUN=1` stops before the submission), scored with `eval/compare.py`; no sandbox run needed |

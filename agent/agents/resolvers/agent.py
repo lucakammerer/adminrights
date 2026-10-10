@@ -17,8 +17,8 @@ SITES_TIMEOUT = 60  # seconds per attempt, so one slow call still leaves room fo
 
 
 async def sites(task) -> dict:
-    """Which website plays which role, judged from the brief: names and ids differ between datasets. Never raises
-    (F21): the run's submission target is the tender portal, the model assigns the other roles, and a role it leaves
+    """Which website plays which role, judged from the brief: names and ids differ between datasets. Never raises:
+    the run's submission target is the tender portal, the model assigns the other roles, and a role it leaves
     open gets a remaining website by elimination."""
     by_id = {s["siteId"]: s for s in task["access"]}
     chosen: dict[str, str] = {}
