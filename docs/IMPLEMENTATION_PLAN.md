@@ -433,7 +433,7 @@ Every item has exactly one owner. When it touches a file someone else owns (§14
 | I17 | ✅ Reader hardening (§5.1 rows 1b, 2; row 8 open, optional); `pypdf` dependency (`tests/test_reader.py`) | `reader.js`, `pyproject.toml` | recorded-page tests; a PDF is read | traps 8, 9 | Y |
 | I18 | Code-side selection cross-check (§4.4) | `agents/resolvers`, `select.py` | synthetic-record tests per trap category | 1, 2, 5, 12–14, 16, 17, 20–26, 28 | L |
 | I19 | Extraction while browsing: each kept page read into records right away (small parallel calls), so resolvers only select | `llm.py`, `agents/*` | resolvers finish in seconds after the last agent | T3.2, T4.2 | F |
-| I20 | Mutation tests on recorded pages | `tests/` | extraction stable | 19 | Y |
+| I20 | ✅ Mutation tests on recorded pages (`tests/test_mutations.py`, pages in `eval/fixtures/pages/`, mutations shared with S2 in `tools/stress/mutations.js`) | `tests/` | extraction stable | 19 | Y |
 
 ### P3: polish
 
