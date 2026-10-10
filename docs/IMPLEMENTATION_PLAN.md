@@ -75,14 +75,16 @@ Phase 1, parallel, one browser each, wrap-up at end − 10 min, hard cut 30 s la
 Phase 2, no browser, hard cut end − 8 min (one retry with low effort until end − 7 min)
     resolvers.requirements (resolvers.commercials starts too and runs alongside phase 3)
 Phase 3, ERP tabs in parallel, hard cut end − 6 min (a cut search → its positions are omitted)
-    erp.run per distinct requirement; then resolvers.commercials, hard cut end − 5.5 min
+    erp.run per distinct requirement; a no_match is confirmed by a second erp.run when ≥ 150 s remain;
+    then resolvers.commercials, hard cut end − 5.5 min
 Phase 4, code
     calc.facts → calc.compute
-Phase 5, deadline end − 20 s
-    submit.run (+ get_tan in the webmail tab)
+Phase 5, deadline end − 20 s (DRY_RUN=1 stops before it)
+    submit.run (+ verify_summary read-back, get_tan in the webmail tab)
 ```
 
-With fewer than 4 browsers, the remaining sites open as tabs in browser 1. Every phase is cut hard by `safe`: the job
+With fewer than 4 browsers, the remaining sites open as tabs in browser 1. A site whose first load fails is logged
+(`first load failed`); its agent opens the URL itself. Every phase is cut hard by `safe`: the job
 runs as its own task whose model calls end by the cut (`llm.UNTIL`), and at the cut `safe` returns the fallback without
 waiting for the task to stop (`asyncio.wait_for` waited, and a call that ignored its cancellation held a 780 s cut until
 1093 s). A stage that was cut is in `CUT`; the submission then works in a fresh tab of that site. The submission is
@@ -100,7 +102,7 @@ Each agent is a folder `agent/agents/<name>/` with `agent.py` (mission, result s
 | `supplier_portal` | supplier portal | the revision marked current and all its requirements | 40 steps |
 | `webmail` | webmail | every message the rules need, inbox and archive | 60 steps |
 | `erp.login` | ERP | get past login, cookies, notices, gates | 20 steps |
-| `erp.run` | ERP (one tab each) | the material for one requirement; its pages kept; `check` → `extract` reads the facts | 40 steps |
+| `erp.run` | ERP (one tab each) | the material for one requirement; its pages kept; `check` → `extract` reads the facts, `validate.material_mismatch` refuses a wrong pick once | 40 steps |
 | `resolvers` | — | three `ask_json` calls: sites, requirements, commercials | 3 attempts each |
 | `submit` | tender portal | fill the wizard, sign | 70 steps |
 | `get_tan` | webmail | the newest TAN for the request just made | 12 steps, 2 min |
@@ -139,7 +141,8 @@ Every browser agent is the same loop; agents differ only in mission, result sche
   ERP `extract`).
 - **Calculator** (`agent/calc.py`, details in [calc.md](calc.md)): `facts` merges the agents' results, `compute`
   applies rules 3–9, 12, 15–18 and 22–27 in `Decimal` with HALF_UP; exact against the reference (PLAN_COMPARISON §2.3).
-- **Submission** (`agents/submit`): one model agent with the `form` tool and German number formatting; `get_tan`
+- **Submission** (`agents/submit`): one model agent with the `form` tool and German number formatting; before the TAN
+  `verify_summary` checks unit prices and total on the summary page in code; `get_tan`
   runs in the mail tab; guardrails in the mission (no extra positions, omit only listed ones, never tick our own terms,
   one TAN request). One `form` call per page, a configurator's dependent choices each followed by its apply button.
   First watchdog slice: `SIGN_BY` (180 s) before its deadline the agent is told to omit what isn't entered, request the
