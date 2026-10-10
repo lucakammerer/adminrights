@@ -1,196 +1,340 @@
-# RULES: the reference for the RFQ challenge
+# Rules
 
-> The single source of truth for **what we must deliver and how it is judged**. Every design decision, PR and
-> submission is checked against this file. If something here is wrong or unclear, fix this file first, then the code.
->
-> Sources: `challenge-rfq.md` (challenge page), `run-brief.md` (the brief a run receives), `fair-play.md`,
-> `run-contract.md`, `building-an-agent.md`, `submitting.md`, `scoring.md` (all in `docs/`, fetched 2026-10-10),
-> plus our own scouting (`scouting-notes.md`).
+> **What we must deliver, every rule we are judged by, and where each bid rule lives in the code.** One reference for
+> the whole team: code, PRs and submissions are checked against it. Source of truth stays the run's brief and the
+> platform docs ([challenge](https://ehl-challenge.atira.ai/challenges/rfq.md),
+> [fair play](https://ehl-challenge.atira.ai/docs/fair-play.md),
+> [run contract](https://ehl-challenge.atira.ai/docs/run-contract.md),
+> [scoring](https://ehl-challenge.atira.ai/docs/scoring.md)); if this file contradicts them, they win, and this file
+> gets fixed. Frame, models and the points table: [challenge.md](challenge.md). No public-1 values in this file.
 
 ---
 
 ## 0. How to read this file
 
-Rules are ranked from **strictest** to **most lenient**. Each rule has an ID that code, tests and PRs cite.
+| Tier | Breaking it means | IDs |
+| --- | --- | --- |
+| **T0 Blocker** | package rejected, flagged or disqualified: nothing counts | T0.1–T0.11 |
+| **T1 Hard** | the run scores 0 or is ineligible | T1.1–T1.12 |
+| **Bid rules** | specific quality points are lost | **1–29**, numbered as in the brief and on the challenge page; agent READMEs cite these numbers |
+| **T3 Rank** | worse tie-breaker (cost × time) | T3.1–T3.5 |
+| **T4 Craft** | worse elegance, slower team | T4.1–T4.7 |
 
-| Tier | Name | Breaking it means | Default check |
-| --- | --- | --- | --- |
-| **T0** | BLOCKER | package rejected, flagged or team disqualified: the run never counts | automated pre-submit gate + human review |
-| **T1** | HARD | run scores 0 or is ineligible | runtime guard + end-to-end test |
-| **T2** | SCORE | loses specific quality points | unit tests on the calculator + local scorer |
-| **T3** | RANK | worse tie-breaker (cost × time) | run metrics dashboard |
-| **T4** | CRAFT | worse "elegance", slower team, harder debugging | code review |
+**MUST / MUST NOT** = no exceptions. **SHOULD** = default; a deviation needs a reason in the PR. **MAY** = free.
+Status: ✅ in the code · ⚠️ in the code with a known gap · ❌ missing. "In the code" is not "verified": verification is
+`eval/compare.py` on a dry run and the per-field points of a test run. `F#` = finding in
+[PLAN_COMPARISON.md](PLAN_COMPARISON.md) §2.6, `I#` = increment in [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) §12.
 
-Wording: **MUST** / **MUST NOT** = no exceptions. **SHOULD** = default, deviations need a written reason in the
-PR. **MAY** = free choice.
+**Last full dry run (2026-10-10, `main` `3accb38`):** the resolver outputs matched the reference for every rule they
+decide (1, 2, 5, 12–14, 16, 17, 20–26, 28); the run still failed on time (T1.3) and on rule 3 (a timed-out search
+became a no-bid).
 
 ---
 
 ## 1. What we deliver
 
-| # | Deliverable | Where it counts |
+| # | Deliverable | Counts for |
 | --- | --- | --- |
-| D1 | An **agent package**: gzipped tarball, `agent.json` at its root, ≤ 20 MB compressed | review, every run |
-| D2 | A **signed bid** entered in the tender portal's configurator within the run's time limit (20 min scored) | quality, eligibility, cost, time |
-| D3 | A **scored submission** on the public dataset (leaderboard, ranks by best submission) | winners criterion 2 |
-| D4 | Our **latest submission that passed review** at hackathon end runs on the **private dataset** (once, or best of 3 if we opt in) | winners criterion 1 (weighs most) |
-| D5 | An **elegant system**: clear architecture, readable code, honest README | winners criterion 3 |
-
-Winner order: **private-dataset performance → public-dataset performance → elegance.**
-Ranking inside a dataset: **eligible → quality ↓ → cost × time ↑** (cost floor $0.01, time floor 1 s).
+| D1 | The package: `agent/` as a gzipped tarball, `agent.json` at its root, ≤ 20 MB | review, every run |
+| D2 | One signed bid entered in the tender portal's configurator before the run expires (scored run: 20 min) | quality, eligibility, cost, time |
+| D3 | Scored submissions on the public dataset: our **best** one holds the leaderboard place | winners, 2nd criterion |
+| D4 | Our **latest** submission that passed review runs on the private dataset at the end (once, or best of 3 if opted in) | winners, 1st criterion (weighs most) |
+| D5 | An elegant system: clear architecture, readable code, honest docs | winners, 3rd criterion |
 
 ---
 
-## 2. T0: BLOCKERS (fair play and platform)
+## 2. T0: Blockers (fair play and platform)
 
 | ID | Rule | Check |
 | --- | --- | --- |
-| **T0.1** | MUST NOT hardcode any value copied from the public scenario or its websites: tender references, material numbers, keys (K-/VP-/TZ-/RP-/PB-/ER-/FX-/MET-…), prices, quantities, totals, discounts, dates, logins, TANs, receipt numbers. This covers code, config, prompts, few-shot examples, notes, defaults and fallbacks. | `tools/audit_hardcode.py`: denylist built from `docs/scouting-notes.md` + `docs/scout-public-expected.py`, grep over the package. **Blocks the release.** |
-| **T0.2** | MUST NOT ship site-specific navigation: no public-site URLs, paths (`/mm03`, `/documents/specification`…), element ids or click sequences. Navigation targets come from the model at run time. Generic heuristics (e.g. "a modal dialog with a close button") are fine. | audit greps for site hostnames and known paths; code review |
-| **T0.3** | A **language model** MUST choose navigation targets, searches and relevant documents from observations at run time, and make the important decisions. | architecture (see plan §4); review checklist |
-| **T0.4** | Helpers MAY: extract a page the model selected, parse a document the model selected, paginate a result set the model selected, calculate, validate, retry, fill forms. Helpers MUST NOT autonomously discover and traverse the sites to assemble the evidence before model-directed investigation (**no crawler**, **no fixed script with the model as fallback**). | code review: every navigation call traces back to a model decision in the run trace |
-| **T0.5** | MUST NOT pre-solve: no answer computed by us (or by an AI assistant) shipped in the package. `docs/scout-public-expected.py` is a dev-only oracle and MUST NOT be in the package. | package is built from `agent/` only; audit checks file list |
-| **T0.6** | Model calls MUST go only through the platform proxy (`*_BASE_URL`, `LLM_PROXY_URL`). MUST NOT bundle or run a local model. Own keys only as **team secrets**, never in the package. | grep for API keys; config reads env only |
-| **T0.7** | MUST NOT contact hosts other than the platform API and the 4 challenge websites. MUST NOT exfiltrate data. | no outbound code except proxy + site URLs from `access` |
-| **T0.8** | MUST NOT start browsers in the sandbox. Use only `CDP_URLS` (≤ 4, declared via `"browsers"` in `agent.json`). Tabs and contexts inside them are fine. Locally we may launch our own. | `browser/pool.py` launches only when `CDP_URLS` is unset |
-| **T0.9** | MUST NOT attack the platform, the websites, the sandbox or other teams; MUST NOT share scored-run data. | team agreement |
-| **T0.10** | MUST NOT put text in the package that tries to steer the AI reviewer's verdict. Factual README is fine. | review |
-| **T0.11** | Facts the brief states for every scenario (company name, VAT id, the sales director's mailbox pattern, authorized subject/sender pairs, rules) MAY be used, but SHOULD be **read from the run's brief at run time**, not typed into code. | brief compiler reads them; audit |
+| T0.1 | MUST NOT put values from the public scenario or its websites into the package: references, material numbers, keys of any kind, prices, quantities, totals, discounts, dates, logins, TANs, receipt numbers. Applies to code, config, prompts, few-shot examples, notes, defaults and fallbacks, **and to the agent READMEs, which are uploaded with the package**. | `tools/audit_package.py` (I8); 0 hits on `main` `3accb38` |
+| T0.2 | MUST NOT ship site-specific navigation: no site URLs, paths, element ids or click sequences. Generic heuristics are fine. | audit; review |
+| T0.3 | A model MUST choose navigation targets, searches and relevant documents from what it observes at run time, and make the important decisions. | every navigation step is a model tool call in the log |
+| T0.4 | Helpers MAY extract a page the model chose, parse a document it chose, page through a result set it chose, calculate, validate, retry and fill forms. They MUST NOT discover and traverse the sites on their own to assemble the evidence (no crawler, no fixed script with the model as a fallback). | review |
+| T0.5 | MUST NOT ship a pre-solved answer. Reference answers (`eval/`) stay outside `agent/`. | package = `agent/` only |
+| T0.6 | Model calls only through the platform proxy; no bundled or local model; own keys only as team secrets. | audit (API-key patterns); env-only config |
+| T0.7 | MUST NOT contact hosts other than the platform API and the challenge's websites, or move data out of the sandbox. | review |
+| T0.8 | MUST NOT start browsers in the sandbox: use the ones in `CDP_URLS` (≤ 4, `"browsers"` in `agent.json`); tabs and contexts are free. No dev scripts that launch a browser inside the package. | `browsers.connect` launches only without `CDP_URLS` |
+| T0.9 | MUST NOT attack the platform, the websites, the sandbox or other teams; MUST NOT share scored-run data. | team agreement |
+| T0.10 | MUST NOT address the AI reviewer to steer its verdict. Plain, honest docs are fine. | review |
+| T0.11 | Facts the brief states for every scenario (company, VAT id, mailbox local parts, authorized subjects and senders, submission steps) MAY be used, and SHOULD be read from the run's brief at run time rather than typed into code. | ⚠️ mail topics fixed in the mission (F10 → I12) |
 
-## 3. T1: HARD (run validity and eligibility)
+## 3. T1: Hard (run validity and eligibility)
 
-| ID | Rule | Check |
+| ID | Rule | Status |
 | --- | --- | --- |
-| **T1.1** | `agent.json` valid: `setup`, `run`, `models` ⊆ hosted ids (`qwen`, `clef`), `browsers` integer 1–4. | `tools/check_package.py` |
-| **T1.2** | `setup` finishes in < 5 min with network only for installs; no credentials there. | test run log |
-| **T1.3** | The run MUST submit an answer before `expires_at` (scored: 20 min). No answer = 0 and ineligible. **Always submit something.** | Time Keeper deadline ladder (plan §8); chaos test with injected slowness |
-| **T1.4** | **Eligibility = exact tender reference.** Read it from the brief and confirm it on the portal (clean value: `aria-label` / zero-width characters stripped). Never the look-alike (`…-A`). | ledger validator: reference equals brief reference, character for character |
-| **T1.5** | Exactly **one** submission; submitting ends the run. The final "verbindlich abgeben" step MUST be executed once, only after the answer passes all validators. | Notary state machine has a single terminal transition |
-| **T1.6** | The answer MUST match `answer_schema` (read from the run, not hardcoded). Money as numbers, quantity and lead time as integers, currency `EUR`, ≤ 100 positions, `notes` ≤ 4000 chars. | `jsonschema` validation before signing |
-| **T1.7** | The site form takes **German number format** for prices and total ("2.614,68"). | formatter unit test |
-| **T1.8** | Signing: TAN from the webmail, valid **5 min**; a new TAN request invalidates the previous one. Request the TAN **only** when every field is entered; use the newest TAN for the exact reference that arrived after our request. | Notary/mail handshake test |
-| **T1.9** | Saving alone is not scored: the bid MUST be **signed and submitted**, including when positions are omitted. | end-to-end test asserts a receipt |
-| **T1.10** | Read the run from `GET /v1/runs/current` with `x-api-key`; send our own User-Agent (the edge refuses Python's default urllib agent). | starter-kit `run.py` |
-| **T1.11** | Session expiry loses unsaved entries; "Zurück" (back) clears later wizard steps. The Notary MUST NOT go back after later steps exist unless it re-enters them. | Notary design |
+| T1.1 | `agent.json` valid: `setup`, `run`, `models` ⊆ hosted ids, `browsers` an integer 1–4. | ✅ |
+| T1.2 | `setup` finishes in < 5 min; it has network but no credentials. | ✅ (`uv sync`) |
+| T1.3 | **Always answer before `expires_at`.** No answer = 0 and ineligible. Every stage gets its own budget when it starts (never negative), model calls are bounded by it, and a watchdog signs what is entered. | ❌ dry run: answer only at 1029 s, the submission would not have fit (F3, F4, F5, F19 → I2, I4, I6) |
+| T1.4 | **Eligibility = the exact tender reference:** from the brief, confirmed on the portal, invisible characters removed; never a look-alike (suffix or other number). | ✅ |
+| T1.5 | Exactly one binding submission; it ends the run. | ✅ |
+| T1.6 | The answer matches the run's `answer_schema` (read from the run, not copied). | ⚠️ not validated before signing (→ I11) |
+| T1.7 | Money in the form in German number format, two decimals. | ✅ `agents/submit` `german` |
+| T1.8 | Signing: request one TAN only when everything is entered; use the newest TAN mail for the exact reference after that request; valid 5 min; a new request invalidates the old TAN. | ✅ `get_tan` |
+| T1.9 | Saving is not submitting: sign and submit, also when positions are omitted. | ⚠️ no watchdog (F5 → I6) |
+| T1.10 | Read the run from `GET /v1/runs/current` with `x-api-key` and our own User-Agent (Python's default is refused). | ✅ `run.py` |
+| T1.11 | Wizards: going back clears later steps; an expired session loses unsaved entries. Move forward step by step, saving each. | ✅ in the mission |
+| T1.12 | Site roles and the submission target come from the run (`access`, `submission`), never from assumed ids; an unknown id must not crash the run. | ❌ F1, F2 → I3 |
 
-## 4. T2: SCORE (the bid rules, formalized)
+---
 
-### 4.1 Points (what each rule is worth)
+## 4. Bid rules 1–29
 
-**Bid case (100 points):**
+### 4.1 Notation and shared definitions
 
-| Part | Points |
-| --- | --- |
-| Decision (`bid`) | 5 |
-| Tender reference | 5 |
-| Discount percent | 5 |
-| Total net (to the cent, consistent with positions) | 5 |
-| Arithmetic consistency (each position + total = sum) | 5 |
-| Withdrawn-Q&A quantity check *(when present)* | 5 |
-| Dated metal-index check *(when present)* | 5 |
-| **Positions** (75 minus present checks, split evenly per position) | 65 in public (both checks present) |
+- `S` = the scenario datetime from the brief; `T` = the exact tender reference; `D` = the bidder's mailbox domain.
+- `r2(x)` = round half up to 0.01. Money is `Decimal` from parsing to the answer; never round an intermediate value
+  unless a rule says so.
+- **Times:** compare in UTC. Convert each site's local times with the timezone the site states; prefer an explicit
+  UTC/ISO value when the page shows one. Date formats come with their order (day/month vs month/day): read the hint.
+- **Numbers:** parse by the format the page states (`de-DE` `12.345,67`, `en-US` `12,345.67`); a form like `12,345` or
+  `12.345` without a hint is ambiguous and MUST NOT be guessed.
+- **`LATEST(subject, key)`**: among records of that subject (and key) that are for **exactly `T`**, come from the
+  **authorized sender** (local part from the brief + `@D`) and are dated **≤ `S`**, the newest one. A newer record
+  replaces older ones; a failed condition does not revive an older one; records for other references and future-dated
+  records never apply; unsent drafts, previews, requests and reviews are not records.
+- **Unfinished is not absent:** a search or stage that didn't complete (forced finish, deadline, crash) yields
+  *unfinished*, never a negative result.
 
-Per position: **material 20 %, quantity 15 %, base price 15 %, surcharge 10 %, packaging 10 %, project bonus 10 %,
-final unit price 10 %, lead time 10 %.** Every field scores on its own. Money is compared **to the cent**. Positions
-are matched by number; **extra or duplicate positions cost one position's share each.**
+### 4.2 What the points imply
 
-**No-bid case (100 points):** decision **75**, tender reference 5, no positions 5, total 0 → 15. A wrong decision
-costs its points but leaves other fields their credit.
+The points table is in [challenge.md](challenge.md); it leads to four rules for us:
 
-> **Consequence:** the bid/no-bid decision is the single most valuable judgement (75 points when no_bid is right,
-> and a wrong no_bid throws away ~75 position points in a bid case). It gets a **proof requirement** (T2.3b).
-
-### 4.2 Notation
-
-- `S` = scenario datetime (from the brief, UTC). `T` = tender reference (exact). `D` = bidder mailbox domain.
-- `r2(x)` = round **HALF_UP** to 0.01. All money in `Decimal`, never float, until the final JSON.
-- **`LATEST(kind, key)`** = among records of that kind and key that are (a) for **exactly** `T`, (b) from the
-  **authorized sender** for that subject (local part from the brief + `@D`), (c) dated **≤ S**, the one with the newest
-  datetime. Newer replaces older. Records for other references and future-dated records **never** apply. A failed
-  condition does **not** revive an older record.
+- In a no-bid case the decision alone is worth 75: the material decision (rule 3) needs proof both ways.
+- Every field scores on its own: a submitted position with some fields right beats an omitted one (rule 9).
+- Money is compared to the cent: `Decimal`, rounding only where the rules say.
+- Extra or duplicate positions cost a position's share each: exactly one entry per tender position (rule 8).
 
 ### 4.3 The rules
 
-| ID | Rule (precise) | Pitfalls seen in public | Check |
-| --- | --- | --- | --- |
-| **T2.1 Quantity** | `q_unit = BoQ quantity`, overridden by the **latest dated** Q&A answer (≤ S) that changes **that** position, ignoring **withdrawn** answers (a later answer withdraws an earlier one by its number). Then `q = q_unit × pieces_per_set` if the unit is *Satz* (pieces per set from the **governing** spec), else `q = q_unit`. Bid quantities are always **pieces**. Carton rounding never changes `q`. | Q&A numbers are not in date order; the latest change (32) was withdrawn → 26 Satz × 5 = 130; dates in Athens time; quantity also drawn on canvas | calc tests: withdrawal, unit conversion, ordering by date, not by number |
-| **T2.2 Governing revision** | The specification revision **marked current** (status "gültig"/current), **not** the first shown and not by number. Superseded revisions never apply. | portal opens the oldest revision first; status only in a tooltip; dates in mixed DD/MM vs MM/DD | ledger validator: exactly one current revision |
-| **T2.3 Requirement + amendments** | Requirement attributes from the governing revision; then apply Q&A **technical amendments that name that revision and that requirement**, only the named attributes, the latest dated (≤ S) per attribute. Amendments to other revisions never apply. | two amendments for the same attribute (485 → 482) | calc tests |
-| **T2.3a Derivation** | If a requirement's stroke is a *nutzbarer Weg* (usable stroke): nominal = amended usable + **2 ×** end reserve, from `LATEST(Technikfreigabe/technik, end-reserve key)` for **that revision**. Other attributes unchanged. | 482 + 2×9 = 500; 576 + 2×12 = 600 | calc tests |
-| **T2.3b Material** | Search the ERP by the requirement's **Kataloggruppe** (narrow, ≤ 20 hits). Candidate qualifies iff bore, (nominal) stroke, pressure, mounting, certification are **all exactly equal** and its status is **active** (blocked = status "gesperrt"). If **any** position has no qualifying material → **no_bid** for the whole tender. **Proof rule:** no_bid requires an *absence proof* (the group search listed and every candidate checked, plus one independent search) and the Auditor's sign-off; bid requires a *presence proof* per position. | identical-looking blocked material; Flansch vs Schwenkauge; 125/325 vs 125/300; certification in a tooltip | ledger validator + no-bid mutation test |
-| **T2.4 Price condition** | The condition **valid at S** (both endpoints inclusive). Normalize by its **price unit** (per 1 or per 100 pieces), choose the scale with the **highest minimum quantity ≤ q** of **this position** (not the material sum). If the currency is not EUR, convert with `LATEST(Devisenfixing/finanzen, FX key)` (EUR per currency unit) and **r2**. This EUR value is `base_unit_price` and is used everywhere after (threshold, bonus, final price). | 2026 vs 2027 conditions; price unit 100; "64,853 (en-US)" = 64 853 per 100 pcs; "181.429 (de-DE)" = 181 429 per 100; future-dated FX decoy | number-parser tests + calc tests |
-| **T2.5 Discount** | `LATEST(approval, leitung@D)` for exactly `T`. If it states a **minimum undiscounted net order value**: `V = r2(Σ q × base_unit_price)` (no surcharges, no setup, no packaging); `V ≥ threshold` (inclusive) → its percentage, else **0 %**, no fallback to older approvals. No approval → 0 %. For no_bid a conditional approval yields 0 %. | look-alike ref `…-A`; requests from vertrieb@ are not approvals; "Angebotsprüfung" is not an approval; a decoy "draft value 99 %" block in every mail | calc tests |
-| **T2.6 Clause** | A position's *Konditionsgruppe* (from Q&A) is resolved in `LATEST(Konditionsregeln, kalkulation@D)`. Its prose maps to **one of three**: `BASE_ONLY`, `BASE_AND_SURCHARGE`, `NONE`. No group → `BASE_ONLY`. Setup fees are **never** discounted. The order-level percentage and threshold don't change. | three prose variants | interpreter tests (prose → enum) + calc tests |
-| **T2.7 Metal surcharge** | `surcharge_mass_kg × rate`, rate from the latest exact-reference *Preisindizes* message from kalkulation@D; if it lists validity windows, use the window that **contains S** (inclusive), not the last listed. Mass is the **surcharge mass** (Zuschlagsmasse), not the allocation mass. | look-alike ref; 3 windows | worth an extra 5-point check |
-| **T2.8 Setup** | Ordinary setup per position (from Q&A, one-off EUR) + allocated **shared setup pool** (Rüstpools): one pool fee from `LATEST(Rüstpools/kalkulation)`, allocated over pool members by weight `q × allocation mass` (Umlagegewicht, ≠ surcharge mass) using the mail's cent rule: floor to cents, remaining cents to the largest remainders, ties by ascending position id. | two different masses on each material | allocation tests |
-| **T2.9 Packaging** | Tariff key from Q&A → `LATEST(Verpackungstarife/logistik)`. `cartons = ceil(q / pieces_per_carton)` **per position** (no pooling). Never discounted. `packaging_per_unit = r2(cartons × tariff / q)`. | look-alike ref with a different tariff | calc tests |
-| **T2.10 Project bonus** | Plan key from Q&A → `LATEST(Projektbonus/finanzen)`. Eligible base `B = Σ q × base_unit_price` over member positions (undiscounted, no surcharges/packaging). Credit = Σ over **marginal** bands of `rate × portion in band`, **r2 once**. Allocate cents proportional to each member's `q × base` by largest remainder (ties ascending id). `rebate_total` = the position's allocated credit (**whole position, not per piece**); non-members `0.00`. Never discounted again. | marginal, not flat | allocation tests |
-| **T2.11 Final unit price** | `unit = r2( base·(1−d·[clause covers base]) + sur·(1−d·[clause covers surcharge]) + (setup + pool_alloc + carton_cost − bonus_alloc) / q )` using **unrounded** components and rounding **once**. Never feed rounded report fields back in. | | golden test vs oracle |
-| **T2.12 Lead time** | If the position has a delivery commitment key: `c = LATEST(Terminfreigabe/logistik, key)`; apply `c.weeks` iff `c.material == selected material` **and** the pooled demand (Σ q over all positions selecting that material) ≤ `c.ceiling` (inclusive). Otherwise shared stock: if **available** stock (unrestricted only, not inspection/blocked stock) ≥ pooled demand → from-stock lead time for **all** those positions, else production lead time for all. No partial allocation. | physical stock includes inspection stock (99 vs 31 available) | calc tests |
-| **T2.13 Total** | `total_net = r2(Σ q × unit)`. MUST equal the sum of the submitted positions (arithmetic points). | | validator |
-| **T2.14 Report fields** | `base_unit_price` = T2.4; `surcharge_per_unit = r2(metal surcharge + (ordinary setup + pool alloc)/q)` **before discount**, excluding packaging and bonus (confirmed by the form text and `scoring.md`); `packaging_per_unit` = T2.9; `rebate_total` = T2.10. `0.00` for a known zero; blank = unanswered. | | golden test |
-| **T2.15 Decision shape** | bid → one entry per tender position, identified by its position number, currency EUR. no_bid → `positions: []`, `total_net: 0`, choose *Verzichtserklärung*. Never extra or duplicate positions. | form defaults to *Nebenangebot* (secondary) → must choose *Hauptangebot* | Notary test |
-| **T2.16 Time and authority** | "Latest" compares **UTC datetimes** (portal shows Athens time, mail Berlin time, ERP UTC); records after `S` never apply. Authorized subject/sender pairs come from the brief: Technikfreigabe/technik, Verpackungstarife/logistik, Terminfreigabe/logistik, Devisenfixing/finanzen, Rüstpools/kalkulation, Projektbonus/finanzen, Konditionsregeln/kalkulation, Preisindizes/kalkulation, discount/leitung. | future-dated 26.01 FX decoy | resolver tests |
-| **T2.17 Partial credit** | Each field scores independently. A position with a best-effort value still earns its correct fields; an **omitted** position earns nothing. Policy: **never omit** a position for which we know the material; fill unknown optional breakdown fields **blank** rather than guessing; still keep `total = Σ q × unit`. Omit only when we cannot configure the material at all. | | policy test in Notary |
+**1 · Quantity.** The position's tender quantity, replaced by the latest dated clarification (≤ `S`) that changes
+**that** position; withdrawn answers don't count (13); then converted to pieces (17).
+Traps: clarification numbers aren't in date order; times in site-local zones; values drawn as images.
+Gather tender · Decide `resolvers.requirements` · ✅ · Check: dry-run score; select tests (I18)
 
-### 4.4 Ambiguity register (our interpretation, to confirm with test-run breakdowns)
+**2 · Requirement.** The position's requirement in the specification revision **marked current** by its status: not
+the one that opens first, not the newest date, not the highest number. Superseded revisions never apply.
+Traps: the oldest revision opens first; the status is only in a tooltip; dates in mixed formats.
+Gather spec · Decide `resolvers.requirements` · ✅ · Check: dry-run score (material and quantity fields)
 
-| ID | Question | Our choice | How we confirm |
-| --- | --- | --- | --- |
-| A1 | "No later than the scenario date": date or datetime? | datetime ≤ S (brief gives a timestamp). Log every record on the same calendar day after S. | test-run breakdown on public (8153 at 08:00Z < 09:00Z is consistent) |
-| A2 | EUR price with price unit 100 giving > 2 decimals | normalize, then r2 | none seen yet; log if it occurs |
-| A3 | Unconditional approval in a no_bid case | discount_percent = approval % (rule only zeroes conditional ones) | log; low frequency |
-| A4 | Two active materials both match exactly | pick the one the Auditor confirms with the tighter evidence; flag in `notes` | log; should not happen |
-| A5 | surcharge_per_unit rounding | r2 of (metal surcharge + setup/q), unrounded parts | confirmed by form text |
+**3 · Material.** An **active** material whose bore, stroke, pressure, mounting and certification all **exactly**
+equal the governing requirement (after amendments, 14, and derivation, 20). Blocked materials never qualify. If any
+position has none, the decision is **no_bid** for the whole tender. Proof both ways: `bid` needs one active exact match
+per position, checked in code; `no_bid` needs a completed search (the group's result list in the evidence, every
+candidate compared) and an independent confirmation. An unfinished search is never "no match" (4.1).
+Traps: look-alike materials that differ in one attribute or only in status.
+Gather erp · Decide `erp.run`, `calc` · ⚠️ dry run: timed-out searches counted as no match → false no-bid (F9, F16 →
+I1, I11) · Check: validate tests with look-alike, blocked and unfinished candidates
 
-## 5. T3: RANK (cost × time)
+**4 · Unit price.** Take the price condition **valid at `S`** (both validity endpoints inclusive), normalize it by its
+**price unit** (per 1 or per n pieces), and choose the scale with the **highest minimum quantity ≤ the position's
+final pieces** (per position, never the material's sum, 15). Converted by 22, this is `base_unit_price`. The approved
+discount applies to it per the position's clause (12) inside the final price (27).
+Traps: several conditions with different validity; price units other than 1; mixed number formats.
+Gather erp · Decide `erp.extract`, `calc` · ⚠️ ambiguous numbers guessed without a hint (F7 → I10) · Check: number and
+calc tests (I10, I14)
+
+**5 · Discount.** `LATEST(discount approval, sales director)` for exactly `T`; none → 0 %. Conditions: 16.
+Traps: approvals for look-alike references; requests from our own mailbox; reviews that are explicitly no approval;
+superseded approvals; draft blocks inside messages; inbox and archive.
+Gather mail · Decide `resolvers.commercials` · ⚠️ search wording taken from a public mail subject (F10 → I12) · Check:
+dry-run score; select tests (I18)
+
+**6 · Lead time.** The from-stock lead time when **available** (unrestricted) stock covers the pooled demand (15);
+otherwise the production lead time. A delivery commitment can override (24).
+Traps: physical totals include inspection or blocked stock.
+Gather erp · Decide `calc` · ✅ · Check: calc tests (I14)
+
+**7 · Total.** `total_net = r2(Σ final quantity × rounded final unit price)`; it MUST equal the sum of the submitted
+positions.
+Gather – · Decide `calc` · ✅ · Check: validate (I11), calc tests (I14)
+
+**8 · Decision.** `bid`: one entry per tender position, identified by its position number, currency EUR, never extra
+or duplicate positions. `no_bid` (rule 3): no positions, total 0. In the form: the main offer for a bid, the waiver for a
+no-bid; the form's preselected offer kind may be wrong.
+Gather – · Decide `calc` · ✅ · Check: validate (I11)
+
+**9 · Partial submission.** Positions can be explicitly omitted in the form (no position points; the other positions
+keep their credit), and the bid must still be signed. Our policy: **omit a position only if its material cannot be
+configured**; with a known material, submit it with every field we have, optional fields we don't know left blank,
+and keep rule 7. A missing active material is no_bid (3), never an omission; an unfinished search is an omission (or a
+retry), never no_bid.
+Gather erp · Decide `calc`, `submit` · ⚠️ positions without prices are omitted; no watchdog (F5, F14 → I6, I15) ·
+Check: calc tests, short-budget dry run
+
+**10 · Finding records.** The spec names a catalogue group per requirement: search the ERP for it and compare the
+candidates' attributes. Empty or over-broad searches list nothing: narrow to ≤ 20 hits. Mail search ANDs its words:
+use the reference plus one subject or topic; read inbox **and** archive, every result page. Helpers may extract opened
+pages and page through chosen result sets; sites and positions may be investigated in parallel.
+Gather erp, mail · Decide missions · ⚠️ each agent looks only on "its" site (F11 → I16); fixed mail topics (F10 → I12)
+· Check: gap-sweep test (I16)
+
+**11 · Agent requirement.** See T0.3 and T0.4.
+
+**12 · Commercial clauses.** A Q&A answer may assign a position to a *Konditionsgruppe*. Resolve it in
+`LATEST(Konditionsregeln, kalkulation)` for exactly `T`. Its prose maps to exactly one of: **base only**, **base and
+mass surcharge**, **neither**. Setup fees are never discounted. A group overrides the default even when two positions
+select the same material; positions without a group are **base only**. The order-level percentage and its threshold
+(16) don't change.
+Gather tender, mail · Decide `resolvers.commercials` · ✅ · Check: dry-run score; prose → class tests (I18)
+
+**13 · Withdrawn answers.** A Q&A answer may withdraw an earlier one by its number: ignore the withdrawn answer's
+quantity change; the latest remaining change applies, else the tender quantity.
+Gather tender · Decide `resolvers.requirements` · ✅ · Check: dry-run score; select tests (I18)
+
+**14 · Scoped amendments.** After choosing the governing revision (2), apply the Q&A technical amendments that name
+**that revision and that requirement**: only the named attributes, the latest dated (≤ `S`) per attribute.
+Amendments to other revisions never apply.
+Gather tender · Decide `resolvers.requirements` · ✅ · Check: dry-run score; select tests (I18)
+
+**15 · Shared stock.** Sum the final quantities of all positions that select the same material. Stock must cover the
+whole sum for those positions to deliver from stock; otherwise all of them use production. No partial allocation.
+Price scales stay per position.
+Gather erp · Decide `calc` · ✅ · Check: calc tests (I14)
+
+**16 · Conditional discount.** If the governing approval (5) sets a minimum undiscounted net order value:
+`V = r2(Σ final quantity × base_unit_price)` (valid per-position scale prices in EUR, before discount, without mass
+surcharges, setup fees or packaging). `V ≥ threshold` (inclusive) → its percentage, else **0 %**, with **no fallback**
+to older approvals. For no_bid, a conditional approval yields 0 %.
+Gather mail · Decide `resolvers.commercials`, `calc` · ✅ · Check: calc tests (I14)
+
+**17 · Units.** Tender and Q&A quantities are in the position's stated unit. Sets convert to pieces with the
+governing spec's pieces per set. Price scales, stock, allocation weights and bid quantities are all in final pieces.
+Carton rounding affects packaging cost only, never the quantity.
+Gather tender, spec · Decide `resolvers.requirements` · ✅ · Check: dry-run score; select tests (I18)
+
+**18 · Pricing breakdown.** Optional fields with independent credit, all net EUR: `base_unit_price` (rule 4, per
+piece); `surcharge_per_unit = r2(metal surcharge + (ordinary setup + allocated pool share) / q)` per piece, **before
+discount**, without packaging and bonus; `packaging_per_unit` (23, per piece); `rebate_total` (26, the **whole
+position's** credit). `0.00` for a known zero; blank = unanswered. Rounded report fields never feed back into 27.
+Gather – · Decide `calc` · ✅ · Check: calc golden test (I14)
+
+**19 · Same rules everywhere.** The calculation rules apply to the practice and the private dataset alike; missing
+calculation fields lose only their own points (9). Nothing may depend on what public-1 looks like (T0.1, T0.2, T1.12).
+
+**20 · Technical derivation.** For a requirement whose stroke is a usable stroke (*nutzbarer Weg*): apply its scoped
+amendments (14), then add **2 ×** the per-end reserve of its key from `LATEST(Technikfreigabe, technik)` **for that
+revision**. Match the resulting nominal stroke in the ERP; other attributes stay unchanged.
+Gather spec, mail · Decide `resolvers.requirements` · ✅ · Check: dry-run score; select tests (I18)
+
+**21 · Authority and time.** Every key is resolved with `LATEST` (4.1). Authorized subject/sender pairs (local part +
+`@D`), as the brief states them: Technikfreigabe/technik, Verpackungstarife/logistik, Terminfreigabe/logistik,
+Devisenfixing/finanzen, Rüstpools/kalkulation, Projektbonus/finanzen; plus the director's approval (5),
+Konditionsregeln (12) and Preisindizes (28), both from kalkulation. Read them from each run's brief (T0.11).
+Gather mail · Decide `resolvers.commercials` · ⚠️ correct in the dry run, but nothing checks the model's selection
+(F6 → I18) · Check: select tests per trap category (§8)
+
+**22 · Currency.** The valid condition names its currency and FX key. Normalize the price unit, choose the
+per-position scale (4), convert with EUR per currency unit from `LATEST(Devisenfixing, finanzen, key)`, and `r2`. This
+EUR value is `base_unit_price`, used in every later step (16, 26, 27).
+Gather erp, mail · Decide `erp.extract`, `resolvers.commercials`, `calc` · ⚠️ an unmatched FX key silently takes the
+only rate (F8 → I15) · Check: calc tests (I14)
+
+**23 · Packaging.** The Q&A assigns the tariff key; `LATEST(Verpackungstarife, logistik, key)` gives the price per
+started carton; the ERP gives pieces per carton. `cartons = ceil(final pieces / carton size)` **per position**, never
+pooled, never discounted; the quantity is not increased. `packaging_per_unit = r2(cartons × tariff / q)`.
+Gather tender, erp, mail · Decide `resolvers.commercials`, `calc` · ✅ · Check: calc tests (I14)
+
+**24 · Delivery.** The Q&A assigns a commitment key; `LATEST(Terminfreigabe, logistik, key)` names a material, weeks
+and a ceiling. Apply it only if its material is the selected one **and** the pooled demand for that material ≤ the
+ceiling (inclusive); otherwise shared-stock delivery (6, 15). Commitments may differ by position for the same material.
+Gather tender, mail · Decide `resolvers.commercials`, `calc` · ✅ · Check: calc tests (I14)
+
+**25 · Shared setup.** The Q&A names the pool members; the ERP gives each material's **allocation mass** (not the
+surcharge mass); `LATEST(Rüstpools, kalkulation)` gives the one pool fee and the cent rule: weights = final pieces ×
+allocation mass; floor to cents, leftover cents to the largest remainders, ties by ascending position id. Each share
+adds to the position's ordinary setup fee (from the Q&A); reported in the surcharge (18).
+Gather tender, erp, mail · Decide `resolvers.commercials`, `calc` · ✅ · Check: allocation tests (I14)
+
+**26 · Project bonus.** `LATEST(Projektbonus, finanzen)` gives marginal bands. Eligible base `B = Σ final pieces ×
+base_unit_price` over member positions (EUR, before discount, without surcharges and packaging). Credit = Σ over
+bands of rate × the part of `B` inside the band, `r2` once; allocated to members in proportion to their goods value by
+largest remainder in cents (ties ascending position id). `rebate_total` = the position's allocation; `0.00` for
+non-members. Independent of discount clauses; never discounted again.
+Gather mail · Decide `resolvers.commercials`, `calc` · ✅ · Check: band and allocation tests (I14)
+
+**27 · Final price.**
+`unit = r2( base·(1 − d·[clause covers base]) + mass surcharge·(1 − d·[clause covers surcharge]) + (ordinary setup + pool share + carton cost − bonus share) / q )`
+with unrounded components and one rounding at the end; `d` from 5 and 16, clauses from 12.
+Gather – · Decide `calc` · ✅ · Check: calc golden test (I14)
+
+**28 · Metal indices.** `LATEST(Preisindizes, kalkulation)` for exactly `T`; if it lists validity windows, use the
+rate whose inclusive window contains `S`, not the last one listed. Mass surcharge per piece = surcharge mass (kg) ×
+that rate (the material's index key selects the index).
+Gather erp, mail · Decide `resolvers.commercials` · ⚠️ an unmatched index key silently takes the only index (F8 →
+I15) · Check: dry-run score; select tests (I18)
+
+**29 · Scoring.** The points per part and per position field: [challenge.md](challenge.md); what they imply: 4.2.
+
+---
+
+## 5. T3: Rank (cost × time)
 
 | ID | Rule | Target |
 | --- | --- | --- |
-| T3.1 | Quality first: never trade a quality point for speed or cost. | — |
-| T3.2 | Time = run start → accepted answer. Work the 4 sites **in parallel** (4 browsers). | p50 ≤ 6 min, p95 ≤ 10 min, hard stop 18 min |
-| T3.3 | Cost = metered LLM usage. Default to hosted **Qwen** ($0.15/M in, $0.016/M cached, $0.47/M out) and **Clef** ($0.24/M in) for yes/no checks. Frontier models only if they buy quality, per call site, behind a flag. | ≤ $0.25 per run |
-| T3.4 | Keep model inputs small: page digests, not raw HTML; stable system prompts first for caching. | ≤ 6k tokens per call p50 |
-| T3.5 | `agent.json` `"models"`: list only what we call (shorter warm-up waits don't count, but listed models must be warm). | `["qwen", "clef"]` or `["qwen"]` |
+| T3.1 | Quality first: never trade a quality point for cost or time. | — |
+| T3.2 | Time runs from the start of the run command to the accepted answer: work the sites in parallel; start the submission early. | answer < 8 min, then toward 5 |
+| T3.3 | Cost is metered model usage. Default to the hosted Qwen; other models only behind a flag and only where they buy quality. The team shares 32 concurrent Qwen calls across all runs. | ≤ $0.25 per run |
+| T3.4 | Keep model inputs small: page text, not HTML; older reads trimmed; static prompt parts first (cached input is cheaper). | — |
+| T3.5 | `agent.json` `"models"` lists only the models we call. | `["qwen"]` |
 
-## 6. T4: CRAFT (elegance and team hygiene)
+## 6. T4: Craft
 
 | ID | Rule |
 | --- | --- |
-| T4.1 | One package dir (`agent/`), small modules with one job each; the calculator is a pure function of the ledger. |
-| T4.2 | Every claim in the ledger carries provenance (site, URL, verbatim quote, record date). Every decision is in the run trace. |
-| T4.3 | Tests run in < 60 s locally (`uv run pytest`); CI runs tests + hardcode audit + package check on every PR. |
-| T4.4 | Release train: only `main` builds submissions; every submission is a tagged commit with its test-run score in the tag message. |
-| T4.5 | **The final run takes the latest passed submission, not the best.** No experimental submissions after the freeze (plan §12). |
-| T4.6 | README explains the architecture honestly (no reviewer-steering language, T0.10). |
+| T4.1 | `agent/` is the only package dir; one folder per agent with its `agent.py` and `README.md`; code calculates, models gather and decide. |
+| T4.2 | Facts come only from kept evidence; decisive values carry the quote they came from; every decision appears in the log. |
+| T4.3 | Tests run locally in under a minute; every change ships with its test or a scored dry run. |
+| T4.4 | Submissions only from `main`, tagged `sub-NN` with their test-run score. |
+| T4.5 | The final run takes the **latest** passed submission: no experimental submissions in the last 3 hours. |
+| T4.6 | Docs say plainly what the system does (T0.10). |
+| T4.7 | Docs follow `AGENTS.md` "Keeping docs current" and the conventions in [README.md](README.md). |
 
-## 7. Generic trap catalogue (what the private sites will throw at us in a different skin)
+---
 
-Handle these as **categories**, never via public-site specifics:
+## 7. Ambiguity register
 
-1. Cookie walls / consent pages after login.
-2. Modal dialogs whose big button navigates away; Escape blocked; small close control.
-3. Look-alike controls: several identical labels, one works (others: "not available", survey, tools page).
-4. Flaky error pages ("Dienst vorübergehend nicht verfügbar") → retry.
-5. Session timeout → back to login → re-login and resume.
-6. Human-check gates: slider to 100 + "I'm not a robot" checkbox unlocking a fieldset; a code shown on a canvas to retype.
-7. Hidden values: canvas (aria-label/fallback), tooltips, `<details>`, hover menus, iframes (nested), ZIP, CSV, TXT (maybe PDF).
-8. Hidden decoys: `aria-hidden`/`display:none` text with poison values; "draft/not sent" blocks in mails.
-9. Zero-width characters inside identifiers.
-10. Mixed number locales (tagged), price units ≠ 1, mixed date formats (tagged), several timezones.
-11. Pagination with tiny pages, "load more", ordering not by date.
-12. Superseded documents shown first; look-alike references (`…-A`); wrong senders; future-dated records; requests vs approvals.
-13. Search engines that refuse empty/broad queries and AND their words.
-14. Wizard forms: default values that are wrong, cascading selects, back clears later steps, browser confirm dialog at the end.
+Interpretations we chose where the rules leave room. Confirm each with a test-run breakdown; update this table.
 
-## 8. Definition of Done for a submission
+| ID | Question | Our choice |
+| --- | --- | --- |
+| A1 | "No later than the scenario date": calendar date or datetime? | datetime ≤ `S` (the brief gives a time); log records on the same day after `S` |
+| A2 | A per-piece price with more than two decimals after normalizing (EUR condition) | keep it unrounded until `r2` makes it `base_unit_price` |
+| A3 | An unconditional approval in a no-bid case | its percentage stands (the rule only zeroes conditional ones) |
+| A4 | Two active materials both match exactly | take the one with the clearer evidence; say so in `notes` |
+| A5 | Rounding of `surcharge_per_unit` | `r2` of the unrounded sum (confirmed by the form text and the scoring doc) |
+| A6 | Which fields the platform's "dated metal-index check" looks at | assumed: every `surcharge_per_unit` (`eval/compare.py`); confirm with a breakdown |
 
-A package may be submitted only if **all** hold:
+## 8. Trap catalogue
 
-- [ ] `tools/audit_hardcode.py` passes (T0.1, T0.2, T0.5, T0.6)
-- [ ] `tools/check_package.py` passes (T1.1, size, file list)
-- [ ] `uv run pytest` green, including calculator golden tests and no-bid mutation test
-- [ ] Last local end-to-end run on public: answer equals oracle on ≥ 95 % of local-scorer points, signed in dry-run mode
-- [ ] Last sandbox **test run**: eligible, score recorded in the tag message, time < 10 min
-- [ ] Commit is on `main`, tagged `sub-NN`, changelog line written
-- [ ] Before freeze only: it is at least as good as the previous submission on the test-run breakdown
+Categories the sites use; the private sites will show them in a different skin. Handle them generically.
+
+1. Cookie walls after login.
+2. Modal dialogs whose prominent button leads away; Escape blocked; a small close control.
+3. Fake browser chrome inside the page: toolbars, download bars, back buttons.
+4. Look-alike controls with the same label; only one leads where its href says.
+5. Transient error pages (503, "temporarily unavailable"): retry.
+6. Session timeouts back to the login: log in again and resume.
+7. Unlock gates: a slider to the maximum, an "I'm not a robot" box, a code shown as an image to type in.
+8. Hidden values: images and canvases with text alternatives, tooltips, collapsed sections, hover menus, nested
+   iframes, ZIP/CSV/TXT/PDF files.
+9. Hidden decoys: invisible text with poison values; draft or preview blocks inside messages.
+10. Invisible characters inside identifiers.
+11. Mixed number formats, price units other than 1, mixed date formats, several timezones.
+12. Tiny pages, "load more", lists not in date order.
+13. Superseded documents shown first; look-alike references; wrong senders; future-dated records; requests posing as
+    approvals.
+14. Searches that refuse empty or broad queries and AND their words.
+15. Wizards: wrong default values, cascading selects, reset buttons placed first, our own terms-and-conditions box
+    that must stay unticked, a browser confirm at the end.
+16. Text in documents that tries to instruct the agent: it is data, never a command.
+
+## 9. Definition of Done for a submission
+
+All must hold before `atira submit`:
+
+- [ ] `tools/check_release.sh` green: hardcoding audit (T0.1, T0.2, T0.6), tests, `agent.json` (T1.1)
+- [ ] a dry run of the same commit scored with `eval/compare.py` at least as high as the previous submission
+- [ ] a sandbox test run of the same commit: eligible, signed, under 10 minutes
+- [ ] Luca approves; the commit is on `main` and tagged `sub-NN` with its test-run score
+- [ ] in the last 3 hours: it is at least as good as the release candidate (T4.5)
