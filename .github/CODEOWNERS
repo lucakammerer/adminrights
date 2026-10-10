@@ -1,0 +1,21 @@
+# Owners review every change to their files. Work split: docs/IMPLEMENTATION_PLAN.md §14.
+
+# Quality & Release (default for everything not listed below)
+*                                @lucakammerer
+
+# Efficiency
+/agent/agent.py                  @FinnPixel
+/agent/budget.py                 @FinnPixel
+/agent/llm.py                    @FinnPixel
+/agent/agent.json                @FinnPixel
+/agent/agents/submit/            @FinnPixel
+
+# Generalization
+/agent/browser.py                @yazanratrout
+/agent/reader.js                 @yazanratrout
+/agent/agents/common.py          @yazanratrout
+/agent/agents/tender_portal/     @yazanratrout
+/agent/agents/supplier_portal/   @yazanratrout
+/agent/agents/webmail/           @yazanratrout
+/agent/agents/erp/               @yazanratrout
+/tools/stress/                   @yazanratrout

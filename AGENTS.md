@@ -33,6 +33,20 @@ you as a coding agent; humans read `README.md`.
   target, the backlog), `challenge.md`, `calc.md`; start at `docs/README.md`
 - `eval/`: reference answers, the scorer `compare.py` and public-1 data; `tools/`: dev helpers (`dev-env.sh`)
 
+## Who owns what
+
+Three owners, one KPI each ([plan §14](docs/IMPLEMENTATION_PLAN.md#14-work-split-and-timeline)); file owners in
+[`.github/CODEOWNERS`](.github/CODEOWNERS) review every change to their files.
+
+- **Efficiency, Finn:** cost × time. `agent.py`, `budget.py`, `llm.py`, `agents/submit/`, `agent.json`.
+- **Generalization, Yazan:** works on unseen sites. `browser.py`, `reader.js`, `agents/common.py`, the four site
+  agents, `tools/stress/`.
+- **Quality & Release, Luca:** score 100, every run signs, audit clean; runs test runs and submits.
+  `calc.py`, `numbers.py`, `validate.py`, `select.py`, `agents/resolvers/`, `tests/`, `eval/`, `tools/`, `bench/`, `docs/`.
+
+Every PR reports dry-run score, run time and cost and may not lower the score. Nothing runs while a scored submission
+runs.
+
 ## Commands
 
 ```sh
