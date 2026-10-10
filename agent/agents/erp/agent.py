@@ -91,8 +91,7 @@ Finish with material_number and why; the facts are read from the pages you kept.
                                        deadline - FINISH_GRACE, tag, max_steps=40, check=check)
     if result.get("material_number") and not result.get("price_condition"):
         try:
-            data, _ = await extract(task, requirement, result, result.get("evidence", []))
-            result = {**result, **data}
+            result, _ = await extract(task, requirement, result, result.get("evidence", []))
         except Exception as error:  # noqa: BLE001  out of time: the material and its kept pages still count
             llm.log(tag, f"extract failed: {type(error).__name__}: {str(error)[:200]}")
     return result
