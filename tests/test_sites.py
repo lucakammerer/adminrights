@@ -97,5 +97,19 @@ class SitesTest(unittest.TestCase):
         self.assertEqual(ids, {"tender_portal": "d", "supplier_portal": "c", "erp": "b", "webmail": "a"})
 
 
+
+class FirstTest(unittest.TestCase):
+    def test_a_failed_call_leaves_the_answer_to_the_other(self):
+        async def fails():
+            raise TimeoutError("hung")
+
+        async def answers():
+            await asyncio.sleep(0.01)
+            return {"positions": []}
+
+        self.assertEqual(asyncio.run(resolvers.first(fails(), answers())), {"positions": []})
+        with self.assertRaises(TimeoutError):
+            asyncio.run(resolvers.first(fails(), fails()))
+
 if __name__ == "__main__":
     unittest.main()

@@ -55,6 +55,21 @@ JSON: {{{", ".join(f'"{role}": "<siteId>"' for role in open_roles)}}}"""
     return {role: by_id[chosen[role]] for role in ROLES}
 
 
+async def first(*jobs):
+    """The first of several identical calls to answer; the others are cancelled."""
+    tasks = [asyncio.ensure_future(job) for job in jobs]
+    try:
+        for done in asyncio.as_completed(tasks):
+            try:
+                return await done
+            except Exception as error:  # noqa: BLE001  another call may still answer
+                failed = error
+        raise failed
+    finally:
+        for job in tasks:
+            job.cancel()
+
+
 async def requirements(task, tender, spec, mail, effort: str = "medium") -> dict:
     # Only the technical release matters here (rule 21 names it); every other mail would slow this critical-path call.
     pages = mail.get("evidence", [])
@@ -83,8 +98,9 @@ For every tender position, work out:
 JSON: {{"positions": [{{"position": "...", "final_quantity_pieces": 0, "quantity_reasoning": "...",
 "requirement": "the requirement id the position refers to", "bore_mm": 0, "stroke_mm": 0, "pressure_bar": 0, "mounting": "...", "certification": "...",
 "catalogue_group": "...", "requirement_reasoning": "..."}}]}}"""
-    llm.log("requirements", f"asking with {len(question)} chars, effort {effort}")  # its size drives the critical path
-    return await llm.ask_json(RESOLVE, question, effort=effort)
+    llm.log("requirements", f"asking twice with {len(question)} chars, effort {effort}")  # its size drives the critical path
+    # it holds up the ERP phase, and one hosted call in a few hangs until its timeout: the faster of two answers
+    return await first(llm.ask_json(RESOLVE, question, effort=effort), llm.ask_json(RESOLVE, question, effort=effort))
 
 
 async def commercials(task, tender, mail) -> dict:

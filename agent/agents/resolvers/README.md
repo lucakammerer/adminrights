@@ -38,7 +38,8 @@ means. The output is typed facts for `calc`, which does all the arithmetic.
   model assigns the other roles (two attempts of at most `SITES_TIMEOUT` seconds each, the second asking only for the
   roles still open; answers that aren't one of the websites are ignored); a role still open gets a remaining website
   by elimination. It never fails the run.
-- `requirements` runs after phase 1, effort medium, and is on the critical path: the ERP agents wait for it. It gets
+- `requirements` runs after phase 1, effort medium, and is on the critical path: the ERP agents wait for it. It asks
+  twice at once and takes the first answer (`first`), because one hosted call in a few hangs until its timeout. It gets
   only the technical mail because all mail doubles its time (66 s instead of 34 s on public-1). Prompt: tender
   quantity replaced by the latest dated clarification, a withdrawn answer as if never given (an older change it
   replaced applies again), sets into pieces; decided from the kept pages, not the agents' summaries; the current
