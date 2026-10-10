@@ -133,15 +133,16 @@ Every browser agent is the same loop; agents differ only in mission, result sche
   and keeps a page with the same content only once.
 - **`check` bounds:** its model calls take at most `CHECK_TIMEOUT` (60 s) each and end at the agent's deadline; a
   check that fails or runs out of time lets the result through unchecked.
-- **Model:** `AGENT_MODEL`, default the hosted Qwen; browser steps run with low reasoning effort (`STEP_EFFORT`);
-  `chat` tries up to 6 times, each attempt at most `CALL_TIMEOUT` (180 s; no SDK-internal retries) and all of them
-  bounded by the stage's `llm.UNTIL`, which `agent.safe`/`agent.start` set per stage; step calls end at the agent's
-  deadline so the forced `finish` keeps its grace. Both limits hold on the wall clock (`asyncio.wait`, the call is
-  dropped at its limit): the SDK's timeout only bounds the silence between bytes. Replies are streamed (`llm.reply`
-  assembles them like a non-streamed one), so that silence tells a stuck call from a slow one: an attempt that brings
-  no byte for `SILENCE` (30 s; 60 s on a retry) is dropped and asked again. A healthy stream starts within seconds;
-  stuck calls never reach the model and used to hold their stage to the cap (run_76abdc35df9c092b: six, among them
-  three of the four ERP searches' first calls).
+- **Model:** `AGENT_MODEL`, default Claude Haiku 5.5 on OpenRouter (any `<provider>/<model>` id; in a run through
+  `$LLM_PROXY_URL/openrouter/v1`, Anthropic prompts cached), `qwen3.8-flash-next` for the hosted Qwen; browser steps
+  run with low reasoning effort (`STEP_EFFORT`). `chat` tries up to 6 times, each attempt at most `CALL_TIMEOUT` (no
+  SDK-internal retries) and all of them bounded by the stage's `llm.UNTIL`, which `agent.safe`/`agent.start` set per
+  stage; step calls end at the agent's deadline so the forced `finish` keeps its grace. An attempt without a reply
+  after `HEDGE_AFTER` sends the same request again alongside and takes the first answer: hung calls never answer,
+  while a fresh one answers in seconds. Both limits hold on the wall clock (`asyncio.wait`, the call is dropped at its
+  limit): the SDK's timeout only bounds the silence between bytes. Replies are streamed (`llm.reply` assembles them
+  like a non-streamed one), so that silence tells a stuck call from a slow one: an attempt that brings no byte for
+  `SILENCE` (30 s) fails and is asked again.
 - **Cut agents keep their evidence:** every `investigate` registers its evidence list in `llm.KEPT`, one per stage
   (`agent.start`); a stage that is cut or fails hands those pages on, marked `forced`.
 - **Shared system prompt** `agents/common.py` `SYSTEM`: the sites' traps in general terms, no site and no value.
@@ -306,9 +307,9 @@ on disagreement it logs both, re-asks once, then the rule wins.
 
 | Use | Model | How |
 | --- | --- | --- |
-| Navigation and reading (tool loop) | hosted Qwen | native tool calls; parallel tool calls allowed |
-| Resolvers and ERP fact extraction | hosted Qwen | JSON mode, up to 3 attempts |
-| Prose → class (condition rules) | hosted Qwen | majority of 3 only if tests show errors (E4) |
+| Navigation and reading (tool loop) | Claude Haiku 5.5 | native tool calls; parallel tool calls allowed |
+| Resolvers and ERP fact extraction | Claude Haiku 5.5 | JSON mode, up to 3 attempts |
+| Prose → class (condition rules) | Claude Haiku 5.5 | majority of 3 only if tests show errors (E4) |
 | Cheap yes/no checks | Clef | not used; only if measurably faster (E5) |
 | Anything else | a frontier model via team secret | off; only behind a flag where it buys quality (E6) |
 
@@ -358,6 +359,7 @@ Same jobs and rules, different software, look, navigation, site names and data, 
 | Unit tests | calc golden test with facts as the pages show them, allocation ties, band edges, inclusive ceilings and thresholds; number parser; validators; selection | I10, I11, I14, I18 |
 | Recorded pages | pages recorded by `tools/stress/run_agents.py`, a few kept in `eval/fixtures/pages/`; reader tests for every trap category on synthetic pages (`tests/test_reader.py`) ✅ | I17 |
 | Dry run + score | `tools/score.sh`: a local run with `DRY_RUN=1` stops after the answer, `eval/compare.py` scores the logged answer with the official weights | I7 |
+| Resolver eval | `tools/resolver_eval.py`: the resolvers on recorded evidence with rule-level changes (`eval/mutations.py`), several passes each for the model's variance | I18 |
 | Mutation tests | recorded pages relabelled, locale-swapped, with hidden decoys, shuffled menus and table rows, content in an extra frame: extraction must not change ✅ (`tests/test_mutations.py`) | I20 |
 | Chaos runs *(stretch)* | local runs with random 503s, a forced session expiry, slow responses: the run must still sign | — |
 | Mirror world *(stretch)* | a small local re-skin of the four jobs with information split differently and a synthetic scenario with a known answer | — |
@@ -459,7 +461,7 @@ Every item has exactly one owner. When it touches a file someone else owns (§14
   submits.
 - **Shared capacity:** one run uses at most about 5 of the team's 32 concurrent model calls. Nothing else runs while a
   scored submission runs, and timing measurements run alone; ordinary local dry runs may overlap. Only Luca starts
-  sandbox test runs, at most 2 at once. Test run 2 waited 15 min in the model queue in total: Finn finds out why
+  sandbox test runs, at most 4 at once. Test run 2 waited 15 min in the model queue in total: Finn finds out why
   before budgets are calibrated.
 - **Freeze:** no experimental submissions in the last 3 hours; the last one must be at least as good as the release
   candidate (T4.5).
