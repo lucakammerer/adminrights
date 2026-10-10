@@ -1,9 +1,35 @@
 """Resolvers: apply the brief's rules to the kept evidence, without a browser. See README.md."""
+import json
+
 import llm
 from agents.common import RESOLVE, context, evidence
 
+ROLES = {
+    "tender_portal": "the public tender, its bill of quantities, the bidder Q&A and the bid submission",
+    "supplier_portal": "the buyer's technical specification and its revisions",
+    "erp": "the company's materials, stock, lead times and price conditions",
+    "webmail": "the sales mailbox with the approvals and the signing TAN",
+}
 
-async def requirements(task, tender, spec, mail) -> dict:
+
+async def sites(task) -> dict:
+    """Which website plays which role, judged from the brief: names and ids differ between datasets."""
+    listing = [{"siteId": s["siteId"], "url": s["url"]} for s in task["access"]]
+    by_id = {s["siteId"]: s for s in task["access"]}
+    question = f"""{context(task)}
+
+Websites: {json.dumps(listing)}
+Assign each role exactly one of these websites by its siteId: {json.dumps(ROLES)}
+JSON: {{{", ".join(f'"{role}": "<siteId>"' for role in ROLES)}}}"""
+    for _ in range(2):
+        roles = await llm.ask_json(RESOLVE, question, effort="low")
+        chosen = [roles.get(role) for role in ROLES]
+        if all(c in by_id for c in chosen) and len(set(chosen)) == len(ROLES):
+            return {role: by_id[roles[role]] for role in ROLES}
+    raise ValueError(f"no clear website per role: {roles}")
+
+
+async def requirements(task, tender, spec, mail, effort: str = "medium") -> dict:
     technical = {"evidence": [page for page in mail.get("evidence", []) if "technik" in page.lower()]}
     question = f"""{context(task)}
 
@@ -26,7 +52,7 @@ For every tender position, work out:
 JSON: {{"positions": [{{"position": "...", "final_quantity_pieces": 0, "quantity_reasoning": "...",
 "requirement": "the requirement id the position refers to", "bore_mm": 0, "stroke_mm": 0, "pressure_bar": 0, "mounting": "...", "certification": "...",
 "catalogue_group": "...", "requirement_reasoning": "..."}}]}}"""
-    return await llm.ask_json(RESOLVE, question)
+    return await llm.ask_json(RESOLVE, question, effort=effort)
 
 
 async def commercials(task, tender, mail) -> dict:
@@ -52,6 +78,7 @@ JSON: {{"tender_reference": "the exact reference", "discount": {{"percent": 0, "
 "positions": [{{"position": "...", "discount_applies_to": "base", "carton_price": 0,
 "delivery_commitment": {{"material_number": "...", "max_pieces": 0, "weeks": 0}} or null,
 "setup_pool_member": false, "project_bonus_member": false, "setup_fee": 0, "reasoning": "..."}}],
-"fx_rates": {{}}, "metal_indices": {{}}, "setup_pool_fee": 0, "project_bonus_bands": [{{"from": 0, "to": null,
-"percent": 0}}]}}"""
-    return await llm.ask_json(RESOLVE, question)
+"fx_rates": {{"<FX key>": 0.0}}, "metal_indices": {{"<index key>": 0.0}}, "setup_pool_fee": 0,
+"project_bonus_bands": [{{"from": 0, "to": null, "percent": 0}}]}}
+Every amount, rate and percent is a plain JSON number (decimal point, no units)."""
+    return await llm.ask_json(RESOLVE, question, effort="medium")

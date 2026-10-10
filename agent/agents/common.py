@@ -31,10 +31,6 @@ reads get shortened. Never guess or reconstruct a value from memory: if you lack
 exactly what was asked, every value copied from the website."""
 
 
-def site(task: dict, site_id: str) -> dict:
-    return next(s for s in task["access"] if s["siteId"] == site_id)
-
-
 def login_line(entry: dict) -> str:
     c = entry["credentials"]
     return f"Website {entry['url']} · username {c['username']} · password {c['password']}"

@@ -3,7 +3,7 @@ import json
 import time
 
 import llm
-from agents.common import STR, SYSTEM, context, login_line, obj, site
+from agents.common import STR, SYSTEM, context, login_line, obj
 
 
 def german(value: float) -> str:
@@ -29,7 +29,7 @@ that request (highest request number / newest), open it and finish with the TAN 
         f"project bonus for the position {german(p['rebate_total'])}" for p in answer["positions"])
     mission = f"""{context(task)}
 
-{login_line(site(task, tab.site['siteId']))}
+{login_line(tab.site)}
 The bid is calculated. Your part: enter and sign it on this tender portal, following the brief's Submission section.
 The bidder's own mailbox address, if a contact e-mail is asked for: {contact or 'unknown'}.
 Bid ({answer['decision']}), tender {answer['tender_reference']}, discount {german(answer['discount_percent'])} %,
