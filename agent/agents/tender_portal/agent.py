@@ -24,7 +24,7 @@ If its documents need an expression of interest ("Teilnahme bekunden"), give it.
    analyst word for word: they change quantities, withdraw earlier answers, and assign keys (Konditionsgruppe,
    tariffs, delivery commitments, setup pools, project bonus, technical amendments to specification revisions).
    In the result, list each one only with its number, date and the evidence number it is kept as; don't copy the
-   text;
+   text, not into notes either (a kept page needs no note);
 3. anything else the brief's rules need that you find here (documents, ZIPs).
 Keep the bill of quantities and every Q&A page with save_evidence as you read them.
 Do not start the bid submission (Angebotsabgabe) yet. Finish with the result."""
