@@ -200,7 +200,8 @@ Every browser agent is the same loop; agents differ only in mission, result sche
   applies rules 3–9, 12, 15–18 and 22–27 in `Decimal` with HALF_UP; exact against the reference (`tests/test_calc.py`).
   `agent.bid` calls them: if they raise, a position whose facts break the calculation loses its ERP finding (or the
   position itself) and is omitted as unfinished, never no_bid; as a last resort every position is omitted, so the run
-  still signs.
+  still signs. Without any requirements row (both resolver calls lost) the bill of quantities' positions are omitted,
+  so the bid stays a partial one instead of a waiver.
 - **Submission** (`agents/submit`): one model agent with the `form` tool and German number formatting; before the TAN
   `verify_summary` checks unit prices and total on the summary page in code; `get_tan`
   runs in a new tab of the mailbox (same login) from its start page, not the mail agents' idle tab (it hung 45-150 s

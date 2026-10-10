@@ -27,7 +27,7 @@ def values(answer: dict, omitted: list, specs: dict) -> str:
                     for key, label in OPTIONAL) for p in answer["positions"])
     return f"""Bid ({answer['decision']}), tender {answer['tender_reference']}, discount {german(answer['discount_percent'])} %,
 total net {german(answer['total_net'])} EUR (net; a displayed gross amount with VAT is not it):
-{rows or '(no positions: no bid)'}
+{rows or ('(none to enter)' if omitted else '(no positions: no bid)')}
 {f"Unfinished positions to omit with the form's omit option (partial submission): {', '.join(omitted)}" if omitted else ''}"""
 
 
