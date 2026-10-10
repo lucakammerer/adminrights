@@ -27,7 +27,8 @@ Status: ✅ in the code · ⚠️ in the code with a known gap · ❌ missing. "
 
 **Last full dry run (2026-10-10, `main` `3accb38`):** the resolver outputs matched the reference for every rule they
 decide (1, 2, 5, 12–14, 16, 17, 20–26, 28); the run still failed on time (T1.3) and on rule 3 (a timed-out search
-became a no-bid).
+became a no-bid). PR #5 has since added site roles from the brief and hard phase cuts; the statuses below
+include it.
 
 ---
 
@@ -65,7 +66,7 @@ became a no-bid).
 | --- | --- | --- |
 | T1.1 | `agent.json` valid: `setup`, `run`, `models` ⊆ hosted ids, `browsers` an integer 1–4. | ✅ |
 | T1.2 | `setup` finishes in < 5 min; it has network but no credentials. | ✅ (`uv sync`) |
-| T1.3 | **Always answer before `expires_at`.** No answer = 0 and ineligible. Every stage gets its own budget when it starts (never negative), model calls are bounded by it, and a watchdog signs what is entered. | ❌ dry run: answer only at 1029 s, the submission would not have fit (F3, F4, F5, F19 → I2, I4, I6) |
+| T1.3 | **Always answer before `expires_at`.** No answer = 0 and ineligible. Every stage gets its own budget when it starts (never negative), model calls are bounded by it, and a watchdog signs what is entered. | ⚠️ hard phase cuts since PR #5 bound every stage; no start-time budgets or watchdog yet; before the cuts, the dry run answered only at 1029 s (F3, F4, F5, F19 → I2, I4, I6) |
 | T1.4 | **Eligibility = the exact tender reference:** from the brief, confirmed on the portal, invisible characters removed; never a look-alike (suffix or other number). | ✅ |
 | T1.5 | Exactly one binding submission; it ends the run. | ✅ |
 | T1.6 | The answer matches the run's `answer_schema` (read from the run, not copied). | ⚠️ not validated before signing (→ I11) |
@@ -74,7 +75,7 @@ became a no-bid).
 | T1.9 | Saving is not submitting: sign and submit, also when positions are omitted. | ⚠️ no watchdog (F5 → I6) |
 | T1.10 | Read the run from `GET /v1/runs/current` with `x-api-key` and our own User-Agent (Python's default is refused). | ✅ `run.py` |
 | T1.11 | Wizards: going back clears later steps; an expired session loses unsaved entries. Move forward step by step, saving each. | ✅ in the mission |
-| T1.12 | Site roles and the submission target come from the run (`access`, `submission`), never from assumed ids; an unknown id must not crash the run. | ❌ F1, F2 → I3 |
+| T1.12 | Site roles and the submission target come from the run (`access`, `submission`), never from assumed ids; an unknown id must not crash the run. | ⚠️ roles assigned by a model from the brief since PR #5; the run's `submission` target is still not read, and an unclear assignment crashes the run (F2, F21 → I3) |
 
 ---
 
@@ -123,8 +124,8 @@ position has none, the decision is **no_bid** for the whole tender. Proof both w
 per position, checked in code; `no_bid` needs a completed search (the group's result list in the evidence, every
 candidate compared) and an independent confirmation. An unfinished search is never "no match" (4.1).
 Traps: look-alike materials that differ in one attribute or only in status.
-Gather erp · Decide `erp.run`, `calc` · ⚠️ dry run: timed-out searches counted as no match → false no-bid (F9, F16 →
-I1, I11) · Check: validate tests with look-alike, blocked and unfinished candidates
+Gather erp · Decide `erp.run`, `calc` · ⚠️ a search cut by its hard deadline is omitted (PR #5), but one forced to
+finish just before the cut can still report no match → false no-bid (F9, F16 → I1, I11) · Check: validate tests with look-alike, blocked and unfinished candidates
 
 **4 · Unit price.** Take the price condition **valid at `S`** (both validity endpoints inclusive), normalize it by its
 **price unit** (per 1 or per n pieces), and choose the scale with the **highest minimum quantity ≤ the position's
@@ -159,7 +160,8 @@ keep their credit), and the bid must still be signed. Our policy: **omit a posit
 configured**; with a known material, submit it with every field we have, optional fields we don't know left blank,
 and keep rule 7. A missing active material is no_bid (3), never an omission; an unfinished search is an omission (or a
 retry), never no_bid.
-Gather erp · Decide `calc`, `submit` · ⚠️ positions without prices are omitted; no watchdog (F5, F14 → I6, I15) ·
+Gather erp · Decide `calc`, `submit` · ⚠️ positions without prices or with a cut search are omitted; no watchdog (F5,
+F14 → I6, I15) ·
 Check: calc tests, short-budget dry run
 
 **10 · Finding records.** The spec names a catalogue group per requirement: search the ERP for it and compare the

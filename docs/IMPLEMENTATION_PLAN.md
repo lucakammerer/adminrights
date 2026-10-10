@@ -13,7 +13,8 @@ The agent on `main` works the four websites with one generic model tool loop, ap
 model "resolvers" and an exact code calculator, and enters the bid with a model-driven submit agent. In a full local
 dry run its resolvers got **every fact right**, and the run still failed. The answer came only after 17 minutes,
 and it was a false **no-bid**, because the ERP agents started after their own deadline and reported "no match" for
-searches they never ran (PLAN_COMPARISON §2.4).
+searches they never ran (PLAN_COMPARISON §2.4). PR #5 has since added site roles from the brief and hard phase cuts,
+which bound the run time; the false no-bid path and the rest of P0 are still open (§12).
 
 So the work goes in this order (backlog §12):
 
@@ -142,7 +143,8 @@ appears as `[tag  123s] n: tool {args}`.
 
 Full local dry run (PLAN_COMPARISON §2.4): every resolver fact correct; answer only at 1029 s, a false no-bid scored
 5 / 100; the tender agent took 12 minutes re-fetching the same pages, the ERP agents started after their deadline, and
-one resolver call took about 5 minutes.
+one resolver call took about 5 minutes. That run was on `3accb38`, before PR #5's hard phase cuts; measure again with
+the first test run (I9).
 
 ---
 
@@ -282,6 +284,8 @@ on disagreement it logs both, re-asks once, then the rule wins.
 | Anything else | a frontier model via team secret | off; only behind a flag where it buys quality (E6) |
 
 - Calls are bounded by the caller's deadline (I2); at most 12 concurrent calls per run (the team shares 32).
+- Reasoning effort: low for browser steps (`STEP_EFFORT`) and for copying values, medium for the resolvers. Low is
+  several times faster; switching thinking off entirely made the model rewrite number formats (PR #5).
 - Prompt layout: static system prompt and tool schemas first (cached input is cheaper), then brief, then dynamic parts.
 - The system prompt teaches meanings (traps, German business terms), never values.
 - Resolver inputs only carry the evidence they need (I5); later, extraction while browsing (I19).
@@ -367,11 +371,11 @@ Owner letters: **L** = Luca, **Y** = Yazan, **F** = Finn (proposal, §14).
 
 | ID | Change | Where | Acceptance | Rules | Owner |
 | --- | --- | --- | --- | --- | --- |
-| I1 | Unfinished ≠ no match (§4.4) | `agents/erp`, `validate.py`, `calc.compute` | a run with a starved ERP stage never answers no_bid | 3, 8, 9 | Y |
-| I2 | Model calls bounded by the caller's deadline; concurrency cap | `llm.py` | test with a fake slow client | T1.3 | F |
-| I3 | Site roles and submission target from the run; unknown ids classified once (URL + landing page) | `agent.py`, `agents/common.py` | a run with renamed site ids doesn't crash | T1.12 | L |
-| I4 | Dependency graph + per-stage budgets (§4.1, §4.2) | `agent.py`, `budget.py`, `agents/erp` | dry run: ERP starts during the first stage; answer < 8 min | T1.3, T3.2 | L |
-| I5 | Slimmer missions and inputs: no word-for-word copies in `finish` schemas when the evidence holds them; "every needed page kept → finish"; resolvers get only the evidence they need; reliable object `finish` | `agents/tender_portal`, `agents/supplier_portal`, `agents/resolvers`, `llm.py` | no page fetched twice without reason; commercials resolver much faster | T3.2, T4.2 | F |
+| I1 | Unfinished ≠ no match (§4.4). Since PR #5 a search cut by its hard deadline is omitted; remaining: a forced finish can still claim no match | `agents/erp`, `validate.py`, `calc.compute` | a run with a starved ERP stage never answers no_bid | 3, 8, 9 | Y |
+| I2 | Model calls bounded by the caller's deadline; concurrency cap. Since PR #5 the phase cuts cancel slow calls; remaining: the bound inside a phase, the cap | `llm.py` | test with a fake slow client | T1.3 | F |
+| I3 | Site roles: done in PR #5 (`resolvers.sites`). Remaining: read the run's submission target; no crash when the assignment is unclear (F21): fall back to known role ids, then retry | `agent.py`, `agents/resolvers` | a run with renamed site ids doesn't crash | T1.12 | L |
+| I4 | Dependency graph + per-stage budgets (§4.1, §4.2). Since PR #5 every phase has a hard cut; remaining: start stages when their inputs exist, budgets computed at stage start | `agent.py`, `budget.py`, `agents/erp` | dry run: ERP starts during the first stage; answer < 8 min | T1.3, T3.2 | L |
+| I5 | Slimmer missions and inputs: no word-for-word copies in `finish` schemas when the evidence holds them; "every needed page kept → finish"; resolvers get only the evidence they need (object `finish` done in PR #5) | `agents/tender_portal`, `agents/supplier_portal`, `agents/resolvers`, `llm.py` | no page fetched twice without reason; commercials resolver much faster | T3.2, T4.2 | F |
 | I6 | Submit in two stages + watchdog: stage 1 at start, stage 2 with the answer, read-back of the review page before the TAN, watchdog at end − 3 min | `agents/submit` | a short-budget run still signs | T1.3, T1.9, 9 | L |
 | I7 | Dry-run mode + `tools/score.sh` (run + `eval/compare.py`) | `agents/submit`, `tools/` | one command → a score | T4.3 | Y |
 | I8 | Release tools: `tools/audit_package.py` + `tools/check_release.sh` (audit, tests, `agent.json`) | `tools/` | green on `main` | T0.1, T0.2, T0.6, T1.1 | Y |
@@ -446,7 +450,7 @@ Owner letters: **L** = Luca, **Y** = Yazan, **F** = Finn (proposal, §14).
 | A false no-bid | I1 + I11 |
 | Session expiry mid-wizard | step-by-step saving, re-login (I13), read-back (I6) |
 | TAN race | one request, newest TAN after the request, 5-minute window |
-| Site ids differ on the private dataset | I3 handles both |
+| Site ids differ on the private dataset | roles from the brief (PR #5); no crash on an unclear assignment (F21 → I3) |
 | Information on unexpected sites | gap sweep (I16) |
 | The scorer's "dated metal-index check" fields are unknown | RULES A6; confirm with the first test-run breakdown |
 | Sandbox speed differs from local | calibrate budgets after the first test run (E7) |
