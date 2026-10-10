@@ -178,8 +178,14 @@ async def investigate(tab, system: str, mission: str, finish_schema: dict, deadl
     tools = BROWSER_TOOLS + (extra_tools or []) + [_fn(
         "finish", "Return your findings when the mission is done (or when told time is up: your best findings).",
         {"result": finish_schema}, ["result"])]
+    try:  # like every tool, the first read never outlasts TOOL_TIMEOUT: a page that never returns can't eat the stage
+        page = await asyncio.wait_for(tab.read(), max(1.0, min(TOOL_TIMEOUT, deadline - time.time())))
+    except Exception as error:  # noqa: BLE001
+        url = (getattr(tab, "site", None) or {}).get("url")
+        page = f"Error: the page did not load ({type(error).__name__}). " + \
+            (f"Open {url} to start." if url else "Read it again.")
     messages = [{"role": "system", "content": system},
-                {"role": "user", "content": mission + "\n\nThe page now:\n" + await tab.read()}]
+                {"role": "user", "content": mission + "\n\nThe page now:\n" + page}]
     steps: list[list[dict]] = []
     evidence: list[str] = []
     if (stage := KEPT.get()) is not None:

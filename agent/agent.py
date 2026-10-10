@@ -29,6 +29,7 @@ CUT: set[str] = set()  # stages cut at their deadline: their task may still hold
 # attempt joins once the first has run BACKUP_AFTER seconds.
 ERP_SEARCH_MIN = 60
 BACKUP_AFTER = 60
+OPEN_TIMEOUT = 20  # seconds to open a new tab on a site's start page (pages load in 1-5 s)
 
 
 def start(job, until: float, cap: float | None = None) -> asyncio.Task:
@@ -146,9 +147,19 @@ def bid(tender: dict, requirements: dict, commercials: dict, erp: dict) -> dict:
 
 
 async def fresh(tab: Tab) -> Tab:
-    """A new tab of the same browser (same login) on the site's start page."""
-    page = await tab.page.context.new_page()
-    await page.goto(tab.site["url"], wait_until="domcontentloaded")
+    """A new tab of the same browser (same login) on the site's start page, within OPEN_TIMEOUT, and never an error:
+    it opens the ERP searches' tabs inside their time and the submission's outside any stage, where a failed load
+    would end the run unsigned. A start page that doesn't load leaves the agent the new tab to open the URL itself
+    (its mission names it); a tab that doesn't open leaves it the old one."""
+    try:
+        page = await asyncio.wait_for(tab.page.context.new_page(), OPEN_TIMEOUT)
+    except Exception as error:  # noqa: BLE001
+        llm.log("fresh", f"no new tab ({type(error).__name__}): the old one for {tab.site.get('url')}")
+        return tab
+    try:
+        await asyncio.wait_for(page.goto(tab.site["url"], wait_until="domcontentloaded"), OPEN_TIMEOUT)
+    except Exception as error:  # noqa: BLE001
+        llm.log("fresh", f"start page not loaded ({type(error).__name__}): {tab.site.get('url')}")
     return Tab(page, tab.site)
 
 

@@ -89,8 +89,9 @@ With fewer than 4 browsers, the remaining sites open as tabs in browser 1. A sit
 (`first load failed`); its agent opens the URL itself. Every phase is cut hard by `safe`: the job
 runs as its own task whose model calls end by the cut (`llm.UNTIL`), and at the cut `safe` returns the fallback without
 waiting for the task to stop (`asyncio.wait_for` waited, and a call that ignored its cancellation held a 780 s cut until
-1093 s). A stage that was cut is in `CUT`; the submission then works in a fresh tab of that site. The submission is
-cut at `end` too. Under load the
+1093 s). A stage that was cut is in `CUT`; the submission then works in a fresh tab of that site. `fresh` opens a tab and
+its start page within `OPEN_TIMEOUT` (20 s) and never raises: a start page that doesn't load leaves the new tab (the
+mission names the URL), a tab that doesn't open leaves the old one. The submission is cut at `end` too. Under load the
 hosted model can take 20–90 s per step; without hard cuts one run spent its whole budget before the submission and
 scored 0.
 
@@ -123,9 +124,9 @@ Every browser agent is the same loop; agents differ only in mission, result sche
   to copy values (`llm.SHORTENED_KEPT`).
 - **`finish`:** a result that isn't a JSON object is refused while more than 30 s remain; fields sent without the
   `result` wrapper are taken as the result.
-- **Tools:** a browser tool runs at most `TOOL_TIMEOUT` (60 s) and never past the agent's deadline, an extra tool
-  (`get_tan`) until the deadline; a timeout reaches the model as an error, so a hung fetch can't hold the agent to
-  its stage cut and lose what it kept.
+- **Tools:** a browser tool, and the first page read before step 0, runs at most `TOOL_TIMEOUT` (60 s) and never past
+  the agent's deadline, an extra tool (`get_tan`) until the deadline; a timeout reaches the model as an error, so a
+  hung fetch can't hold the agent to its stage cut and lose what it kept.
 - **`check`:** optional validator on `finish`: a problem refuses `finish` and the agent keeps working.
 - **Time:** 60 s before the deadline the agent is told to finish (the caller may send its own warning earlier: submit
   does, see §3.4); at the deadline or the step limit `finish` is forced via `tool_choice` and the result is marked

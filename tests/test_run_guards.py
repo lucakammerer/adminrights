@@ -102,6 +102,87 @@ class CutKeepsEvidence(unittest.TestCase):
         self.assertEqual(asyncio.run(scenario()), {"positions": []})
 
 
+class FakePage:
+    """A browser page whose new tabs and loads can be made to hang or fail."""
+    def __init__(self, new_page=None, goto=None):
+        self.context = SimpleNamespace(new_page=new_page)
+        self._goto = goto
+
+    def on(self, *_):
+        pass
+
+    async def add_init_script(self, _):
+        pass
+
+    async def goto(self, *_, **__):
+        if self._goto:
+            await self._goto()
+
+
+async def hang():
+    await asyncio.sleep(100)
+
+
+class TabOpen(unittest.TestCase):
+    """Opening a tab or reading its first page never holds an agent or ends the run."""
+    SITE = {"url": "https://site.example/", "credentials": {}}
+
+    def setUp(self):
+        self.real = agent.OPEN_TIMEOUT, llm.TOOL_TIMEOUT, llm.chat
+        agent.OPEN_TIMEOUT, llm.TOOL_TIMEOUT = 0.2, 0.2
+
+    def tearDown(self):
+        agent.OPEN_TIMEOUT, llm.TOOL_TIMEOUT, llm.chat = self.real
+
+    def fresh(self, new_page):
+        async def scenario():
+            old = agent.Tab(FakePage(new_page=new_page), self.SITE)
+            began = time.time()
+            tab = await agent.fresh(old)
+            return old, tab, time.time() - began
+        return asyncio.run(scenario())
+
+    def test_start_page_that_hangs_leaves_the_new_tab(self):
+        async def new_page():
+            return FakePage(goto=hang)
+        old, tab, seconds = self.fresh(new_page)
+        self.assertIsNot(tab, old)
+        self.assertLess(seconds, 2)
+
+    def test_failed_load_is_no_error(self):
+        async def fails():
+            raise TimeoutError("Timeout 30000ms exceeded")
+
+        async def new_page():
+            return FakePage(goto=fails)
+        old, tab, _ = self.fresh(new_page)
+        self.assertIsNot(tab, old)
+
+    def test_tab_that_never_opens_leaves_the_old_one(self):
+        old, tab, seconds = self.fresh(hang)
+        self.assertIs(tab, old)
+        self.assertLess(seconds, 2)
+
+    def test_first_read_that_hangs_tells_the_model_the_url(self):
+        seen = []
+
+        async def chat(messages, tools=None, **kwargs):
+            seen.append(messages[1]["content"])
+            return reply("finish", {"result": {}})
+        llm.chat = chat
+
+        class HangingTab:
+            site = self.SITE
+
+            async def read(self, offset=0):
+                await hang()
+
+        began = time.time()
+        asyncio.run(llm.investigate(HangingTab(), "system", "mission", {"type": "object"}, time.time() + 300, "t"))
+        self.assertLess(time.time() - began, 3)
+        self.assertIn("Open https://site.example/", seen[0])
+
+
 class Requirements(unittest.TestCase):
     def setUp(self):
         self.real = agent.resolvers.requirements, agent.BACKUP_AFTER
