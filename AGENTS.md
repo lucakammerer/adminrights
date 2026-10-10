@@ -54,7 +54,7 @@ atira models proxy                                  # terminal 1, keep it open
 cd agent && eval "$(atira scout --env)"             # terminal 2: scouting logins, model variables
 HEADLESS=1 uv run --no-sync python agent.py         # one local run, never counts
 atira test-run .                                    # sandbox, points per field, not on the leaderboard
-python3 tools/runs/serve.py                         # run dashboard on http://127.0.0.1:8770
+python3 tools/runs/serve.py                         # run dashboard: what each run tested, its time, how to improve
 atira submit .                                      # only after Luca approves and docs/RULES.md §9 holds
 ```
 

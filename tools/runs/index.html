@@ -6,7 +6,7 @@
 <title>AdminRights · runs</title>
 <style>
   :root {
-    --bg: #ffffff; --panel: #f6f8fa; --line: #d0d7de; --text: #1f2328; --muted: #656d76;
+    --bg: #fff; --panel: #f6f8fa; --line: #d0d7de; --text: #1f2328; --muted: #656d76;
     --green: #1a7f37; --red: #cf222e; --amber: #9a6700; --blue: #0969da; --gray: #8c959f;
     --green-bg: #dafbe1; --red-bg: #ffebe9; --amber-bg: #fff8c5; --blue-bg: #ddf4ff;
   }
@@ -21,17 +21,19 @@
   body { margin: 0; background: var(--bg); color: var(--text);
     font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; }
   main { max-width: 1100px; margin: 0 auto; padding: 24px 16px 48px; }
-  header { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
   h1 { font-size: 20px; margin: 0; }
+  h3 { font-size: 13px; margin: 16px 0 6px; }
+  a { color: var(--blue); }
   .muted { color: var(--muted); }
   .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
+  .box { border: 1px solid var(--line); border-radius: 6px; }
 
+  header { display: flex; align-items: baseline; gap: 12px; }
   .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; margin: 16px 0; }
-  .stat { border: 1px solid var(--line); border-radius: 6px; padding: 10px 12px; background: var(--panel); }
+  .stat { padding: 10px 12px; background: var(--panel); }
   .stat b { display: block; font-size: 22px; line-height: 1.2; }
   .stat span { color: var(--muted); font-size: 12px; }
-
-  .trend { border: 1px solid var(--line); border-radius: 6px; padding: 12px; margin-bottom: 16px; }
+  .trend { padding: 12px; margin-bottom: 16px; }
   .trend svg { display: block; width: 100%; height: 72px; }
 
   .toolbar { display: flex; gap: 8px; margin-bottom: 8px; }
@@ -39,33 +41,43 @@
     border-radius: 6px; padding: 5px 10px; font: inherit; }
   .toolbar input { flex: 1; }
 
-  .list { border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
-  .list-head { background: var(--panel); padding: 10px 16px; border-bottom: 1px solid var(--line); font-weight: 600; }
+  .list { overflow: hidden; }
+  .list > header { background: var(--panel); padding: 10px 16px; border-bottom: 1px solid var(--line); font-weight: 600; }
   .run { border-bottom: 1px solid var(--line); }
   .run:last-child { border-bottom: 0; }
-  .row { display: grid; grid-template-columns: 24px 1fr auto; gap: 12px; padding: 12px 16px; cursor: pointer;
+  .row { display: grid; grid-template-columns: 20px 1fr auto; gap: 12px; padding: 12px 16px; cursor: pointer;
     align-items: center; }
   .row:hover { background: var(--panel); }
   .title { font-weight: 600; }
   .meta { color: var(--muted); font-size: 12px; }
   .metrics { display: flex; gap: 14px; align-items: center; color: var(--muted); font-size: 12px; white-space: nowrap; }
   .pill { border-radius: 999px; padding: 1px 8px; font-size: 12px; font-weight: 600; }
-  .pill.green { background: var(--green-bg); color: var(--green); }
-  .pill.red { background: var(--red-bg); color: var(--red); }
-  .pill.amber { background: var(--amber-bg); color: var(--amber); }
-  .pill.blue { background: var(--blue-bg); color: var(--blue); }
-  .pill.gray { border: 1px solid var(--line); color: var(--muted); font-weight: 500; }
+  .green { background: var(--green-bg); color: var(--green); }
+  .red { background: var(--red-bg); color: var(--red); }
+  .amber { background: var(--amber-bg); color: var(--amber); }
+  .blue { background: var(--blue-bg); color: var(--blue); }
 
-  .icon { width: 18px; height: 18px; }
-  .spin { animation: spin 1s linear infinite; transform-origin: center; }
+  .dot { width: 14px; height: 14px; border-radius: 50%; }
+  .dot.success { background: var(--green); }
+  .dot.warning { background: var(--amber); }
+  .dot.failure { background: var(--red); }
+  .dot.cancelled { border: 2px solid var(--gray); }
+  .dot.queued { border: 2px solid var(--amber); }
+  .dot.running { border: 2px solid var(--line); border-top-color: var(--amber); animation: spin 1s linear infinite; }
   @keyframes spin { to { transform: rotate(360deg); } }
 
-  .details { display: none; padding: 4px 16px 16px 52px; }
+  .details { display: none; padding: 0 16px 16px 48px; }
   .run.open .details { display: block; }
-  .details a { color: var(--blue); }
-  .kv { display: flex; flex-wrap: wrap; gap: 6px 18px; margin: 4px 0 12px; font-size: 12px; }
-  .error { background: var(--red-bg); color: var(--red); border-radius: 6px; padding: 8px 10px; margin-bottom: 12px;
-    font-size: 12px; }
+  .error { background: var(--red-bg); color: var(--red); border-radius: 6px; padding: 8px 10px; font-size: 12px; }
+  ul { margin: 0; padding-left: 18px; }
+  li { margin: 2px 0; }
+  .advice li b { font-weight: 600; color: var(--muted); font-size: 12px; }
+
+  .gantt { display: grid; grid-template-columns: 130px 1fr 100px; white-space: nowrap; gap: 3px 10px; font-size: 12px; align-items: center; }
+  .track { position: relative; height: 10px; background: var(--panel); border-radius: 3px; }
+  .bar { position: absolute; top: 0; bottom: 0; background: var(--blue); border-radius: 3px; min-width: 2px; }
+  .bar.point { width: 10px !important; margin-left: -5px; border-radius: 50%; background: var(--muted); }
+
   table { border-collapse: collapse; font-size: 12px; }
   th, td { border: 1px solid var(--line); padding: 3px 8px; text-align: left; }
   th { background: var(--panel); font-weight: 600; }
@@ -81,25 +93,21 @@
     <h1>AdminRights · runs</h1>
     <span class="muted" id="updated">loading…</span>
   </header>
-
   <section class="stats" id="stats"></section>
-
-  <section class="trend">
-    <div class="meta">Quality of finished runs, oldest → newest (green: eligible bid, gray: no answer)</div>
+  <section class="trend box">
+    <div class="meta">Quality of finished runs, oldest → newest · green: eligible bid · amber: ineligible · gray: no bid</div>
     <svg id="trend" viewBox="0 0 1000 72" preserveAspectRatio="none"></svg>
   </section>
-
   <div class="toolbar">
-    <input id="filter" placeholder="Filter by branch, run id or error">
+    <input id="filter" placeholder="Filter by branch, commit, run id or error">
     <select id="kind">
       <option value="">All runs</option>
       <option value="rehearsal">Test runs</option>
       <option value="scored">Scored runs</option>
     </select>
   </div>
-
-  <section class="list">
-    <div class="list-head" id="count"></div>
+  <section class="list box">
+    <header id="count"></header>
     <div id="runs"></div>
   </section>
 </main>
@@ -107,122 +115,141 @@
 <script>
 const FIELDS = ["material_number", "quantity", "base_unit_price", "surcharge_per_unit", "packaging_per_unit",
   "rebate_total", "unit_price", "lead_time_weeks"];
-const ICONS = {
-  queued: '<svg class="icon" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6" fill="none" stroke="var(--amber)" stroke-width="2"/><circle cx="8" cy="8" r="2" fill="var(--amber)"/></svg>',
-  running: '<svg class="icon spin" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6" fill="none" stroke="var(--line)" stroke-width="2"/><path d="M8 2a6 6 0 0 1 6 6" fill="none" stroke="var(--amber)" stroke-width="2" stroke-linecap="round"/></svg>',
-  success: '<svg class="icon" viewBox="0 0 16 16"><circle cx="8" cy="8" r="8" fill="var(--green)"/><path d="M4.5 8.2l2.2 2.2 4.8-4.8" fill="none" stroke="#fff" stroke-width="1.8"/></svg>',
-  warning: '<svg class="icon" viewBox="0 0 16 16"><circle cx="8" cy="8" r="8" fill="var(--amber)"/><path d="M8 4v5M8 11.5v.5" stroke="#fff" stroke-width="1.8" stroke-linecap="round"/></svg>',
-  failure: '<svg class="icon" viewBox="0 0 16 16"><circle cx="8" cy="8" r="8" fill="var(--red)"/><path d="M5.2 5.2l5.6 5.6M10.8 5.2l-5.6 5.6" stroke="#fff" stroke-width="1.8"/></svg>',
-  cancelled: '<svg class="icon" viewBox="0 0 16 16"><circle cx="8" cy="8" r="7" fill="none" stroke="var(--gray)" stroke-width="2"/><path d="M4 12L12 4" stroke="var(--gray)" stroke-width="2"/></svg>',
-};
-
-let runs = [];
 const open = new Set();
+let runs = [];
+
 const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const words = (key) => key.replace(/_/g, " ");
 const dollars = (micro) => `$${(micro / 1e6).toFixed(3)}`;
+const clock = (s) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
+const answered = (run) => run.has_answer && run.score;
+const num = (x) => (typeof x === "number" ? Number(x.toFixed(2)) : x);
 
 function state(run) {
   if (!run.finished_at) return run.started_at ? "running" : "queued";
   if (run.status === "cancelled") return "cancelled";
-  if (!run.has_answer || !run.score) return "failure";
+  if (!answered(run)) return "failure";
   return run.score.eligible && run.score.quality >= 50 ? "success" : "warning";
 }
 
 function seconds(run) {
-  if (run.score) return run.score.duration_ms / 1000;
-  if (!run.started_at) return 0;
-  return ((run.finished_at || Date.now()) - run.started_at) / 1000;
-}
-
-function clock(s) {
-  const m = Math.floor(s / 60);
-  return `${m}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
+  if (answered(run)) return run.score.duration_ms / 1000;
+  return run.started_at ? ((run.finished_at || Date.now()) - run.started_at) / 1000 : 0;
 }
 
 function ago(ms) {
   const s = (Date.now() - ms) / 1000;
   if (s < 90) return "just now";
   if (s < 5400) return `${Math.round(s / 60)} min ago`;
-  if (s < 129600) return `${Math.round(s / 3600)} h ago`;
-  return new Date(ms).toLocaleString();
+  return s < 129600 ? `${Math.round(s / 3600)} h ago` : new Date(ms).toLocaleString();
 }
 
 function renderStats() {
-  const active = runs.filter((r) => !r.finished_at);
   const done = runs.filter((r) => r.finished_at);
-  const scored = done.filter((r) => r.has_answer && r.score);
-  const best = scored.reduce((b, r) => (!b || r.score.quality > b.score.quality ? r : b), null);
-  const answered = done.length ? Math.round((100 * scored.length) / done.length) : 0;
-  const avg = scored.length ? scored.reduce((a, r) => a + seconds(r), 0) / scored.length : 0;
+  const bids = done.filter(answered);
+  const best = bids.reduce((b, r) => (!b || r.score.quality > b.score.quality ? r : b), null);
   const stats = [
-    [active.filter((r) => r.started_at).length, "running"],
-    [active.filter((r) => !r.started_at).length, "queued"],
-    [`${scored.length} / ${done.length}`, `answered (${answered} %)`],
-    [best ? best.score.quality : "–", best ? `best quality · ${esc(best.label || best.run_id.slice(4, 12))}` : "best quality"],
-    [scored.length ? clock(avg) : "–", "avg time when answered"],
-    [dollars(done.reduce((a, r) => a + r.cost_micro_usd, 0)), "total cost"],
+    [runs.filter((r) => r.started_at && !r.finished_at).length, "running"],
+    [runs.filter((r) => !r.started_at).length, "queued"],
+    [`${bids.length} / ${done.length}`, "runs that signed a bid"],
+    [best ? best.score.quality : "–", best ? `best quality · ${esc(best.source.commit || best.run_id)}` : "best quality"],
+    [bids.length ? clock(bids.reduce((a, r) => a + seconds(r), 0) / bids.length) : "–", "average time to a bid"],
   ];
-  document.getElementById("stats").innerHTML = stats
-    .map(([v, l]) => `<div class="stat"><b>${v}</b><span>${l}</span></div>`).join("");
+  document.getElementById("stats").innerHTML =
+    stats.map(([v, l]) => `<div class="stat box"><b>${v}</b><span>${l}</span></div>`).join("");
 }
 
 function renderTrend() {
   const done = runs.filter((r) => r.finished_at && r.status !== "cancelled").reverse();
   const w = 1000 / Math.max(done.length, 12);
   document.getElementById("trend").innerHTML = done.map((r, i) => {
-    const q = r.has_answer && r.score ? r.score.quality : 0;
+    const q = answered(r) ? r.score.quality : 0;
     const h = Math.max(3, (q / 100) * 68);
-    const color = !r.has_answer ? "var(--gray)" : r.score?.eligible ? "var(--green)" : "var(--amber)";
+    const color = !answered(r) ? "var(--gray)" : r.score.eligible ? "var(--green)" : "var(--amber)";
     return `<rect x="${i * w + 2}" y="${70 - h}" width="${w - 4}" height="${h}" rx="2" fill="${color}">
-      <title>${esc(r.label || r.run_id)}: ${q}</title></rect>`;
+      <title>${esc(r.source.commit || r.run_id)}: ${q}</title></rect>`;
   }).join("") + '<line x1="0" y1="70.5" x2="1000" y2="70.5" stroke="var(--line)"/>';
 }
 
-function breakdown(run) {
-  const b = run.has_answer && run.score?.breakdown;
-  if (!b) return "";
-  const cell = (f) => f == null ? "<td></td>"
-    : `<td class="${f.points > 0 ? "ok" : "miss"}" title="got ${esc(JSON.stringify(f.got))}">${f.points}</td>`;
-  const top = Object.entries(b).filter(([k, v]) => k !== "positions" && v && typeof v === "object" && "points" in v);
-  const head = `<tr><th>Position</th>${FIELDS.map((f) => `<th>${f.replace(/_/g, " ")}</th>`).join("")}<th>Σ</th></tr>`;
+function whatRan(src) {
+  if (!src.commit) {
+    return `<p class="muted">The package matches no commit in this clone: it was built from uncommitted changes or a
+      deleted merge. Run <span class="mono">git fetch</span>, or upload with a label (<span class="mono">branch@sha</span>).</p>`;
+  }
+  const ahead = src.on_main ? `<li>On main</li>` : src.ahead.map((c) => `<li class="mono">${esc(c)}</li>`).join("");
+  const files = src.files.length ? `<p class="meta">Changed against main: ${src.files.map(esc).join(", ")}</p>` : "";
+  const differs = src.differs.length
+    ? `<p class="meta">Not committed: the package also changes ${src.differs.map(esc).join(", ")}</p>` : "";
+  return `<p><span class="mono">${src.commit}</span> ${esc(src.subject)}
+      ${!src.on_main && src.branches.length ? `<span class="meta">· ${src.branches.map(esc).join(", ")}</span>` : ""}</p>
+    <ul>${ahead}</ul>${files}${differs}`;
+}
+
+function timeline(run) {
+  if (!run.phases?.length) return '<p class="muted">No phase timings in this run\'s logs.</p>';
+  const total = Math.max(seconds(run), ...run.phases.map((p) => p.end), 1);
+  return `<div class="gantt">${run.phases.map((p) => `
+    <span class="mono">${esc(p.phase)}</span>
+    <div class="track"><div class="bar ${p.start === p.end ? "point" : ""}" style="left:${(100 * p.start) / total}%;width:${(100 * (p.end - p.start)) / total}%"></div></div>
+    <span class="meta">${p.start === p.end ? `done at ${p.end} s` : `${p.start}–${p.end} s`}</span>`).join("")}</div>`;
+}
+
+function improve(run) {
+  if (!run.finished_at) return '<p class="muted">Shown when the run has finished.</p>';
+  if (!run.advice?.length) return '<p class="muted">Nothing to flag.</p>';
+  return `<ul class="advice">${run.advice.map((a) => `<li>${esc(a.text)} <b>${esc(a.owner)}</b></li>`).join("")}</ul>`;
+}
+
+function points(run) {
+  if (!answered(run)) return '<p class="muted">No bid, no points.</p>';
+  const b = run.score.breakdown;
+  const cell = (f) => (f == null ? "<td></td>"
+    : `<td class="${f.points > 0 ? "ok" : "miss"}" title="entered ${esc(JSON.stringify(f.got))}">${num(f.points)}</td>`);
+  const top = Object.entries(b).filter(([, v]) => v && typeof v === "object" && "points" in v && !Array.isArray(v));
   const rows = (b.positions || []).map((p) =>
-    `<tr><th>${esc(p.position)}</th>${FIELDS.map((f) => cell(p[f])).join("")}<td><b>${p.points}</b></td></tr>`).join("");
+    `<tr><th>${esc(p.position)}</th>${FIELDS.map((f) => cell(p[f])).join("")}<td><b>${num(p.points)}</b></td></tr>`);
   return `<div class="tables">
-    <table><tr><th>Field</th><th>Points</th></tr>${top.map(([k, v]) => `<tr><th>${k.replace(/_/g, " ")}</th>${cell(v)}</tr>`).join("")}</table>
-    <table>${head}${rows}</table></div>`;
+    <table><tr><th>Field</th><th>Points</th></tr>${top.map(([k, v]) => `<tr><th>${words(k)}</th>${cell(v)}</tr>`).join("")}</table>
+    <table><tr><th>Position</th>${FIELDS.map((f) => `<th>${words(f)}</th>`).join("")}<th>Σ</th></tr>${rows.join("")}</table>
+  </div>`;
+}
+
+function badge(run) {
+  if (answered(run)) {
+    const tone = !run.score.eligible ? "red" : run.score.quality >= 50 ? "green" : "amber";
+    return `<span class="pill ${tone}">Q ${run.score.quality}${run.score.eligible ? "" : " · ineligible"}</span>`;
+  }
+  if (run.finished_at) return `<span class="pill red">${esc(run.failure_class || run.status)}</span>`;
+  return `<span class="pill blue">${run.started_at ? "running" : `queued${run.queue_position != null ? ` #${run.queue_position}` : ""}`}</span>`;
 }
 
 function renderRun(run) {
-  const s = state(run);
-  const title = run.label || `package ${run.package.sha256.slice(0, 8)}`;
-  const quality = run.has_answer && run.score
-    ? `<span class="pill ${run.score.eligible ? (run.score.quality >= 50 ? "green" : "amber") : "red"}">Q ${run.score.quality}${run.score.eligible ? "" : " · ineligible"}</span>`
-    : run.finished_at ? `<span class="pill red">${esc(run.failure_class || run.status)}</span>` : `<span class="pill blue">${s}</span>`;
-  const queue = run.queue_position != null ? ` · queue #${run.queue_position}` : "";
-  const cost = run.cost_micro_usd / 1e6;
+  const src = run.source;
+  const where = src.on_main ? "main" : src.branches?.[0] || "commit";
+  const title = src.label || (src.commit ? `${where} @ ${src.commit}` : "unknown package");
+  const cost = Math.max(run.cost_micro_usd / 1e6, 0.01);
   return `<div class="run ${open.has(run.run_id) ? "open" : ""}" data-id="${run.run_id}">
     <div class="row">
-      ${ICONS[s]}
+      <div class="dot ${state(run)}"></div>
       <div>
-        <div class="title">${esc(title)}</div>
-        <div class="meta"><span class="mono">${run.run_id}</span> · ${run.kind === "rehearsal" ? "test run" : esc(run.kind)} · ${ago(run.created_at)}${queue}</div>
+        <div class="title">${esc(title)}${src.subject ? ` <span class="muted">· ${esc(src.subject)}</span>` : ""}</div>
+        <div class="meta"><span class="mono">${run.run_id}</span> · ${run.kind === "rehearsal" ? "test run" : esc(run.kind)} · ${ago(run.created_at)}</div>
       </div>
       <div class="metrics">
-        ${quality}
-        <span title="run time">⏱ ${clock(seconds(run))}</span>
+        ${badge(run)}
+        <span title="run time">⏱ <span data-clock="${run.run_id}">${clock(seconds(run))}</span></span>
         <span title="LLM cost">${dollars(run.cost_micro_usd)}</span>
-        <span title="cost × time">${(Math.max(cost, 0.01) * Math.max(seconds(run), 1)).toFixed(0)} $·s</span>
+        <span title="cost × time, as ranked">${(cost * Math.max(seconds(run), 1)).toFixed(0)} $·s</span>
       </div>
     </div>
     <div class="details">
       ${run.error ? `<div class="error">${esc(run.error)}</div>` : ""}
-      <div class="kv">
-        <span>${run.calls} model calls</span>
-        <span>${(run.input_tokens / 1e6).toFixed(2)} M in · ${(run.output_tokens / 1e3).toFixed(0)} k out</span>
-        <span class="mono">package ${run.package.sha256.slice(0, 12)} · ${run.package.files} files</span>
-        <a href="https://ehl-challenge.atira.ai/runs/${run.run_id}" target="_blank">run page ↗</a>
-      </div>
-      ${breakdown(run)}
+      <h3>What ran</h3>${whatRan(src)}
+      <h3>Where the time went</h3>${timeline(run)}
+      <h3>How to improve</h3>${improve(run)}
+      <h3>Points per field</h3>${points(run)}
+      <p class="meta">${run.calls} model calls · ${(run.input_tokens / 1e6).toFixed(2)} M tokens in · ${(run.output_tokens / 1e3).toFixed(0)} k out ·
+        <a href="https://ehl-challenge.atira.ai/runs/${run.run_id}" target="_blank">run page ↗</a></p>
     </div>
   </div>`;
 }
@@ -230,12 +257,19 @@ function renderRun(run) {
 function render() {
   const q = document.getElementById("filter").value.toLowerCase();
   const kind = document.getElementById("kind").value;
-  const shown = runs.filter((r) => (!kind || r.kind === kind)
-    && (!q || [r.label, r.run_id, r.error, r.failure_class].some((v) => String(v ?? "").toLowerCase().includes(q))));
+  const shown = runs.filter((r) => (!kind || r.kind === kind) && (!q || [r.run_id, r.error, r.source.label,
+    r.source.commit, r.source.subject, ...(r.source.branches || [])].some((v) => String(v ?? "").toLowerCase().includes(q))));
   document.getElementById("count").textContent = `${shown.length} runs`;
   document.getElementById("runs").innerHTML = shown.map(renderRun).join("") || '<div class="empty">No runs yet.</div>';
   renderStats();
   renderTrend();
+}
+
+function tick() {
+  for (const run of runs.filter((r) => r.started_at && !r.finished_at)) {
+    const el = document.querySelector(`[data-clock="${run.run_id}"]`);
+    if (el) el.textContent = clock(seconds(run));
+  }
 }
 
 async function load() {
@@ -250,7 +284,7 @@ async function load() {
 
 document.getElementById("runs").addEventListener("click", (event) => {
   const run = event.target.closest(".run");
-  if (!run || event.target.closest("a")) return;
+  if (!run || !event.target.closest(".row")) return;
   open.has(run.dataset.id) ? open.delete(run.dataset.id) : open.add(run.dataset.id);
   run.classList.toggle("open");
 });
@@ -258,7 +292,7 @@ document.getElementById("filter").addEventListener("input", render);
 document.getElementById("kind").addEventListener("change", render);
 load();
 setInterval(load, 15000);
-setInterval(render, 1000);
+setInterval(tick, 1000);
 </script>
 </body>
 </html>
