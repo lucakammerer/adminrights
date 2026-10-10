@@ -18,7 +18,7 @@ reference, discount, pool fee, bonus bands.
 ## compute
 
 1. Any position the ERP agent reported as `no_match`: `no_bid`, no positions, total 0; a conditional approval → 0 %.
-   Positions without material or prices otherwise are unfinished: left out of the answer and returned as `omitted`,
+   Positions without material, prices or a quantity are unfinished: left out of the answer and returned as `omitted`,
    so the submit agent omits them in the form (rule 9).
 2. Base price = scale price (highest scale reached, `scale_price`) / price unit × rate, to the cent.
 3. Order value before discount = Σ quantity × base. Below `min_order_value` → 0 %.

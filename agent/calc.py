@@ -65,7 +65,8 @@ def compute(facts: dict) -> dict:
         return {"answer": {"tender_reference": reference, "decision": "no_bid", "currency": "EUR",
                            "discount_percent": float(percent), "positions": [], "total_net": 0},
                 "omitted": [], "trace": "a position has no matching active material: no_bid"}
-    omitted = [p["position"] for p in positions if not p.get("material_number") or not p.get("scales")]
+    omitted = [p["position"] for p in positions
+               if not p.get("material_number") or not p.get("scales") or p["quantity_pieces"] <= 0]
     positions = [p for p in positions if p["position"] not in omitted]
 
     rows = {}
@@ -77,7 +78,7 @@ def compute(facts: dict) -> dict:
         mass = d(p.get("surcharge_mass_kg_per_piece")) * d(p.get("metal_index_eur_per_kg"))
         rows[p["position"]] = {"p": p, "qty": qty, "base": base, "mass": mass}
 
-    order_value = cents(sum(r["qty"] * r["base"] for r in rows.values()))
+    order_value = cents(sum((r["qty"] * r["base"] for r in rows.values()), Decimal(0)))
     if threshold not in (None, "") and order_value < d(threshold):
         percent = Decimal(0)
     rate = percent / 100
@@ -170,8 +171,10 @@ def lookup(table: dict | None, *keys):
 def facts(tender, requirements, commercials, erp: dict) -> dict:
     by_pos = {c["position"]: c for c in commercials.get("positions", [])}
     positions = []
-    for req in requirements["positions"]:
-        key = req["position"]
+    for req in requirements.get("positions") or []:
+        key = req.get("position")
+        if not key:
+            continue
         e = erp.get(key) or {}
         c = by_pos.get(key, {})
         pc = e.get("price_condition") or {}
@@ -182,7 +185,7 @@ def facts(tender, requirements, commercials, erp: dict) -> dict:
             fx = lookup(commercials.get("fx_rates"), pc.get("fx_key"), currency)
         index = lookup(commercials.get("metal_indices"), e.get("price_index_key"))
         positions.append({
-            "position": key, "quantity_pieces": int(d(req["final_quantity_pieces"])),
+            "position": key, "quantity_pieces": int(d(req.get("final_quantity_pieces"))),
             "material_number": e.get("material_number") or None, "no_match": e.get("no_match") is True,
             "scales": [{"min_quantity": s["from_quantity"], "price": number(s["price_as_shown"], fmt)}
                        for s in pc.get("scales") or []],
