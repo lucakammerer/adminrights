@@ -23,6 +23,17 @@ that request (highest request number / newest), open it and finish with the TAN 
         found.pop("evidence", None)
         return json.dumps(found, ensure_ascii=False)
 
+    async def verify_summary(_args):
+        """Read-back before signing (I6b): every unit price and the total as calculated must be on the summary."""
+        page = await tab.read() + await tab.read(14000)
+        expected = {f"position {p['position']} unit price": german(p["unit_price"]) for p in answer["positions"]}
+        expected["total net"] = german(answer["total_net"])
+        wrong = [f"{name} {value}" for name, value in expected.items() if value not in page]
+        if not wrong:
+            return "Every unit price and the total net match the calculated bid."
+        return ("Not on this page as calculated: " + "; ".join(wrong) + ". Where the page shows a different value, "
+                "correct that entry and verify again; a value this summary doesn't show at all is fine.")
+
     rows = "\n".join(
         f"- position {p['position']}: material {p['material_number']} ({specs.get(p['position'], '')}), "
         f"quantity {p['quantity']} Stück, unit price "
@@ -44,15 +55,17 @@ and end it with the page's next-step button. Choices that depend on each other (
 each choice followed by its apply button. Pick options by the text the page shows (it may word a value differently
 than the specification above). Fields in collapsed sections are opened by the form tool. If a step fails, send the
 rest of that page again in one form call, with the failed step corrected. Never add extra positions, never skip a
-position unless it is listed to omit, never tick your own terms and conditions (AGB). When the form asks for the signing TAN,
+position unless it is listed to omit, never tick your own terms and conditions (AGB). Before you request the signing
+TAN, call verify_summary on the summary page and correct what it reports. When the form asks for the signing TAN,
 request it once, then call get_tan with the portal's message (the newest request wins; a new request invalidates the
 old TAN; a TAN is valid for five minutes). Review the summary, then submit bindingly; the run ends when the bid is accepted.
 If a value is rejected, read the message and fix it. Finish with what the portal confirmed."""
     tools = [llm._fn("get_tan", "After requesting a TAN: look up the newest signing TAN in the bidder's mailbox.",
-                     {"portal_message": {"type": "string", "description": "what the portal said about the request"}})]
+                     {"portal_message": {"type": "string", "description": "what the portal said about the request"}}),
+             llm._fn("verify_summary", "On the summary page before the TAN: compare it with the calculated bid.")]
     hurry = ("Time is almost up and an unsigned bid scores nothing. Stop entering values: omit every position not "
              "completely entered yet with the form's omit option, go to the summary, request the TAN unless you already "
              "did, get it with get_tan, and submit the bid bindingly now. Call finish only after the portal accepted it.")
     return await llm.investigate(tab, SYSTEM, mission, obj(confirmation=STR), deadline, "submit",
-                                 extra_tools=tools, handlers={"get_tan": fetch_tan}, max_steps=70,
+                                 extra_tools=tools, handlers={"get_tan": fetch_tan, "verify_summary": verify_summary}, max_steps=70,
                                  warn_at=SIGN_BY, warning=hurry)
