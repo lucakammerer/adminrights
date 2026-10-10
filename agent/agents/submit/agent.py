@@ -1,5 +1,6 @@
 """Submit agent: enters and signs the bid, with a TAN sub-agent in the mailbox. See README.md."""
 import json
+import re
 import time
 
 import llm
@@ -39,11 +40,21 @@ number / newest), open it and finish with found true and the TAN exactly as writ
         return json.dumps(found, ensure_ascii=False)
 
     async def verify_summary(_args):
-        """Read-back before signing (I6b): every unit price and the total as calculated must be on the summary."""
+        """Read-back before signing (I6b): every unit price and the total as calculated must be on the summary, and
+        the breakdown values too once the summary shows any of them (a run typed one position's bonus as 0)."""
         page = await tab.read() + await tab.read(14000)
+
+        def shows(value: str) -> bool:  # a whole number on the page: 0,50 is not inside 10,50
+            return re.search(rf"(?<![\d.,]){re.escape(value)}(?!\d)", page) is not None
+
         expected = {f"position {p['position']} unit price": german(p["unit_price"]) for p in answer["positions"]}
         expected["total net"] = german(answer["total_net"])
-        wrong = [f"{name} {value}" for name, value in expected.items() if value not in page]
+        breakdown = {f"position {p['position']} {label}": german(p[key]) for p in answer["positions"]
+                     for key, label in optional if p.get(key)}
+        if any(shows(value) for value in breakdown.values()):
+            expected |= breakdown
+        wrong = [f"{name} {value}" for name, value in expected.items() if not shows(value)]
+        llm.log("submit", f"verify_summary: {'; '.join(wrong) or 'all match'}")
         if not wrong:
             return "Every unit price and the total net match the calculated bid."
         return ("Not on this page as calculated: " + "; ".join(wrong) + ". Where the page shows a different value, "

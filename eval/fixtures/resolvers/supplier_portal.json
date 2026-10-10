@@ -1,0 +1,118 @@
+{
+ "result": {
+  "document": "Lastenheft Hydraulikzylinder für Werkstatt-Hebeanlagen (LH-VG-2027-7093), Technische Unterlagen, Stadt Buchenstadt Verkehrsbetze. The technical specification revision marked current/gültig is R-6156. All requirements read from R-6156 (5 pages).",
+  "current_revision": "R-6156",
+  "revisions": [
+   {
+    "revision": "R-4034",
+    "date": "2027-05-01 (01/05 MM/TT)",
+    "status": "ersetzt (Erstausgabe)"
+   },
+   {
+    "revision": "R-6156",
+    "date": "2027-01-17 (17/01 TT/MM)",
+    "status": "gültig (CURRENT)"
+   },
+   {
+    "revision": "R-9711",
+    "date": "2027-11-01 (01/11 MM/TT)",
+    "status": "ersetzt (future-dated decoy)"
+   }
+  ],
+  "requirements": [
+   {
+    "requirement": "A-1",
+    "position": "A-1",
+    "bore_mm": 80,
+    "stroke_mm": 200,
+    "pressure_bar": 210,
+    "mounting": "Schwenkauge",
+    "certification": "EN 1493",
+    "catalogue_group": "GR-8923",
+    "original_wording": "Bohrung 80 mm, Hub 200 mm, Betriebsdruck 210 bar, Befestigung Schwenkauge, Zertifizierung EN 1493. Kataloggruppe GR-8923: in der ERP-Suche eingeben und technische Merkmale einzeln prüfen. (Plain stroke, no nutzbarer Weg flag.)"
+   },
+   {
+    "requirement": "A-2",
+    "position": "A-2",
+    "bore_mm": 63,
+    "stroke_mm": 489,
+    "pressure_bar": 250,
+    "mounting": "Flansch",
+    "certification": "EN 1493",
+    "catalogue_group": "GR-5152",
+    "original_wording": "Bohrung 63 mm, Hub 489 mm, Betriebsdruck 250 bar, Befestigung Flansch, Zertifizierung EN 1493. Kataloggruppe GR-5152. Maßbezug: Hub/Stellweg ist nutzbarer Weg. ERP-Nennweg = nutzbarer Weg + 2 × Endreserve. Endreserve-Schlüssel ER-4001; revisionsgebundene Technikfreigabe beachten. Also technical amendments name the usable stroke. (Hub 489 is the usable stroke; add 2x ER-4001 reserve per the revision-specific Technikfreigabe to get ERP nominal stroke.)"
+   },
+   {
+    "requirement": "A-3",
+    "position": "A-3",
+    "bore_mm": 40,
+    "stroke_mm": 600,
+    "pressure_bar": 210,
+    "mounting": "Fußbefestigung",
+    "certification": "keine gefordert",
+    "catalogue_group": "GR-6333",
+    "original_wording": "Bohrung 40 mm, Hub 600 mm, Betriebsdruck 210 bar, Befestigung Fußbefestigung, Zertifizierung keine gefordert. Kataloggruppe GR-6333. (Plain stroke.)"
+   },
+   {
+    "requirement": "A-4",
+    "position": "A-4",
+    "bore_mm": 50,
+    "stroke_mm": 576,
+    "pressure_bar": 210,
+    "mounting": "Schwenkauge",
+    "certification": "keine gefordert",
+    "catalogue_group": "GR-6617",
+    "original_wording": "Bohrung 50 mm, Hub 576 mm, Betriebsdruck 210 bar, Befestigung Schwenkauge, Zertifizierung keine gefordert. Kataloggruppe GR-6617. Maßbezug: Hub/Stellweg ist nutzbarer Weg. ERP-Nennweg = nutzbarer Weg + 2 × Endreserve. Endreserve-Schlüssel ER-9526; revisionsgebundene Technikfreigabe beachten. (Hub 576 is the usable stroke; add 2x ER-9526 reserve to get ERP nominal stroke.)"
+   },
+   {
+    "requirement": "A-5",
+    "position": "A-5",
+    "bore_mm": 125,
+    "stroke_mm": 300,
+    "pressure_bar": 250,
+    "mounting": "Flansch",
+    "certification": "keine gefordert",
+    "catalogue_group": "GR-4287",
+    "original_wording": "Bohrung 125 mm, Hub 300 mm, Betriebsdruck 250 bar, Befestigung Flansch, Zertifizierung keine gefordert. Lieferumfang: 1 Satz = 5 Stück. ERP-Bestände, Preisstaffeln und Angebotsmengen beziehen sich auf Stück. Kataloggruppe GR-4287. (Plain stroke; 1 Satz = 5 Stück.)"
+   }
+  ],
+  "other_relevant_facts": "Document access required: reason 'Verbindliche Unterlagen zur Kenntnis genommen', Belegnummer 64431, confirmation checkbox, then 'Leseberechtigung anfordern'. The revision-history table and the viewer open on the OUTDATED R-4034 by default (R-4034 A-1 Hub is 100 mm, a decoy) — must switch to R-6156. R-6156 is the current/gültig revision and its A-1 Hub is 200 mm. Nutzbarer-Weg flag (technical derivation) applies to A-2 (ER-4001) and A-4 (ER-9526); their listed Hub is the usable stroke, so the ERP nominal stroke = usable stroke + 2 × per-end reserve (reserve value per the revision-specific Technikfreigabe, resolved elsewhere). A-5 states pieces-per-set: 1 Satz = 5 Stück; ERP stock, price scales and bid quantities use Stück. Evidence kept: revision list + R-6156 pages 1-5.",
+  "evidence": [
+   "### Lastenheft revision history + document access (R-4034 replaced, R-6156 gueltig/current, R-9711 replaced)\nURL: https://atira-rfq-customer-portal.kyora.run/documents/specification\nTitle: Lastenheft Hydraulikzylinder für Werkstatt-Hebeanlagen – Lieferantenportal\n\n[1:link \"←\" -> /documents/supplier-guide] Verbindung gesichert [2:input type=text \"Adresse\" value=\"Lieferantenservice / Dokumentendienst\"] [3:button \"↻\"]\n↓ Überlassungsbedingungen.html [4:link \"Öffnen\" -> /documents/supplier-guide] [5:button \"×\"]\nLieferantenportalStadt Buchenstadt, Verkehrsbetriebe\n[6:link \"Startseite\" -> /]\n[7:button \"Dokumente ▾\"]\n[8:button \"Abmelden\"]\nDie Lieferantenverwaltung bittet um Prüfung Ihrer Kontaktdaten vor jeder Dokumentenüberlassung.\n# Lastenheft Hydraulikzylinder für Werkstatt-Hebeanlagen\nLH-VG-2027-7093 · Technische Unterlagen\n[9:summary (collapsed, content below)]\nDokumentendienst · Änderungsprotokoll\nÜberlassene Ausgaben\nRevisionshistorie\n| Revision | Datum | Status | Änderungsvermerk\n| [10:link \"Revision R-4034\" -> /documents/specification?revision=R-4034] | 01/05 (MM/TT) 2027\n|\n[11:button \"Freigabestand\" (info: ersetzt)] (tooltip: ersetzt)\n| Erstausgabe\n| [12:link \"Revision R-6156\" -> /documents/specification?revision=R-6156] | 17/01 (TT/MM) 2027\n|\n[13:button \"Freigabestand\" (info: gültig)] (tooltip: gültig)\n| A-1: Hubmaß angepasst. Bitte ausschließlich die aktuelle Revision verwenden.\n| [14:link \"Revision R-9711\" -> /documents/specification?revision=R-9711] | 01/11 (MM/TT) 2027\n|\n[15:button \"Freigabestand\" (info: ersetzt)] (tooltip: ersetzt)\n| A-1: Hubmaß angepasst. Bitte ausschließlich die aktuelle Revision verwenden.\n## Dokumentansicht · Revision R-4034\n[iframe src=/documents/specification/viewer?revision=R-4034]\n[16:link \"←\" -> /documents] Verbindung gesichert [17:input type=text \"Adresse\" value=\"LH-VG-2027-7093 · Revision R-4034\"] [18:button \"↻\"]\n↓ Archivverzeichnis.html [19:link \"Öffnen\" -> /documents] [20:button \"×\"]\nDruckvorschau: Spaltenbreiten wurden für den Papierausdruck optimiert.\n# LH-VG-2027-7093 · Revision R-4034\nTechnische Unterlagen\nersetzt\nRevision R-4034\nAnforderungsblätter · Technische Einzelwerte\n| Referenz | Anforderung | Bohrung (mm) | Hub (mm) | Druck (bar) | Befestigung | Zertifizierung\n| A-1\n|\n[21:summary (collapsed, content below)] Bohrung 80 mm, Hub 100 mm, Betriebsdruck 210 bar, Befestigung Schwenkauge, Zertifizierung EN 1493. Kataloggruppe GR-8923: in der ERP-Suche eingeben und technische Merkmale einzeln prüfen.\n| Bohrung (mm): 80\n| 100 (en-US)\n| 210 (de-DE)\n| Schwenkauge\n|\n[22:button \"Prüfvermerk\" (info: EN 1493)] (tooltip: EN 1493)\nsiehe Freigabestand\nSeite 1 von 5\n[23:link \"Nächste Seite\" -> /documents/specification/viewer?revision=R-4034&page=2]\n[24:button \"Weitere laden\"]\n[/iframe]\nLieferantenservice · Demonstrationssystem · Alle Angaben sind fiktiv",
+   "### R-6156 (current) page1 A-1\nFetched https://atira-rfq-customer-portal.kyora.run/documents/specification/viewer?revision=R-6156&page=1 (HTTP 200)\n[link \"←\" -> /documents] Verbindung gesichert [input type=text \"Adresse\" value=\"LH-VG-2027-7093 · Revision R-6156\"] [button \"↻\"]\n↓ Archivverzeichnis.html [link \"Öffnen\" -> /documents] [button \"×\"]\n# LH-VG-2027-7093 · Revision R-6156\nRevision R-6156\nTechnische Unterlagen\ngültig\nAnforderungsblätter · Technische Einzelwerte\n| Referenz | Anforderung | Bohrung (mm) | Hub (mm) | Druck (bar) | Befestigung | Zertifizierung\n| A-1\n|\n[summary (collapsed, content below)] Bohrung 80 mm, Hub 200 mm, Betriebsdruck 210 bar, Befestigung Schwenkauge, Zertifizierung EN 1493. Kataloggruppe GR-8923: in der ERP-Suche eingeben und technische Merkmale einzeln prüfen.\n| Bohrung (mm): 80\n| 200 (en-US)\n| 210 (de-DE)\n| Schwenkauge\n|\n[button \"Prüfvermerk\" (info: EN 1493)] (tooltip: EN 1493)\nsiehe Freigabestand\nSeite 1 von 5\n[link \"Nächste Seite\" -> /documents/specification/viewer?revision=R-6156&page=2]\n[button \"Weitere laden\"]",
+   "### R-6156 (current) page2 A-2 nutzbarer Weg ER-4001\nFetched https://atira-rfq-customer-portal.kyora.run/documents/specification/viewer?revision=R-6156&page=2 (HTTP 200)\n[link \"←\" -> /documents] Verbindung gesichert [input type=text \"Adresse\" value=\"LH-VG-2027-7093 · Revision R-6156\"] [button \"↻\"]\n↓ Archivverzeichnis.html [link \"Öffnen\" -> /documents] [button \"×\"]\n# LH-VG-2027-7093 · Revision R-6156\ngültig\nTechnische Unterlagen\nRevision R-6156\nAnforderungsblätter · Technische Einzelwerte\n| Referenz | Anforderung | Bohrung (mm) | Hub (mm) | Druck (bar) | Befestigung | Zertifizierung\n| A-2\n|\n[summary (collapsed, content below)] Bohrung 63 mm, Hub 489 mm, Betriebsdruck 250 bar, Befestigung Flansch, Zertifizierung EN 1493. Kataloggruppe GR-5152: in der ERP-Suche eingeben und technische Merkmale einzeln prüfen. Maßbezug: Hub/Stellweg ist nutzbarer Weg. ERP-Nennweg = nutzbarer Weg + 2 × Endreserve. Endreserve-Schlüssel ER-4001; revisionsgebundene Technikfreigabe beachten. Auch technische Nachträge nennen den nutzbaren Weg.\n| Bohrung (mm): 63\n| 489 (en-US)\n| 250 (de-DE)\n| Flansch\n|\n[button \"Prüfvermerk\" (info: EN 1493)] (tooltip: EN 1493)\nsiehe Freigabestand\nSeite 2 von 5\n[link \"Vorherige Seite\" -> /documents/specification/viewer?revision=R-6156&page=1]\n[link \"Nächste Seite\" -> /documents/specification/viewer?revision=R-6156&page=3]\n[button \"Weitere laden\"]",
+   "### R-6156 (current) page3 A-3\nFetched https://atira-rfq-customer-portal.kyora.run/documents/specification/viewer?revision=R-6156&page=3 (HTTP 200)\n[link \"←\" -> /documents] Verbindung gesichert [input type=text \"Adresse\" value=\"LH-VG-2027-7093 · Revision R-6156\"] [button \"↻\"]\n↓ Archivverzeichnis.html [link \"Öffnen\" -> /documents] [button \"×\"]\n# LH-VG-2027-7093 · Revision R-6156\nTechnische Unterlagen\ngültig\nRevision R-6156\nAnforderungsblätter · Technische Einzelwerte\n| Referenz | Anforderung | Bohrung (mm) | Hub (mm) | Druck (bar) | Befestigung | Zertifizierung\n| A-3\n|\n[summary (collapsed, content below)] Bohrung 40 mm, Hub 600 mm, Betriebsdruck 210 bar, Befestigung Fußbefestigung, Zertifizierung keine gefordert. Kataloggruppe GR-6333: in der ERP-Suche eingeben und technische Merkmale einzeln prüfen.\n| Bohrung (mm): 40\n| 600 (en-US)\n| 210 (de-DE)\n| Fußbefestigung\n|\n[button \"Prüfvermerk\" (info: Keine gefordert)] (tooltip: Keine gefordert)\nsiehe Freigabestand\nSeite 3 von 5\n[link \"Vorherige Seite\" -> /documents/specification/viewer?revision=R-6156&page=2]\n[link \"Nächste Seite\" -> /documents/specification/viewer?revision=R-6156&page=4]\n[button \"Weitere laden\"]",
+   "### R-6156 (current) page4 A-4 nutzbarer Weg ER-9526\nFetched https://atira-rfq-customer-portal.kyora.run/documents/specification/viewer?revision=R-6156&page=4 (HTTP 200)\n[link \"←\" -> /documents] Verbindung gesichert [input type=text \"Adresse\" value=\"LH-VG-2027-7093 · Revision R-6156\"] [button \"↻\"]\n↓ Archivverzeichnis.html [link \"Öffnen\" -> /documents] [button \"×\"]\n# LH-VG-2027-7093 · Revision R-6156\nTechnische Unterlagen\ngültig\nRevision R-6156\nAnforderungsblätter · Technische Einzelwerte\n| Referenz | Anforderung | Bohrung (mm) | Hub (mm) | Druck (bar) | Befestigung | Zertifizierung\n| A-4\n|\n[summary (collapsed, content below)] Bohrung 50 mm, Hub 576 mm, Betriebsdruck 210 bar, Befestigung Schwenkauge, Zertifizierung keine gefordert. Kataloggruppe GR-6617: in der ERP-Suche eingeben und technische Merkmale einzeln prüfen. Maßbezug: Hub/Stellweg ist nutzbarer Weg. ERP-Nennweg = nutzbarer Weg + 2 × Endreserve. Endreserve-Schlüssel ER-9526; revisionsgebundene Technikfreigabe beachten. Auch technische Nachträge nennen den nutzbaren Weg.\n| Bohrung (mm): 50\n| 576 (en-US)\n| 210 (de-DE)\n| Schwenkauge\n|\n[button \"Prüfvermerk\" (info: Keine gefordert)] (tooltip: Keine gefordert)\nsiehe Freigabestand\nSeite 4 von 5\n[link \"Vorherige Seite\" -> /documents/specification/viewer?revision=R-6156&page=3]\n[link \"Nächste Seite\" -> /documents/specification/viewer?revision=R-6156&page=5]\n[button \"Weitere laden\"]",
+   "### R-6156 (current) page5 A-5 1Satz=5Stueck\nFetched https://atira-rfq-customer-portal.kyora.run/documents/specification/viewer?revision=R-6156&page=5 (HTTP 200)\n[link \"←\" -> /documents] Verbindung gesichert [input type=text \"Adresse\" value=\"LH-VG-2027-7093 · Revision R-6156\"] [button \"↻\"]\n↓ Archivverzeichnis.html [link \"Öffnen\" -> /documents] [button \"×\"]\n# LH-VG-2027-7093 · Revision R-6156\ngültig\nRevision R-6156\nTechnische Unterlagen\nAnforderungsblätter · Technische Einzelwerte\n| Referenz | Anforderung | Bohrung (mm) | Hub (mm) | Druck (bar) | Befestigung | Zertifizierung\n| A-5\n|\n[summary (collapsed, content below)] Bohrung 125 mm, Hub 300 mm, Betriebsdruck 250 bar, Befestigung Flansch, Zertifizierung keine gefordert. Lieferumfang: 1 Satz = 5 Stück. ERP-Bestände, Preisstaffeln und Angebotsmengen beziehen sich auf Stück. Kataloggruppe GR-4287: in der ERP-Suche eingeben und technische Merkmale einzeln prüfen.\n| Bohrung (mm): 125\n| 300 (en-US)\n| 250 (de-DE)\n| Flansch\n|\n[button \"Prüfvermerk\" (info: Keine gefordert)] (tooltip: Keine gefordert)\nsiehe Freigabestand\nSeite 5 von 5\n[link \"Vorherige Seite\" -> /documents/specification/viewer?revision=R-6156&page=4]"
+  ]
+ },
+ "summary": {
+  "seconds": 536,
+  "turns": 20,
+  "tool_calls": 34,
+  "calls_by_tool": {
+   "form": 2,
+   "click": 8,
+   "read": 1,
+   "fetch": 8,
+   "goto": 2,
+   "check": 3,
+   "fill": 2,
+   "save_evidence": 6,
+   "note": 1,
+   "finish": 1
+  },
+  "repeated_urls": {
+   "/documents?page=3": 2,
+   "/documents/specification/viewer?revision=R-6156&page=1": 2,
+   "/documents/specification/viewer?revision=R-6156&page=2": 2,
+   "/documents/specification/viewer?revision=R-6156&page=3": 2,
+   "/documents/specification/viewer?revision=R-6156&page=4": 2,
+   "/documents/specification/viewer?revision=R-6156&page=5": 2
+  },
+  "refused_finishes": 0,
+  "forced": false,
+  "evidence": 6,
+  "cut": false
+ }
+}

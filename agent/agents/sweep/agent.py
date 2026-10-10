@@ -1,15 +1,19 @@
 """Gap sweep (I16): code lists the facts the first pass left open; for each, one short mission looks for it on the
 other websites, where the model chooses what to open. See README.md."""
 import asyncio
+import time
 
 import llm
 from agents.common import BOOL, STR, login_line, obj, system
+from agents.resolvers import agent as resolvers
 from calc import lookup
 
 SPEC = ("final_quantity_pieces", "bore_mm", "stroke_mm", "pressure_bar", "catalogue_group")
 MAX_GAPS = 3  # the most important open facts only: each costs a mission per website
 STEPS = 12
 RESULT = obj(found=BOOL, fact=STR, where=STR)
+SECOND_CALL = 150  # seconds kept for the second commercials call after a sweep (it took 77-317 s on 2026-10-10)
+SWEEP_MIN = 90  # seconds a sweep needs to be worth starting
 
 
 def _missing(value) -> bool:
@@ -82,3 +86,44 @@ async def sweep(task: dict, tabs: dict, gap_list: list[dict], deadline: float) -
 
     await asyncio.gather(*(on_tab(role, tab) for role, tab in tabs.items()))
     return pages
+
+
+async def commercials_with_sweep(task: dict, tender: dict, mail: dict, others: list[dict], open_tabs, until: float,
+                                 stop: asyncio.Event | None = None) -> dict:
+    """The commercials resolver, then a sweep for the commercial facts it left open and, if the sweep kept pages, the
+    resolver again with them. Runs alongside the ERP searches on the other websites' tabs (`open_tabs()` gives them)
+    and only in time that is free anyway: once `stop` is set (the ERP searches are done, calc is waiting) the first
+    answer is returned at once. Never worse than the first answer: a sweep or second call that fails, finds nothing or
+    runs out of time keeps it."""
+    first = await resolvers.commercials(task, tender, mail, others)
+    open_facts = [g for g in gaps(tender, {}, first) if g["resolver"] == "commercials"]
+    sweep_until = until - SECOND_CALL
+    if not open_facts or sweep_until - time.time() < SWEEP_MIN or (stop and stop.is_set()):
+        if open_facts:
+            llm.log("sweep", f"no time to look for {[g['fact'] for g in open_facts]}")
+        return first
+
+    async def improve() -> dict:
+        llm.log("sweep", f"looking for {[g['fact'] for g in open_facts]}")
+        swept = (await sweep(task, await open_tabs(), open_facts, sweep_until)).get("commercials") or []
+        if not swept:
+            return first
+        widened = {**tender, "evidence": (tender.get("evidence") or []) + swept}
+        second = await resolvers.commercials(task, widened, mail, others)
+        llm.log("sweep", f"commercials decided again with {len(swept)} swept pages")
+        return second or first
+
+    job = asyncio.ensure_future(improve())
+    waits = {job} | ({asyncio.ensure_future(stop.wait())} if stop else set())
+    try:
+        await asyncio.wait(waits, timeout=max(1.0, until - time.time() - 5), return_when=asyncio.FIRST_COMPLETED)
+        if job.done() and not job.cancelled() and job.exception() is None:
+            return job.result()
+        if job.done() and job.exception() is not None:
+            llm.log("sweep", f"failed: {type(job.exception()).__name__}: {str(job.exception())[:200]}")
+        else:
+            llm.log("sweep", "stopped: the ERP searches are done, calc goes on with the first answer")
+        return first
+    finally:
+        for waiting in waits:
+            waiting.cancel()

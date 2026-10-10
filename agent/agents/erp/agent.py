@@ -1,4 +1,5 @@
 """ERP agents: login, the material per requirement, its facts read from kept pages. See README.md."""
+import asyncio
 import json
 
 import llm
@@ -18,7 +19,20 @@ FINISH_GRACE = 30  # seconds for a forced finish, which before ran to the stage 
 NO_MATCH_REFUSALS = 2  # an unproven no_match goes back this often; then main's second agent confirms it
 CANDIDATES = arr(obj(material=STR, differs_in=STR, blocked=BOOL))
 REQUIRED = ("material_number", "available_stock_pieces", "lead_time_stock_weeks", "lead_time_production_weeks",
-              "pieces_per_carton", "allocation_mass", "surcharge_mass", "price_condition")
+            "price_condition")  # every position's price and lead time need these: asked for until shown
+WANTED = ("pieces_per_carton", "allocation_mass", "surcharge_mass")  # only some rules use them (packaging, setup
+# pool, metal surcharge) and a material may have none: asked for once, then the finish is accepted without them
+PARALLEL = 6  # ERP searches at once; a scenario with many requirements would crowd the shared model calls and the ERP
+_slots: dict[int, asyncio.Semaphore] = {}
+
+
+def slots() -> asyncio.Semaphore:
+    """The search slots of the running event loop (a semaphore belongs to one loop)."""
+    loop = id(asyncio.get_running_loop())
+    if loop not in _slots:
+        _slots.clear()
+        _slots[loop] = asyncio.Semaphore(PARALLEL)
+    return _slots[loop]
 
 
 async def login(task, tab, deadline):
@@ -28,8 +42,9 @@ Your part: log in to this ERP and get past every cookie, notice or unlock step u
     return await llm.investigate(tab, system(task), mission, obj(ok=BOOL), deadline, "erp-login", max_steps=20)
 
 
-async def extract(task, requirement: dict, chosen: dict, pages: list[str]) -> tuple[dict, str]:
-    """Read the material's facts from the pages the ERP agent kept, never from its memory."""
+async def extract(task, requirement: dict, chosen: dict, pages: list[str], asked: set | None = None) -> tuple[dict, str]:
+    """Read the material's facts from the pages the ERP agent kept, never from its memory. `asked`: the WANTED facts
+    already asked for once (they are not asked for again)."""
     if not chosen.get("material_number"):
         return chosen, ""
     question = f"""Scenario date and rules are in this brief:
@@ -52,6 +67,10 @@ as shown and the record's own number format and price unit.
     missing = [f for f in REQUIRED if data.get(f) in (None, "", [], {})]
     if not pc.get("scales") or any(s.get("price_as_shown") in (None, "") for s in pc.get("scales") or []):
         missing.append("price scales of the valid condition record")
+    if asked is not None:
+        wanted = [f for f in WANTED if data.get(f) in (None, "", [], {}) and f not in asked]
+        asked.update(wanted)
+        missing += [f"{f} (if the material has one)" for f in wanted]
     if not missing:
         return data, ""
     return data, ("Not done: the kept pages do not show " + ", ".join(missing) + f" for {data['material_number']}. "
@@ -96,6 +115,7 @@ Your part: find the material for one requirement in this ERP. Requirement: {json
 Finish with material_number and why; the facts are read from the pages you kept."""
     pages: list[str] = []
     doubted: set[str] = set()
+    asked: set[str] = set()
     refusals = [0]
 
     async def check(result, evidence):
@@ -106,7 +126,7 @@ Finish with material_number and why; the facts are read from the pages you kept.
                 refusals[0] += 1
                 return result, problem
             return result, ""
-        data, problem = await extract(task, requirement, result, evidence)
+        data, problem = await extract(task, requirement, result, evidence, asked)
         differences = material_mismatch(requirement, data) if data.get("material_number") else []
         if differences and data["material_number"] not in doubted:  # once per material: a re-check that keeps it wins
             doubted.add(data["material_number"])
@@ -116,10 +136,11 @@ Finish with material_number and why; the facts are read from the pages you kept.
         return data, problem
 
     tag = f"erp:{requirement.get('catalogue_group')}"
-    with llm.limits(deadline):  # a forced finish must not eat the time the extract below needs after it
-        result = await llm.investigate(tab, system(task), mission,
-                                       obj(material_number=STR, no_match=BOOL, why=STR, candidates=CANDIDATES),
-                                       deadline - FINISH_GRACE, tag, max_steps=40, check=check)
+    async with slots():  # at most PARALLEL searches at once; a waiting one keeps its own deadline
+        with llm.limits(deadline):  # a forced finish must not eat the time the extract below needs after it
+            result = await llm.investigate(tab, system(task), mission,
+                                           obj(material_number=STR, no_match=BOOL, why=STR, candidates=CANDIDATES),
+                                           deadline - FINISH_GRACE, tag, max_steps=40, check=check)
     if result.get("material_number") and not result.get("price_condition"):
         try:
             result, _ = await extract(task, requirement, result, result.get("evidence", []))

@@ -39,11 +39,11 @@ you as a coding agent; humans read `README.md`.
 Three owners, one KPI each ([plan §14](docs/IMPLEMENTATION_PLAN.md#14-work-split-and-timeline)); file owners in
 [`.github/CODEOWNERS`](.github/CODEOWNERS) review every change to their files.
 
-- **Efficiency, Finn:** cost × time. `agent.py`, `budget.py`, `llm.py`, `agents/submit/`, `agent.json`.
+- **Efficiency, Finn:** cost × time. `agent.py`, `llm.py`, `agents/submit/`, `agent.json`.
 - **Generalization, Yazan:** works on unseen sites. `browser.py`, `reader.js`, `agents/common.py`, the four site
   agents, `tools/stress/`.
 - **Quality & Release, Luca:** score 100, every run signs, audit clean; runs test runs and submits.
-  `calc.py`, `numbers.py`, `validate.py`, `select.py`, `agents/resolvers/`, `tests/`, `eval/`, `tools/`, `bench/`, `docs/`.
+  `calc.py`, `validate.py`, `agents/resolvers/`, `tests/`, `eval/`, `tools/`, `bench/`, `docs/`.
 
 Every PR reports dry-run score, run time and cost and may not lower the score. Nothing runs while a scored submission
 runs.
@@ -54,6 +54,7 @@ runs.
 atira models proxy                                  # terminal 1, keep it open
 cd agent && eval "$(atira scout --env)"             # terminal 2: scouting logins, model variables
 HEADLESS=1 uv run --no-sync python agent.py         # one local run, never counts
+# runs need OPENROUTER_API_KEY (Haiku); AGENT_MODEL=qwen3.8-flash-next runs on the hosted Qwen instead
 tools/score.sh                                      # from the repo root: local dry run (DRY_RUN=1, no submission) + points per field
 uv run --project agent --no-sync python -m unittest discover -s tests   # from the repo root, in seconds
 tools/check_release.sh                              # before every submit: audit, tests, agent.json
