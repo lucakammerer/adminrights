@@ -65,8 +65,9 @@ def compute(facts: dict) -> dict:
         return {"answer": {"tender_reference": reference, "decision": "no_bid", "currency": "EUR",
                            "discount_percent": float(percent), "positions": [], "total_net": 0},
                 "omitted": [], "trace": "a position has no matching active material: no_bid"}
-    omitted = [p["position"] for p in positions
-               if not p.get("material_number") or not p.get("scales") or p["quantity_pieces"] <= 0]
+    # a known material without prices is still submitted: material, quantity, surcharge, packaging and lead time
+    # keep their own points (rule 9), the base price and a bonus that depends on it stay blank
+    omitted = [p["position"] for p in positions if not p.get("material_number") or p["quantity_pieces"] <= 0]
     positions = [p for p in positions if p["position"] not in omitted]
 
     rows = {}
@@ -74,11 +75,12 @@ def compute(facts: dict) -> dict:
         qty = int(d(p["quantity_pieces"]))
         unit = d(p.get("price_unit") or 1)
         fx = d(p.get("fx_eur_per_currency_unit") or 1) if (p.get("currency") or "EUR") != "EUR" else Decimal(1)
-        base = cents(scale_price(p["scales"], qty) / unit * fx)
+        base = cents(scale_price(p["scales"], qty) / unit * fx) if p.get("scales") else None
         mass = d(p.get("surcharge_mass_kg_per_piece")) * d(p.get("metal_index_eur_per_kg"))
         rows[p["position"]] = {"p": p, "qty": qty, "base": base, "mass": mass}
+    priced = {k: r for k, r in rows.items() if r["base"] is not None}
 
-    order_value = cents(sum((r["qty"] * r["base"] for r in rows.values()), Decimal(0)))
+    order_value = cents(sum((r["qty"] * r["base"] for r in priced.values()), Decimal(0)))
     if threshold not in (None, "") and order_value < d(threshold):
         percent = Decimal(0)
     rate = percent / 100
@@ -89,7 +91,7 @@ def compute(facts: dict) -> dict:
 
     pool = allocate(d(facts.get("setup_pool_fee")),
                     {k: r["qty"] * d(r["p"].get("allocation_mass")) for k, r in rows.items() if r["p"].get("setup_pool_member")})
-    bonus_rows = {k: r["qty"] * r["base"] for k, r in rows.items() if r["p"].get("project_bonus_member")}
+    bonus_rows = {k: r["qty"] * r["base"] for k, r in priced.items() if r["p"].get("project_bonus_member")}
     bonus = allocate(bonus_credit(sum(bonus_rows.values(), Decimal(0)), facts.get("project_bonus_bands") or []),
                      bonus_rows)
 
@@ -98,7 +100,7 @@ def compute(facts: dict) -> dict:
         p, qty, base, mass = r["p"], r["qty"], r["base"], r["mass"]
         material = p["material_number"]
         rule = p.get("discount_applies_to") or "base"
-        base_net = base * (1 - rate) if rule in ("base", "base_and_surcharge") else base
+        base_net = (base or 0) * (1 - rate) if rule in ("base", "base_and_surcharge") else (base or 0)
         mass_net = mass * (1 - rate) if rule == "base_and_surcharge" else mass
         setup = d(p.get("setup_fee")) + pool.get(key, Decimal(0))
         per_carton = int(d(p.get("pieces_per_carton")))
@@ -116,13 +118,16 @@ def compute(facts: dict) -> dict:
         else:
             weeks = int(d(p["lead_time_production_weeks"]))
         total += qty * unit_price
-        answer_rows.append({"position": key, "material_number": material, "quantity": qty,
-                            "unit_price": float(unit_price), "lead_time_weeks": weeks,
-                            "base_unit_price": float(base), "surcharge_per_unit": float(cents(mass + setup / qty)),
-                            "packaging_per_unit": float(cents(packaging / qty)), "rebate_total": float(rebate)})
+        row = {"position": key, "material_number": material, "quantity": qty,
+               "unit_price": float(unit_price), "lead_time_weeks": weeks,
+               "base_unit_price": float(base) if base is not None else None,
+               "surcharge_per_unit": float(cents(mass + setup / qty)),
+               "packaging_per_unit": float(cents(packaging / qty)),
+               "rebate_total": None if base is None and p.get("project_bonus_member") else float(rebate)}
+        answer_rows.append({k: v for k, v in row.items() if v is not None})
         trace.append(f"{key}: {qty} pcs {material} base {base} mass {mass} rule {rule} setup {setup} "
                      f"cartons {cartons} packaging {packaging} rebate {rebate} -> {unit_price} x {qty}, {weeks} weeks"
-                     + "".join(f" MISSING {gap}" for gap in p.get("gaps") or []))
+                     + "".join(f" MISSING {gap}" for gap in (p.get("gaps") or []) + ["price"] * (base is None)))
     return {"answer": {"tender_reference": reference, "decision": "bid", "currency": "EUR",
                        "discount_percent": float(percent), "positions": answer_rows, "total_net": float(cents(total))},
             "omitted": omitted, "trace": "\n".join(trace + [f"omitted (unfinished): {omitted}"] * bool(omitted))}

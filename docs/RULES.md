@@ -161,7 +161,7 @@ keep their credit), and the bid must still be signed. Our policy: **omit a posit
 configured**; with a known material, submit it with every field we have, optional fields we don't know left blank,
 and keep rule 7. A missing active material is no_bid (3), never an omission; an unfinished search is an omission (or a
 retry), never no_bid.
-Gather erp · Decide `calc`, `submit` · ⚠️ positions without prices or with a cut search are omitted; no watchdog (F5,
+Gather erp · Decide `calc`, `submit` · ✅ a known material without prices is submitted, base and a dependent bonus blank; ⚠️ a cut search without a material is omitted; no watchdog (F5,
 F14 → I6, I15) ·
 Check: calc tests, short-budget dry run
 

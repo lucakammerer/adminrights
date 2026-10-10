@@ -34,12 +34,13 @@ that request (highest request number / newest), open it and finish with the TAN 
         return ("Not on this page as calculated: " + "; ".join(wrong) + ". Where the page shows a different value, "
                 "correct that entry and verify again; a value this summary doesn't show at all is fine.")
 
+    optional = (("base_unit_price", "base price"), ("surcharge_per_unit", "surcharge per piece"),
+                ("packaging_per_unit", "packaging per piece"), ("rebate_total", "project bonus for the position"))
     rows = "\n".join(
         f"- position {p['position']}: material {p['material_number']} ({specs.get(p['position'], '')}), "
-        f"quantity {p['quantity']} pieces, unit price "
-        f"{german(p['unit_price'])} EUR, lead time {p['lead_time_weeks']} weeks, base price {german(p['base_unit_price'])}, "
-        f"surcharge per piece {german(p['surcharge_per_unit'])}, packaging per piece {german(p['packaging_per_unit'])}, "
-        f"project bonus for the position {german(p['rebate_total'])}" for p in answer["positions"])
+        f"quantity {p['quantity']} pieces, unit price {german(p['unit_price'])} EUR, lead time {p['lead_time_weeks']} weeks, "
+        + ", ".join(f"{label} {german(p[key])}" if key in p else f"{label} left blank (unknown)"
+                    for key, label in optional) for p in answer["positions"])
     mission = f"""{context(task)}
 
 {login_line(tab.site)}

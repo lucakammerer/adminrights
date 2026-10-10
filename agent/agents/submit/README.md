@@ -11,7 +11,7 @@ bindingly. Without a submission the run scores 0.
 
 ## Input / output
 
-- Input: answer and `omitted` positions from `calc.compute`, specification per position (for the configurator choices), own mailbox address
+- Input: answer and `omitted` positions from `calc.compute` (an optional field missing from a row is left blank), specification per position (for the configurator choices), own mailbox address
   from the mail agent (contact field), portal login, the mail tab for the TAN.
 - Output `{confirmation}`: what the portal confirmed.
 

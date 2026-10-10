@@ -48,6 +48,19 @@ class Golden(unittest.TestCase):
         self.assertEqual(result["answer"]["tender_reference"], FACTS["tender_reference"])
         self.assertEqual(len(result["omitted"]), len(FACTS["positions"]))
 
+    def test_known_material_without_prices_is_submitted(self):
+        """Rule 9: material, quantity, surcharge, packaging and lead time keep their points; base stays blank."""
+        facts = copy.deepcopy(FACTS)
+        unpriced = facts["positions"][0]
+        unpriced["scales"] = []
+        result = calc.compute(facts)
+        self.assertEqual(result["omitted"], [])
+        row = next(p for p in result["answer"]["positions"] if p["position"] == unpriced["position"])
+        self.assertNotIn("base_unit_price", row)
+        omitted = copy.deepcopy(FACTS)
+        omitted["positions"][0]["material_number"] = None
+        self.assertGreater(quality(facts), quality(omitted))
+
 
 def synthetic(**position):
     """One synthetic position at 10.00 EUR per piece, nothing else priced."""

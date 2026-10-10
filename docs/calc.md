@@ -18,10 +18,12 @@ and bonus membership, allocation mass. Plus reference, discount, pool fee, bonus
 ## compute
 
 1. Any position the ERP agent reported as `no_match`: `no_bid`, no positions, total 0; a conditional approval → 0 %.
-   Positions without material, prices or a quantity are unfinished: left out of the answer and returned as `omitted`,
-   so the submit agent omits them in the form (rule 9).
+   Positions without material or a quantity are unfinished: left out of the answer and returned as `omitted`, so the
+   submit agent omits them in the form (rule 9). A material without prices is still submitted: its base price (and
+   the bonus of a bonus member) is left out of the row, everything else is calculated, and its unit price lacks the
+   base; the trace marks it `MISSING price`.
 2. Base price = scale price (highest scale reached, `scale_price`) / price unit × rate, to the cent.
-3. Order value before discount = Σ quantity × base. Below `min_order_value` → 0 %.
+3. Order value before discount = Σ quantity × base over the priced positions. Below `min_order_value` → 0 %.
 4. Sum demand per material across positions (shared stock, delivery commitment).
 5. Split the setup pool by quantity × allocation mass; compute the project bonus over marginal bands
    (`bonus_credit`) and split it by goods value. Both via `allocate`: floor to cents, leftover cents to the largest
