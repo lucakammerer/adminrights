@@ -1,0 +1,228 @@
+{
+ "tender_reference": "VG-2027-7093",
+ "discount": {
+  "percent": 5,
+  "min_order_value": 1.0,
+  "source": "conditional-7571, leitung@linden-hydraulik.example, 24.01.2027 17:00"
+ },
+ "positions": [
+  {
+   "position": "01.01",
+   "quantity_pieces": 25,
+   "material_number": "HZ-1609",
+   "no_match": false,
+   "scales": [
+    {
+     "min_quantity": 25,
+     "price": 2743.58
+    },
+    {
+     "min_quantity": 10,
+     "price": 2930.65
+    },
+    {
+     "min_quantity": 1,
+     "price": 3117.71
+    }
+   ],
+   "price_unit": 1,
+   "currency": "EUR",
+   "fx_eur_per_currency_unit": null,
+   "surcharge_mass_kg_per_piece": 2.125,
+   "metal_index_eur_per_kg": 3.15,
+   "setup_fee": 0.0,
+   "discount_applies_to": "base",
+   "stock": 31,
+   "lead_time_stock_weeks": 2,
+   "lead_time_production_weeks": 7,
+   "delivery_commitment": {
+    "material_number": "HZ-1609",
+    "max_pieces": 24,
+    "weeks": 3
+   },
+   "pieces_per_carton": 11,
+   "carton_price": 13.25,
+   "setup_pool_member": false,
+   "allocation_mass": 3100.0,
+   "project_bonus_member": false
+  },
+  {
+   "position": "01.02",
+   "quantity_pieces": 29,
+   "material_number": "HZ-2170",
+   "no_match": false,
+   "scales": [
+    {
+     "min_quantity": 25,
+     "price": 64853.0
+    },
+    {
+     "min_quantity": 10,
+     "price": 69275.0
+    },
+    {
+     "min_quantity": 1,
+     "price": 73697.0
+    }
+   ],
+   "price_unit": 100,
+   "currency": "USD",
+   "fx_eur_per_currency_unit": 1.0873,
+   "surcharge_mass_kg_per_piece": 1.875,
+   "metal_index_eur_per_kg": 3.15,
+   "setup_fee": 0.0,
+   "discount_applies_to": "base",
+   "stock": 29,
+   "lead_time_stock_weeks": 1,
+   "lead_time_production_weeks": 11,
+   "delivery_commitment": {
+    "material_number": "HZ-2170",
+    "max_pieces": 45,
+    "weeks": 3
+   },
+   "pieces_per_carton": 3,
+   "carton_price": 13.25,
+   "setup_pool_member": false,
+   "allocation_mass": 875.0,
+   "project_bonus_member": false
+  },
+  {
+   "position": "01.03",
+   "quantity_pieces": 16,
+   "material_number": "HZ-2170",
+   "no_match": false,
+   "scales": [
+    {
+     "min_quantity": 25,
+     "price": 64853.0
+    },
+    {
+     "min_quantity": 10,
+     "price": 69275.0
+    },
+    {
+     "min_quantity": 1,
+     "price": 73697.0
+    }
+   ],
+   "price_unit": 100,
+   "currency": "USD",
+   "fx_eur_per_currency_unit": 1.0873,
+   "surcharge_mass_kg_per_piece": 1.875,
+   "metal_index_eur_per_kg": 3.15,
+   "setup_fee": 85.0,
+   "discount_applies_to": "none",
+   "stock": 29,
+   "lead_time_stock_weeks": 1,
+   "lead_time_production_weeks": 11,
+   "delivery_commitment": {
+    "material_number": "HZ-2170",
+    "max_pieces": 44,
+    "weeks": 3
+   },
+   "pieces_per_carton": 3,
+   "carton_price": 13.25,
+   "setup_pool_member": true,
+   "allocation_mass": 875.0,
+   "project_bonus_member": true
+  },
+  {
+   "position": "01.04",
+   "quantity_pieces": 21,
+   "material_number": "HZ-3916",
+   "no_match": false,
+   "scales": [
+    {
+     "min_quantity": 25,
+     "price": 181429.0
+    },
+    {
+     "min_quantity": 10,
+     "price": 193799.0
+    },
+    {
+     "min_quantity": 1,
+     "price": 206169.0
+    }
+   ],
+   "price_unit": 100,
+   "currency": "USD",
+   "fx_eur_per_currency_unit": 1.0873,
+   "surcharge_mass_kg_per_piece": 0.625,
+   "metal_index_eur_per_kg": 3.15,
+   "setup_fee": 0.0,
+   "discount_applies_to": "base",
+   "stock": 14,
+   "lead_time_stock_weeks": 3,
+   "lead_time_production_weeks": 8,
+   "delivery_commitment": {
+    "material_number": "HZ-3916",
+    "max_pieces": 21,
+    "weeks": 3
+   },
+   "pieces_per_carton": 11,
+   "carton_price": 13.25,
+   "setup_pool_member": true,
+   "allocation_mass": 2125.0,
+   "project_bonus_member": true
+  },
+  {
+   "position": "01.05",
+   "quantity_pieces": 130,
+   "material_number": "HZ-6932",
+   "no_match": false,
+   "scales": [
+    {
+     "min_quantity": 25,
+     "price": 186615.0
+    },
+    {
+     "min_quantity": 10,
+     "price": 199339.0
+    },
+    {
+     "min_quantity": 1,
+     "price": 212063.0
+    }
+   ],
+   "price_unit": 100,
+   "currency": "EUR",
+   "fx_eur_per_currency_unit": null,
+   "surcharge_mass_kg_per_piece": 1.375,
+   "metal_index_eur_per_kg": 3.15,
+   "setup_fee": 57.5,
+   "discount_applies_to": "base_and_surcharge",
+   "stock": 51,
+   "lead_time_stock_weeks": 1,
+   "lead_time_production_weeks": 12,
+   "delivery_commitment": {
+    "material_number": "HZ-6932",
+    "max_pieces": 160,
+    "weeks": 3
+   },
+   "pieces_per_carton": 7,
+   "carton_price": 13.25,
+   "setup_pool_member": true,
+   "allocation_mass": 2125.0,
+   "project_bonus_member": true
+  }
+ ],
+ "setup_pool_fee": 517.25,
+ "project_bonus_bands": [
+  {
+   "from": 0,
+   "to": 5000.0,
+   "percent": 0
+  },
+  {
+   "from": 5000.0,
+   "to": 15000.0,
+   "percent": 2
+  },
+  {
+   "from": 15000.0,
+   "to": null,
+   "percent": 5
+  }
+ ]
+}
