@@ -1,4 +1,5 @@
 """Resolvers: apply the brief's rules to the kept evidence, without a browser. See README.md."""
+import asyncio
 import json
 
 import llm
@@ -12,21 +13,50 @@ ROLES = {
 }
 
 
+SITES_TIMEOUT = 120  # seconds for the model's assignment; the run starts browsing right after it
+
+
 async def sites(task) -> dict:
-    """Which website plays which role, judged from the brief: names and ids differ between datasets."""
+    """Which website plays which role, judged from the brief: names and ids differ between datasets. Never raises
+    (F21): the run's submission target is the tender portal, the model assigns the other roles, and a role it leaves
+    open gets a remaining website by elimination."""
     listing = [{"siteId": s["siteId"], "url": s["url"]} for s in task["access"]]
     by_id = {s["siteId"]: s for s in task["access"]}
+    chosen: dict[str, str] = {}
+    target = (task.get("submission") or {}).get("siteId")
+    if target in by_id:
+        chosen["tender_portal"] = target  # the bid is entered on the tender portal
     question = f"""{context(task)}
 
 Websites: {json.dumps(listing)}
 Assign each role exactly one of these websites by its siteId: {json.dumps(ROLES)}
 JSON: {{{", ".join(f'"{role}": "<siteId>"' for role in ROLES)}}}"""
-    for _ in range(2):
-        roles = await llm.ask_json(RESOLVE, question, effort="low")
-        chosen = [roles.get(role) for role in ROLES]
-        if all(c in by_id for c in chosen) and len(set(chosen)) == len(ROLES):
-            return {role: by_id[roles[role]] for role in ROLES}
-    raise ValueError(f"no clear website per role: {roles}")
+
+    async def ask():
+        for _ in range(2):
+            try:
+                answer = await llm.ask_json(RESOLVE, question, effort="low")
+            except Exception as error:  # noqa: BLE001  elimination below still assigns every role
+                llm.log("sites", f"assignment failed: {type(error).__name__}: {str(error)[:200]}")
+                continue
+            for role in ROLES:
+                site_id = answer.get(role)
+                if role not in chosen and isinstance(site_id, str) and site_id in by_id \
+                        and site_id not in chosen.values():
+                    chosen[role] = site_id
+            if len(chosen) == len(ROLES):
+                return
+
+    try:
+        await asyncio.wait_for(ask(), timeout=SITES_TIMEOUT)
+    except asyncio.TimeoutError:
+        llm.log("sites", f"assignment timed out after {SITES_TIMEOUT}s")
+    free = [site_id for site_id in by_id if site_id not in chosen.values()]
+    for role in ROLES:
+        if role not in chosen:
+            chosen[role] = free.pop(0) if free else next(iter(by_id))
+            llm.log("sites", f"{role}: no clear assignment, took {chosen[role]} by elimination")
+    return {role: by_id[chosen[role]] for role in ROLES}
 
 
 async def requirements(task, tender, spec, mail, effort: str = "medium") -> dict:

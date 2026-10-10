@@ -221,12 +221,12 @@ Luca's PR #5, merged after this analysis, changes several findings. The findings
 | # | Now |
 | --- | --- |
 | F1 | **fixed:** a model assigns each website its role from the brief (`resolvers.sites`) |
-| F2 | open: the run's `submission` target is still not read |
+| F2 | **fixed in I3:** the run's `submission` target pins the tender-portal role |
 | F3 | partly: stages still wait for each other, but each one is cut hard |
 | F4 | partly: a phase's hard cut cancels slow calls; there is no bound inside a phase |
 | F7 | partly: rates written as text (`1 USD = x EUR`) are now parsed; ambiguous numbers are still guessed |
 | F16 | partly: a search cut by its hard deadline is omitted; one forced to finish before the cut can still claim no match |
 | F19 | partly: the offsets are still fixed, but no stage can overrun its cut |
 | F20 | **fixed:** `finish` results that aren't JSON objects are refused |
-| F21 | **new, high:** `agent.py` awaits the role assignment outside `safe`; if the model can't assign the roles clearly, `resolvers.sites` raises and the run ends without an answer (T1.3, T1.12 → I3) |
+| F21 | **new, high:** `agent.py` awaits the role assignment outside `safe`; if the model can't assign the roles clearly, `resolvers.sites` raises and the run ends without an answer (T1.3, T1.12 → I3). **Fixed in I3:** `sites` never raises |
 | — | a comment in `calc.py` used a public-1 value (an exchange rate); PR #6 replaces it with a synthetic one (T0.1) |

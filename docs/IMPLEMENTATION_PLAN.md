@@ -377,7 +377,7 @@ Every item has exactly one owner. When it touches a file someone else owns (§14
 | --- | --- | --- | --- | --- | --- |
 | I1 | Unfinished ≠ no match (§4.4). Since PR #5 a search cut by its hard deadline is omitted; remaining: a forced finish can still claim no match. **First slice, before I9:** `investigate` marks a forced `finish`, and a forced result never counts as `no_match` | `llm.py` (the mark), `agents/erp`, `validate.py`, `calc.compute` | a run with a starved ERP stage never answers no_bid | 3, 8, 9 | L |
 | I2 | Model calls bounded by the caller's deadline; concurrency cap. Since PR #5 the phase cuts cancel slow calls; remaining: the bound inside a phase, the cap | `llm.py` | test with a fake slow client | T1.3 | F |
-| I3 | Site roles: done in PR #5 (`resolvers.sites`). Remaining: read the run's submission target; no crash when the assignment is unclear (F21): fall back to known role ids, then retry | `agent.py`, `agents/resolvers` | stress level S1 passes (§14.1) | T1.12 | Y |
+| I3 | ✅ Site roles from the brief (PR #5); the run's submission target pins the tender portal, and an unclear assignment falls back by elimination instead of crashing (F21). Tests: `tests/test_sites.py`, `tools/stress/s1_sites.py` | `agent.py`, `agents/resolvers` | stress level S1 passes (§14.1) | T1.12 | Y |
 | I4 | Dependency graph + per-stage budgets (§4.1, §4.2). Since PR #5 every phase has a hard cut; remaining: start stages when their inputs exist, budgets computed at stage start | `agent.py`, `budget.py`, `agents/erp` | dry run: ERP starts during the first stage; answer < 8 min | T1.3, T3.2 | F |
 | I5 | Slimmer missions and inputs: no word-for-word copies in `finish` schemas when the evidence holds them; "every needed page kept → finish"; resolvers get only the evidence they need (object `finish` done in PR #5) | `agents/tender_portal`, `agents/supplier_portal`, `agents/resolvers`, `llm.py` | no page fetched twice without reason; commercials resolver much faster | T3.2, T4.2 | F |
 | I6 | Submit in two stages + watchdog: stage 1 at start, stage 2 with the answer, watchdog at end − 3 min | `agents/submit` | a short-budget run still signs | T1.3, 9 | F |
@@ -516,7 +516,7 @@ in `agents/submit`); the file's owner reviews that PR.
 | A false no-bid | I1 + I11 |
 | Session expiry mid-wizard | step-by-step saving, re-login (I13), read-back (I6b) |
 | TAN race | one request, newest TAN after the request, 5-minute window |
-| Site ids differ on the private dataset | roles from the brief (PR #5); no crash on an unclear assignment (F21 → I3) |
+| Site ids differ on the private dataset | roles from the brief, pinned by the submission target, never a crash (I3); S1 checks it |
 | Information on unexpected sites | gap sweep (I16) |
 | The scorer's "dated metal-index check" fields are unknown | RULES A6; confirm with the first test-run breakdown |
 | Sandbox speed differs from local | calibrate budgets after the first test run (E7) |
