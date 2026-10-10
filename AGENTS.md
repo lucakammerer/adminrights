@@ -54,7 +54,7 @@ runs.
 atira models proxy                                  # terminal 1, keep it open
 cd agent && eval "$(atira scout --env)"             # terminal 2: scouting logins, model variables
 HEADLESS=1 uv run --no-sync python agent.py         # one local run, never counts
-# runs need OPENROUTER_API_KEY (Haiku); AGENT_MODEL=qwen3.8-flash-next runs on the hosted Qwen instead
+# runs on the hosted Qwen; AGENT_MODEL=anthropic/claude-haiku-5.5 with OPENROUTER_API_KEY runs on Haiku
 tools/score.sh                                      # from the repo root: local dry run (DRY_RUN=1, no submission) + points per field
 uv run --project agent --no-sync python -m unittest discover -s tests   # from the repo root, in seconds
 tools/check_release.sh                              # before every submit: audit, tests, agent.json
@@ -80,8 +80,8 @@ minutes; results land in `bench/RUNS.md`. Details and the submission gate: `docs
 
 ## Ways to hurt yourself
 
-- Qwen sometimes sends `finish` as a string with broken JSON. `investigate` refuses it while time allows; a result
-  that still arrives broken loses its fields (a position without material is then omitted, not `no_bid`). A `finish`
+- Qwen sometimes sends `finish` as a string with broken JSON. `investigate` refuses it while time allows (an agent
+  without a `check` only once, then the text is kept as `summary`); a result that still arrives broken loses its fields (a position without material is then omitted, not `no_bid`). A `finish`
   whose fields come without the `result` wrapper is taken as the result.
 - `no_bid` only follows an explicit `no_match` from the ERP agent. Don't derive it from an empty field.
 - Looking a website up by its `siteId`: ids and names differ in the private dataset. Use the roles from

@@ -68,18 +68,29 @@ The work goes in this order (backlog §12):
 Phase 0, no browser
     resolvers.sites: a model assigns each website its role from the brief (names and ids differ per dataset)
 Phase 1, parallel, one browser each, wrap-up at end − 10 min, hard cut 30 s later
-    tender_portal.run · supplier_portal.run · webmail.run · erp.login
-Phase 2, no browser, hard cut end − 8 min, so the ERP searches keep ERP_SEARCH_MIN (60 s) before their own end at
-end − 7 min; after a phase 1 that ran to its cut, requirements gets only 90 s
-    resolvers.requirements (a low-effort attempt joins after BACKUP_AFTER, 60 s, and counts only when the first brings
-    nothing; resolvers.commercials starts too and runs alongside phase 3); a resolver call may use its whole window
+    tender_portal.run · supplier_portal.run · webmail.login, then webmail.run (up to 3 at once, each with its share of
+    the brief's mail records, the technical release first; one login first, three at once expired each other) · erp.login
+    submit.run starts once webmail.run is done (not with DRY_RUN=1 or an API target), in a fresh tender-portal tab,
+    deadline end − 20 s: bidder data and offer kind, then it waits in bid_values for the bid (phase 5)
+Phase 2, no browser
+    resolvers.specs once supplier_portal and the technical-release share of webmail are done, unless all of phase 1 is done
+    already (then requirements starts at once): the governing requirements without the tender (cut where the ERP searches keep
+    ERP_SEARCH_MIN, 60 s: end − 8 min); each distinct one starts its ERP search (phase 3) once erp.login is done,
+    while the tender agent is still working
+    resolvers.requirements and resolvers.commercials once all of phase 1 is done; with early ERP searches,
+    requirements runs until the ERP cut (end − 6 min), without them only until end − 8 min, so the searches that wait
+    for it keep ERP_SEARCH_MIN. specs and requirements get a low-effort attempt after BACKUP_AFTER (60 s) that counts
+    only when the first brings nothing; a resolver call may use its whole window
 Phase 3, ERP tabs in parallel, hard cut end − 6 min (a cut search → its positions are omitted)
-    erp.run per distinct requirement; a no_match is confirmed by a second erp.run when ≥ 150 s remain;
-    then resolvers.commercials, hard cut end − 5.5 min
+    erp.run per distinct governing requirement (agent.spec_key compares the values however a model wrote them); a
+    position whose values no early search had gets its own search while search time is left (else it is omitted), a
+    search no position needs is stopped; a no_match is confirmed by a second erp.run when ≥ 150 s remain;
+    then resolvers.commercials (three parts at once), hard cut end − 5.5 min
 Phase 4, code
     calc.facts → calc.compute
 Phase 5, deadline end − 20 s (DRY_RUN=1 stops before it)
-    submit.run (+ verify_summary read-back, get_tan in the webmail tab)
+    the bid reaches submit.run through bid_values (+ verify_summary read-back, get_tan in the webmail tab with the
+    webmail agent's search URL)
 ```
 
 With fewer than 4 browsers, the remaining sites open as tabs in browser 1. A site whose first load fails is logged
@@ -103,7 +114,7 @@ Each agent is a folder `agent/agents/<name>/` with `agent.py` (mission, result s
 | `webmail` | webmail | every message the rules need, inbox and archive | 60 steps |
 | `erp.login` | ERP | get past login, cookies, notices, gates | 20 steps |
 | `erp.run` | ERP (one tab each) | the material for one requirement; its pages kept; `check` → `extract` reads the facts, `validate.material_mismatch` refuses a wrong pick once | 40 steps |
-| `resolvers` | — | three `ask_json` calls: sites, requirements, commercials | 3 attempts each |
+| `resolvers` | — | four `ask_json` calls: sites, specs, requirements, commercials | 3 attempts each |
 | `submit` | tender portal | fill the wizard, sign | 70 steps |
 | `get_tan` | webmail | the newest TAN for the request just made | 12 steps, 2 min |
 
@@ -116,11 +127,28 @@ Every browser agent is the same loop; agents differ only in mission, result sche
 - **Tools:** `read`, `goto`, `click`, `fill`, `select`, `check`, `press`, `back`, `form` (a whole form by visible
   labels, survives reloads; `ref` steps for unlabeled controls; opens collapsed sections around a field), `fetch` (read a same-site URL without navigating; opens ZIPs and PDFs), `save_evidence`
   (keep a page word for word), `note` (pin verified facts), `finish`.
+- **Fewer steps:** `read`, `fetch` and `save_evidence` take `all_pages`: code follows the page links of the list the
+  model chose and returns (or keeps) every page in one call (`agent/paging.py`; another page of a list is a link that
+  differs from it in one number, up to 8 pages and 48,000 characters; the brief allows helpers to "paginate a
+  model-selected result set"). Of several page actions in one turn only the last one's result carries the page (the
+  others say what they did; a read that reports a download or dialog stays whole). A page the model has read is kept
+  without being shown again. Tools of one turn run in order, and the tool descriptions ask for `finish` in the turn of
+  the last `save_evidence`.
 - **Small context:** tool results of the last 4 steps stay in full (`KEEP_STEPS`); older ones shrink to 300 characters, and a
   shortened `save_evidence` result tells the model the page is kept in full for the analyst, so it doesn't reopen it
-  to copy values (`llm.SHORTENED_KEPT`).
-- **`finish`:** a result that isn't a JSON object is refused while more than 30 s remain; fields sent without the
-  `result` wrapper are taken as the result.
+  to copy values (`llm.SHORTENED_KEPT`). They shrink in batches, once 6 steps have left the window (`TRIM_EVERY`) or
+  their results reach 60,000 characters (`TRIM_CHARS`): every shortening invalidates the prompt cache from that point
+  on, and between batches the history only grows, so the model reads it from the cache.
+- **Shared prefix:** every agent sends the same system message, the website rules and the brief
+  (`agents.common.system`), and the same tools: the browser tools and one `finish` whose result schema is in the
+  mission (`llm.FINISH`); submit's own tools come after them. The provider caches a prompt prefix only for the same
+  tool list (measured: same system text, another finish schema, no cache hit), so now all agents of a run share their
+  first ~4,500 tokens and every model replica soon serves them from its cache. The model's reasoning stays while its
+  step is in the `KEEP_STEPS` window and goes in the same batches as the older page reads (the API reads reasoning
+  sent back as input on every later step).
+- **`finish`:** a result that isn't a JSON object is refused while more than 30 s remain; an agent without a `check`
+  (its kept pages are what counts) that sends broken text a second time has it taken as `summary` (a supplier agent
+  without thinking sent it twice and lost 30 s each); fields sent without the `result` wrapper are taken as the result.
 - **Tools:** a browser tool, and the first page read before step 0, runs at most `TOOL_TIMEOUT` (60 s) and never past
   the agent's deadline, an extra tool (`get_tan`) until the deadline; a timeout reaches the model as an error, so a
   hung fetch can't hold the agent to its stage cut and lose what it kept.
@@ -133,14 +161,22 @@ Every browser agent is the same loop; agents differ only in mission, result sche
   and keeps a page with the same content only once.
 - **`check` bounds:** its model calls take at most `CHECK_TIMEOUT` (60 s) each and end at the agent's deadline; a
   check that fails or runs out of time lets the result through unchecked.
-- **Model:** `AGENT_MODEL`, default `qwen3.8-flash-next`, the hosted Qwen; any `<provider>/<model>` id runs on OpenRouter
-  (in a run through `$LLM_PROXY_URL/openrouter/v1`, Anthropic prompts cached), e.g. `anthropic/claude-haiku-5.5`; browser steps
-  run with low reasoning effort (`STEP_EFFORT`). `chat` tries up to 6 times, each attempt at most `CALL_TIMEOUT` (no
-  SDK-internal retries) and all of them bounded by the stage's `llm.UNTIL`, which `agent.safe`/`agent.start` set per
-  stage; step calls end at the agent's deadline so the forced `finish` keeps its grace. An attempt without a reply
-  after `HEDGE_AFTER` sends the same request again alongside and takes the first answer: hung calls never answer,
-  while a fresh one answers in seconds. Both limits hold on the wall clock (`asyncio.wait`, the call is dropped at its
-  limit): the SDK's timeout only bounds the silence between bytes.
+- **Model:** `AGENT_MODEL`, default the hosted Qwen; a `<provider>/<model>` id runs on OpenRouter through the run's
+  proxy with the team secret `OPENROUTER_API_KEY` (Anthropic models with a moving cache breakpoint); its last three
+  attempts at a call go to the hosted Qwen (`llm.FALLBACK`), which `agent.json` keeps warm at no cost in time; a call
+  without an answer after `HEDGE` (15 s) gets a twin and the first answer wins (about one OpenRouter call in six never
+  came back); `ask_json` (resolvers, ERP extract) always runs on the hosted Qwen, where it is measured. Browser steps run
+  with low reasoning effort (`STEP_EFFORT`): without thinking a step took a fifth of the time, but a webmail agent kept
+  its only record after 12 steps and then searched on to its step limit of 60 (it never judged itself done);
+  `chat` tries up to 6 times, each attempt at most `CALL_TIMEOUT` (180 s; no SDK-internal retries) and all of them
+  bounded by the stage's `llm.UNTIL`, which `agent.safe`/`agent.start` set per stage; step calls end at the agent's
+  deadline so the forced `finish` keeps its grace. Both limits hold on the wall clock (`asyncio.wait`, the call is
+  dropped at its limit): the SDK's timeout only bounds the silence between bytes. Replies are streamed (`llm.reply`
+  assembles them like a non-streamed one; not for an OpenRouter model: streamed, Haiku never saw what its actions did
+  and typed the same login 40 times in every tab, its calls take 3-13 s and end at the silence limit unstreamed too), so that silence tells a stuck call from a slow one: an attempt that brings
+  no byte for `SILENCE` (30 s; 60 s on a retry) is dropped and asked again. A healthy stream starts within seconds;
+  stuck calls never reach the model and used to hold their stage to the cap (run_76abdc35df9c092b: six, among them
+  three of the four ERP searches' first calls).
 - **Cut agents keep their evidence:** every `investigate` registers its evidence list in `llm.KEPT`, one per stage
   (`agent.start`); a stage that is cut or fails hands those pages on, marked `forced`.
 - **Shared system prompt** `agents/common.py` `SYSTEM`: the sites' traps in general terms, no site and no value.
@@ -148,9 +184,10 @@ Every browser agent is the same loop; agents differ only in mission, result sche
 ### 3.4 Resolvers, calculator, submission
 
 - **Resolvers** (`agents/resolvers`): one `ask_json` call each (JSON mode, up to 3 attempts). `sites`: which website
-  plays which role, from the brief. `requirements`: final quantities and governing requirements; `commercials`:
+  plays which role, from the brief. `specs`: the governing requirements from the specification and the technical
+  mail alone, so the ERP searches start early; `requirements`: final quantities and governing requirements; `commercials`:
   discount, clauses, tariffs, commitments, pool and bonus membership, setup fees, FX rates, metal indices, pool fee,
-  bonus bands. Reasoning effort is medium for `requirements` and `commercials`, low for copying values (`sites`,
+  bonus bands. Reasoning effort is medium for `specs`, `requirements` and `commercials`, low for copying values (`sites`,
   ERP `extract`).
 - **Calculator** (`agent/calc.py`, details in [calc.md](calc.md)): `facts` merges the agents' results, `compute`
   applies rules 3–9, 12, 15–18 and 22–27 in `Decimal` with HALF_UP; exact against the reference (`tests/test_calc.py`).
@@ -170,7 +207,8 @@ Every browser agent is the same loop; agents differ only in mission, result sche
 ### 3.5 Logs
 
 Every line goes through `llm.log` as `[tag  123s] ...` (seconds since start). `main` logs one line per stage
-(`sites`, `tender-portal`, `supplier-portal`, `webmail`, `requirements`, `commercials`, `erp`, `facts`, `calc`, `answer`,
+(`sites`, `specs`, `tender-portal`, `supplier-portal`, `webmail`, `requirements`, `commercials`, `erp`, `facts`, `calc`,
+`answer`,
 `submit`); every agent step
 appears as `[tag  123s] n: tool {args}`.
 
@@ -272,11 +310,11 @@ on disagreement it logs both, re-asks once, then the rule wins.
 | --- | --- | --- |
 | 1 | Visibility truth: drop `display:none`, `visibility:hidden`, zero opacity or font size, `hidden`, `aria-hidden`; a checkbox or radio made transparent under a styled label stays a control (only display and visibility hide it) | ✅ |
 | 1b | Off-screen and screen-reader-only (clipped) text kept but marked `(off-screen text: …)` and counted: recorded pages showed no such hiding, and real values can live there (decided on the recordings) | ✅ I17 |
-| 2 | Reveal real values: image and canvas labels, tooltips (also `title` of plain elements), CSS-generated text (`::before`/`::after`), collapsed `<details>`, select options, input values; a canvas without text is marked; names, labels and tooltips skip hidden descendants (decoys inside them) | ✅ I17 |
+| 2 | Reveal real values: image and canvas labels, tooltips (also `title` of plain elements), CSS-generated text (`::before`/`::after`), collapsed `<details>`, select options, input values; a canvas without text is marked; names, labels and tooltips skip hidden descendants (decoys inside them); a tooltip a control already names as its `(info: …)` is not repeated | ✅ I17 |
 | 3 | Normalize text: remove invisible characters; keep number-format hints verbatim | ✅ |
 | 4 | Controls as `[n:kind "label"]` refs the tools act on; links show their href | ✅ |
 | 5 | Same-origin iframes inlined, nested ones too | ✅ |
-| 6 | Tables with cell separators; page indicators stay in the text | ✅ |
+| 6 | Tables with cell separators, one line per row (line breaks inside cells folded in, so cells line up with their header); page indicators stay in the text | ✅ |
 | 7 | Open dialogs marked; in-page dialogs closed on every settle; browser dialogs accepted and reported | ✅ |
 | 8 | Repeated page chrome (headers, banners) suppressed to save tokens: on the page shown after an action, lines without controls that earlier reads of the tab showed twice are left out at its top and bottom, with a note; controls, evidence and explicit reads stay complete (about 10 % less page text on the recordings) | ✅ I17 |
 | 9 | 14,000 characters per read, `offset` for the rest | ✅ |
@@ -305,15 +343,16 @@ on disagreement it logs both, re-asks once, then the rule wins.
 
 | Use | Model | How |
 | --- | --- | --- |
-| Navigation and reading (tool loop) | Qwen3.8-Flash-Next | native tool calls; parallel tool calls allowed |
-| Resolvers and ERP fact extraction | Qwen3.8-Flash-Next | JSON mode, up to 3 attempts |
-| Prose → class (condition rules) | Qwen3.8-Flash-Next | majority of 3 only if tests show errors (E4) |
+| Navigation and reading (tool loop) | the hosted Qwen; Claude Haiku via OpenRouter (team secret) with `AGENT_MODEL` | native tool calls; Qwen streamed, a call silent for 30 s asked again; Haiku unstreamed, hedged after 15 s, prompt cache, the hosted Qwen for a call's last three attempts |
+| Resolvers and ERP fact extraction | hosted Qwen | JSON mode, up to 3 attempts |
+| Prose → class (condition rules) | hosted Qwen | majority of 3 only if tests show errors (E4) |
 | Cheap yes/no checks | Clef | not used; only if measurably faster (E5) |
 | Anything else | a frontier model via team secret | off; only behind a flag where it buys quality (E6) |
 
 - Calls are bounded by the caller's deadline (I2); at most 12 concurrent calls per run (the team shares 32).
 - Reasoning effort: low for browser steps (`STEP_EFFORT`) and for copying values, medium for the resolvers. Low is
-  several times faster; switching thinking off entirely made the model rewrite number formats (PR #5).
+  several times faster; switching thinking off entirely made the model rewrite number formats (PR #5) and loop
+  without ever finishing (a webmail agent searched 48 steps past its only record).
 - Prompt layout: static system prompt and tool schemas first (cached input is cheaper), then brief, then dynamic parts.
 - The system prompt teaches meanings (traps, German business terms), never values.
 - Resolver inputs only carry the evidence they need (I5); later, extraction while browsing (I19).
@@ -411,7 +450,7 @@ Every item has exactly one owner. When it touches a file someone else owns (§14
 | I3 | ✅ Site roles from the brief (PR #5); the run's submission target pins the tender portal, and an unclear assignment falls back by elimination instead of crashing. Tests: `tests/test_sites.py`, `tools/stress/s1_sites.py` | `agent.py`, `agents/resolvers` | stress level S1 passes (§14.1) | T1.12 | Y |
 | I4 | Dependency graph + per-stage budgets (§4.1, §4.2). Since PR #5 every phase has a hard cut; remaining: start stages when their inputs exist, budgets computed at stage start | `agent.py`, `budget.py`, `agents/erp` | dry run: ERP starts during the first stage; answer < 8 min | T1.3, T3.2 | F |
 | I5 | Slimmer missions and inputs: no word-for-word copies in `finish` schemas when the evidence holds them; "every needed page kept → finish"; resolvers get only the evidence they need (object `finish` done in PR #5) | `agents/tender_portal`, `agents/supplier_portal`, `agents/resolvers`, `llm.py` | no page fetched twice without reason; commercials resolver much faster | T3.2, T4.2 | F |
-| I6 | Submit in two stages + watchdog: stage 1 at start, stage 2 with the answer, watchdog at end − 3 min | `agents/submit` | a short-budget run still signs | T1.3, 9 | F |
+| I6 | Submit in two stages + watchdog: stage 1 once the mailbox is done ✅ (`bid_values` waits for the bid), stage 2 with the answer ✅, watchdog at end − 3 min | `agents/submit` | a short-budget run still signs | T1.3, 9 | F |
 | I6b | ✅ Read-back before the TAN: `verify_summary` checks every unit price and the total net on the summary page in code | `agents/submit`, `validate.py` | a mistyped value is corrected before signing | T1.9, 7 | L |
 | I7 | Built, first full run pending: `DRY_RUN=1` stops `main` after the answer; `tools/score.sh` (run + `eval/compare.py`) | `agent.py`, `tools/` | one command → a score | T4.3 | L |
 | I8 | ✅ `tools/check_release.sh` (audit, tests, `agent.json`), `tools/audit_package.py` (public-1 values, site paths, own browsers, API keys; repo and `--package`), `tools/ci.py` (gates before every test run, docs/release.md). Was: release tools: `tools/audit_package.py` + `tools/check_release.sh` (audit, tests, `agent.json`). The audit also runs on the uploaded package (`atira run_package`), not only on the repo | `tools/` | green on `main` and on the last uploaded package | T0.1, T0.2, T0.6, T1.1 | L |
@@ -459,7 +498,7 @@ Every item has exactly one owner. When it touches a file someone else owns (§14
   submits.
 - **Shared capacity:** one run uses at most about 5 of the team's 32 concurrent model calls. Nothing else runs while a
   scored submission runs, and timing measurements run alone; ordinary local dry runs may overlap. Only Luca starts
-  sandbox test runs, at most 4 at once. Test run 2 waited 15 min in the model queue in total: Finn finds out why
+  sandbox test runs, at most 2 at once. Test run 2 waited 15 min in the model queue in total: Finn finds out why
   before budgets are calibrated.
 - **Freeze:** no experimental submissions in the last 3 hours; the last one must be at least as good as the release
   candidate (T4.5).

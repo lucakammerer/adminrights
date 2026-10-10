@@ -11,13 +11,18 @@ bindingly. Without a submission the run scores 0.
 
 ## Input / output
 
-- Input: answer and `omitted` positions from `calc.compute` (an optional field missing from a row is left blank), specification per position (for the configurator choices), own mailbox address
+- Input: a future that holds the answer and `omitted` positions from `calc.compute` (an optional field missing from a row is left blank), specification per position (for the configurator choices), own mailbox address
   from the mail agent (contact field), portal login, the mail tab for the TAN.
 - Output `{confirmation}`: what the portal confirmed.
 
 ## Implementation
 
 - `agent.py` `run` → `llm.investigate`, tag `submit`, at most 70 steps, deadline end − 20 s, cut hard at `end`.
+  `agent.main` starts it as soon as the webmail agent is done, in a fresh tender-portal tab, while the ERP searches and
+  the commercials still run: it enters what doesn't depend on the bid (bidder data, offer kind) and then calls the
+  extra tool `bid_values`, which waits until `main` sets the bid and returns it (`values`). Its result starts with
+  `llm.PINNED`, so the history trim never shortens the values being entered. Started after the answer, the submission
+  took 240-330 s; an early submission that ends before the bid (a crash) is started again once the bid is there.
   Values in German format with two decimals (`german`). Whole form pages in one `form` call, a configurator's
   dependent choices each followed by its apply button; `form` opens collapsed sections around a field itself.
 - One `form` call per position: the mission sends the configurator's choices without reading their options first,
@@ -30,7 +35,9 @@ bindingly. Without a submission the run scores 0.
   per call).
 - Watchdog (first slice): `SIGN_BY` = 180 s before the deadline the agent gets its own warning: omit every position
   not completely entered, request the TAN, sign. The generic "call finish now" would end the run unsigned.
-- Extra tool `get_tan`: starts its own `investigate` in the mail tab, tag `tan`, at most 12 steps, at most 2 min.
+- Extra tool `get_tan`: starts its own `investigate` in the mail tab, tag `tan`, at most 12 steps, at most 2 min,
+  with the search URL the webmail agent reported (`search_url`), so it searches instead of browsing (9 steps, 71 s
+  in run_acc211d89c011277).
   Finds the newest TAN mail for the request just made. The tab is first opened on the mailbox's start page, and a
   `check` refuses a finish without `found` and a TAN while more than 45 s remain: in one test run the look-up started
   inside the mail agent's last search list, returned the newest message there (not a TAN mail) with no TAN, and the
@@ -51,4 +58,3 @@ bindingly. Without a submission the run scores 0.
 ## Open
 
 - The watchdog is a warning to the model, not code: if the model ignores it or the TAN look-up stalls, nothing signs.
-- Stage 1 (bidder data, offer type) could run while the ERP agents work (I6).

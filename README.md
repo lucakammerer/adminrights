@@ -15,19 +15,20 @@ flowchart LR
   subgraph P1["1 · Gather · ⏱ −10 min"]
     tender["🏛️ Tender portal<br/>positions · Q#amp;A"]
     supplier["📐 Supplier portal<br/>current spec"]
-    mail["✉️ Webmail<br/>approvals · terms"]
+    mail["✉️ Webmail ×3<br/>approvals · terms"]
     login["🔑 ERP login"]
   end
 
   evidence[("📄 Kept<br/>evidence")]
 
-  subgraph P2["2 · Interpret · ⏱ −8 min"]
+  subgraph P2["2 · Interpret · ⏱ −6 min"]
+    specs["🧠 Specs<br/>governing requirements"]
     req["🧠 Requirements<br/>quantities · specs"]
     com["🧠 Commercials<br/>discount · fees"]
   end
 
   subgraph P3["3 · Materials · ⏱ −6 min"]
-    erp["🏭 ERP search<br/>one tab per spec<br/>no match checked twice"]
+    erp["🏭 ERP search<br/>one tab per spec, from Specs<br/>no match checked twice"]
     sweepnode["🔎 Gap sweep<br/>open commercial facts<br/>on the other sites"]
   end
 
@@ -42,11 +43,14 @@ flowchart LR
   roles --> tender & supplier & mail & login
   tender & supplier & mail --> evidence
   evidence --> req & com
-  req --> erp
+  supplier & mail -. as soon as done .-> specs --> erp
+  req -. values Specs missed .-> erp
+  req --> calc
   login -. session .-> erp
   erp --> calc
   com -. facts left open .-> sweepnode -. until ERP is done .-> calc
   com --> calc
+  mail -. done: bidder data first .-> submit
   calc --> submit --> bid([✅ Bid])
 
   classDef browser fill:#dbeafe,stroke:#2563eb,color:#111827
@@ -55,7 +59,7 @@ flowchart LR
   classDef store fill:#fef3c7,stroke:#d97706,color:#111827
   classDef terminal fill:#111827,stroke:#111827,color:#ffffff
   class tender,supplier,mail,login,erp,sweepnode,submit browser
-  class roles,req,com model
+  class roles,specs,req,com model
   class calc code
   class evidence store
   class run,bid terminal

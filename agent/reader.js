@@ -16,6 +16,7 @@
   let next = opts.start || 1
   let marked = 0
   const out = []
+  const told = new Set()  // tooltips already given as a control's (info: ...): shown once, not twice
 
   // A checkbox or radio made transparent under a styled label is still the control people tick: only display and
   // visibility hide it. Everything else with zero opacity or font size is hidden text (decoys).
@@ -84,8 +85,9 @@
   }
   const described = (el) => {
     const ids = (el.getAttribute("aria-describedby") || "").split(/\s+/).filter(Boolean)
-    const t = ids.map((id) => el.ownerDocument.getElementById(id)).filter(Boolean).map((e) => clean(textOf(e)).trim())
-    return t.filter(Boolean).join("; ")
+    const els = ids.map((id) => el.ownerDocument.getElementById(id)).filter(Boolean)
+    els.forEach((e) => told.add(e))
+    return els.map((e) => clean(textOf(e)).trim()).filter(Boolean).join("; ")
   }
   const ref = (el) => {
     if (fetched) return ""
@@ -140,7 +142,7 @@
     if (SKIP.has(tag)) return
     const role = el.getAttribute("role")
     if (role === "tooltip") {
-      out.push(` (tooltip: ${clean(textOf(el)).trim()}) `)
+      if (!told.has(el)) out.push(` (tooltip: ${clean(textOf(el)).trim()}) `)
       return
     }
     if (hidden(el)) return
@@ -178,6 +180,7 @@
       if (tag === "SUMMARY" || tag === "A" || tag === "BUTTON" || tag === "SELECT" || tag === "TEXTAREA" || tag === "INPUT") return
     }
     const block = BLOCK.has(tag)
+    const row = out.length  // a table row becomes one line, its cells' own line breaks folded in
     if (block) out.push("\n")
     if (/^H[1-6]$/.test(tag)) out.push("#".repeat(+tag[1]) + " ")
     if (tag === "TD" || tag === "TH") out.push(" | ")
@@ -192,6 +195,7 @@
     if (title && c === null && !clean(out.slice(start).join("")).includes(title)) out.push(` (tooltip: ${title}) `)
     if (tag === "DIALOG") out.push("\n=== END DIALOG ===\n")
     if (block) out.push("\n")
+    if (tag === "TR") out.push("\n" + out.splice(row).join("").replace(/\s*\n\s*/g, " ").trim() + "\n")
   }
 
   const doc = opts.root || (opts.doc ? new DOMParser().parseFromString(opts.doc, "text/html") : document)

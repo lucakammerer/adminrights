@@ -274,9 +274,9 @@ Gather erp, webmail · Decide `resolvers.commercials` · ⚠️ an unmatched ind
 | --- | --- | --- |
 | T3.1 | Quality first: never trade a quality point for cost or time. | — |
 | T3.2 | Time runs from the start of the run command to the accepted answer: work the sites in parallel; start the submission early. | answer < 8 min, then toward 5 |
-| T3.3 | Cost is metered model usage. The hosted Qwen3.8-Flash-Next (`models: ["qwen"]`), free to us but priced in the ranking. `AGENT_MODEL=anthropic/claude-haiku-5.5` runs on Claude Haiku 5.5 through OpenRouter (team secret `OPENROUTER_API_KEY`, limited credit), prompt-cached. | ≤ $0.25 per run |
+| T3.3 | Cost is metered model usage. Every agent on the hosted Qwen by default; `AGENT_MODEL=anthropic/claude-haiku-5.5` puts the browser agents on Claude Haiku through OpenRouter (team secret, no shared queue, cached prompts), resolvers and the ERP extract stay on the hosted Qwen. Another model only with a test run that keeps the score. The team shares 32 concurrent Qwen calls across all runs. | ≤ $0.25 per run |
 | T3.4 | Keep model inputs small: page text, not HTML; older reads trimmed; static prompt parts first (cached input is cheaper). | — |
-| T3.5 | `agent.json` `"models"` lists only the hosted models we call. | `[]` |
+| T3.5 | `agent.json` `"models"` lists only the models we call. | `["qwen"]` |
 
 ## 6. T4: Craft
 

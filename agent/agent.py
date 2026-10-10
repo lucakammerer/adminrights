@@ -24,12 +24,14 @@ from browser import Tab
 
 
 CUT: set[str] = set()  # stages cut at their deadline: their task may still hold its tab for a moment
-# The requirements call took 52-184 s on 2026-10-10 (~16k tokens in). It runs until the ERP searches have
-# ERP_SEARCH_MIN left: an answer after that leaves them no search, and every position would be omitted anyway. After a
-# phase 1 that ran to its cut, that leaves requirements only 90 s (the budgets must make room, I4). A low-effort
-# attempt joins once the first has run BACKUP_AFTER seconds.
+# The ERP searches start from the specs resolver's governing requirements once the supplier portal, the mailbox and the
+# ERP login are done, while the tender agent may still be working. The requirements call (52-184 s on 2026-10-10, ~16k
+# tokens in) then runs alongside them until the ERP cut. Without early searches the searches wait for it, so it runs
+# only until they have ERP_SEARCH_MIN left: a later answer would leave them no search. A low-effort attempt joins once
+# the first has run BACKUP_AFTER seconds.
 ERP_SEARCH_MIN = 60
 BACKUP_AFTER = 60
+SPEC_KEYS = ("bore_mm", "stroke_mm", "pressure_bar", "mounting", "certification", "catalogue_group")
 OPEN_TIMEOUT = 20  # seconds to open a new tab on a site's start page (pages load in 1-5 s)
 
 
@@ -90,22 +92,50 @@ def positions(requirements) -> list[dict]:
     return [r for r in rows if isinstance(r, dict) and named(r.get("position"))] if isinstance(rows, list) else []
 
 
-async def resolve_requirements(inputs: tuple, until: float) -> list[dict]:
-    """The requirements resolver's positions by `until`. One call may use the whole window (a cut call would only be
-    asked again); if the first attempt has no answer after BACKUP_AFTER seconds, a low-effort one runs alongside and
-    counts only when the first brings nothing."""
+def governing(answer) -> list[dict]:
+    """The specs resolver's requirements that name something to search for."""
+    rows = answer.get("requirements") if isinstance(answer, dict) else None
+    return [r for r in rows if isinstance(r, dict) and any(r.get(k) not in (None, "") for k in SPEC_KEYS)] \
+        if isinstance(rows, list) else []
+
+
+def spec_key(row: dict) -> tuple:
+    """A requirement's values as one key, however a model wrote them (200 or 200.0, "EN 1493" or "en1493"): an ERP
+    search started from the specs resolver counts for every position with the same values."""
+    def norm(value) -> str:
+        text = "".join(str("" if value is None else value).split()).casefold()
+        try:
+            return repr(float(text))
+        except ValueError:
+            return text
+    return tuple(norm(row.get(k)) for k in SPEC_KEYS)
+
+
+async def resolve(tag: str, ask, until: float, rows) -> list[dict]:
+    """A resolver's rows by `until`; `ask(effort)` makes the call. One call may use the whole window (a cut call would
+    only be asked again); if the first attempt has no rows after BACKUP_AFTER seconds, a low-effort one runs alongside
+    and counts only when the first brings nothing. Cancelling this stops both."""
     cap = until - time.time()
-    first = start(resolvers.requirements(*inputs), until, cap)
-    await asyncio.wait({first}, timeout=max(0.0, min(BACKUP_AFTER, cap)))
-    answered = first.done() and not first.cancelled() and first.exception() is None and positions(first.result())
-    backup = None if answered else start(resolvers.requirements(*inputs, effort="low"), until, cap)
-    rows = positions(await safe("requirements", first, until))
-    if rows or backup is None:
-        if backup:
-            backup.cancel()
-        return rows
-    llm.log("requirements", "first attempt brought nothing: taking the low-effort one")
-    return positions(await safe("requirements", backup, until))
+    first, backup = start(ask("medium"), until, cap), None
+    try:
+        await asyncio.wait({first}, timeout=max(0.0, min(BACKUP_AFTER, cap)))
+        answered = first.done() and not first.cancelled() and first.exception() is None and rows(first.result())
+        backup = None if answered else start(ask("low"), until, cap)
+        found = rows(await safe(tag, first, until))
+        if found or backup is None:
+            return found
+        llm.log(tag, "first attempt brought nothing: taking the low-effort one")
+        return rows(await safe(tag, backup, until))
+    finally:
+        for job in (first, backup):
+            if job:
+                job.cancel()
+
+
+async def resolve_requirements(inputs: tuple, until: float) -> list[dict]:
+    """The requirements resolver's positions by `until`."""
+    return await resolve("requirements", lambda effort: resolvers.requirements(*inputs, effort=effort), until,
+                         positions)
 
 
 def bid(tender: dict, requirements: dict, commercials: dict, erp: dict) -> dict:
@@ -190,35 +220,48 @@ async def main() -> int:
             tabs[role] = Tab(page, entry)
 
         phase1 = end - 10 * 60  # agents wrap up here; hard cut 30 s later
-        tender, spec, mail, _ = await asyncio.gather(
+        # several webmail agents at once, each with its share of the brief's records; the first (the technical release)
+        # works the mailbox's own tab, the others fresh ones, once one login is through. The specification resolver
+        # needs only the first.
+        shares = webmail.groups(task["brief"])
+        mail_login = asyncio.create_task(safe("webmail-login", webmail.login(task, tabs["webmail"], phase1),
+                                              phase1 + 30)) if len(shares) > 1 else None
+
+        async def mail_share(i: int, records: list[dict]):
+            if mail_login:
+                await mail_login
+            tag = "webmail" if i == 0 else f"webmail-{i + 1}"
+            tab = tabs["webmail"] if i == 0 else await fresh(tabs["webmail"])
+            return await safe(tag, webmail.run(task, tab, phase1, records, len(shares) == 1, tag), phase1 + 30)
+        mail_jobs = [asyncio.create_task(mail_share(i, records)) for i, records in enumerate(shares)]
+
+        async def merged_mail():
+            return webmail.merge(list(await asyncio.gather(*mail_jobs)))
+
+        tender_job, spec_job, mail_job, login_job = (asyncio.create_task(job) for job in (
             safe("tender-portal", tender_portal.run(task, tabs["tender_portal"], phase1), phase1 + 30),
             safe("supplier-portal", supplier_portal.run(task, tabs["supplier_portal"], phase1), phase1 + 30),
-            safe("webmail", webmail.run(task, tabs["webmail"], phase1), phase1 + 30),
-            safe("erp-login", erp_agent.login(task, tabs["erp"], phase1), phase1 + 30))
-        llm.log("tender-portal", json.dumps(tender, ensure_ascii=False)[:3000])
-        llm.log("supplier-portal", json.dumps(spec, ensure_ascii=False)[:3000])
-        llm.log("webmail", json.dumps(mail, ensure_ascii=False)[:4000])
+            merged_mail(),
+            safe("erp-login", erp_agent.login(task, tabs["erp"], phase1), phase1 + 30)))
+
+        # The submission starts once the mailbox is done (contact address and TAN tab known), in a tab of its own, while
+        # the bid is still worked out: it enters what doesn't depend on the bid and waits for its values (I6). It took
+        # 240-330 s after the answer when it started there.
+        bid_ready: asyncio.Future = asyncio.get_running_loop().create_future()
+        early_submit = not os.environ.get("DRY_RUN") and (task.get("submission") or {}).get("kind") != "api"
+
+        async def submission():
+            mail = await mail_job
+            portal = await fresh(tabs["tender_portal"])
+            mailbox = await fresh(tabs["webmail"]) if "webmail" in CUT else tabs["webmail"]
+            return await submit_agent.run(task, portal, mailbox, bid_ready, mail.get("own_address", ""), end - 20,
+                                          mail.get("search_url", ""))
+        submitting = start(submission(), end) if early_submit else None
 
         erp_end = end - 6 * 60  # leaves the submission six minutes
-        async def sweep_tabs():  # the other websites are idle while the ERP searches run: tabs of their own for a sweep
-            return {role: await fresh(tabs[role]) for role in ("tender_portal", "supplier_portal", "webmail")}
-
-        # only calc needs it; one call may use the whole window, a cut call would only be asked again. Commercial facts
-        # it leaves open are looked for on the other websites until the ERP searches are done (I16).
-        erp_done = asyncio.Event()
-        commercials_job = start(sweep.commercials_with_sweep(task, tender, mail, [spec], sweep_tabs, erp_end + 30,
-                                                             erp_done), erp_end + 30, erp_end + 30 - time.time())
         erp_search_end = erp_end - 30 - erp_agent.FINISH_GRACE  # where each ERP agent's own search must end
-        requirements = {"positions": await resolve_requirements((task, tender, spec, mail),
-                                                                erp_search_end - ERP_SEARCH_MIN)}
-        llm.log("requirements", json.dumps(requirements, ensure_ascii=False))
-
         erp_tab = tabs["erp"]
-
-        spec_keys = ("bore_mm", "stroke_mm", "pressure_bar", "mounting", "certification", "catalogue_group")
-        distinct: dict[tuple, dict] = {}
-        for r in requirements["positions"]:
-            distinct.setdefault(tuple(str(r.get(k)) for k in spec_keys), {k: r.get(k) for k in spec_keys})
+        searches: dict[tuple, tuple[str, asyncio.Task]] = {}  # one ERP search per governing requirement (spec_key)
 
         async def erp_search(req, first):
             tab = erp_tab if first and "erp-login" not in CUT else await fresh(erp_tab)
@@ -232,12 +275,73 @@ async def main() -> int:
                     return second
             return result
 
-        async def erp_for(key, req, first):
-            return key, await safe(f"erp:{req.get('catalogue_group')}", erp_search(req, first), erp_end)
+        def search(row: dict):
+            """Start the ERP search for a governing requirement, unless one with the same values runs already."""
+            if (key := spec_key(row)) not in searches:
+                req = {k: row.get(k) for k in SPEC_KEYS}
+                searches[key] = f"erp:{req.get('catalogue_group')}", start(erp_search(req, not searches), erp_end)
 
-        found = dict(await asyncio.gather(*(erp_for(k, r, i == 0) for i, (k, r) in enumerate(distinct.items()))))
+        async def search_early():
+            """The ERP searches need the governing requirements, not the quantities: they start once the
+            specification, the technical mail and the ERP login are in, while the tender agent or the other mail agents
+            may still be working."""
+            spec, mail = await asyncio.gather(spec_job, mail_jobs[0])
+            if not spec.get("evidence"):  # nothing to decide from: the searches wait for the requirements
+                llm.log("specs", "no specification kept: no early ERP searches")
+                return
+            if tender_job.done() and mail_job.done():  # requirements starts now and decides the same values
+                llm.log("specs", "phase 1 already done: no early ERP searches")
+                return
+            rows = await resolve("specs", lambda effort: resolvers.specs(task, spec, mail, effort),
+                                 erp_search_end - ERP_SEARCH_MIN, governing)
+            llm.log("specs", json.dumps(rows, ensure_ascii=False))
+            await login_job
+            for row in rows:
+                search(row)
+
+        early = asyncio.create_task(search_early())
+        early.add_done_callback(lambda t: t.cancelled() or t.exception())
+        tender, spec, mail, _ = await asyncio.gather(tender_job, spec_job, mail_job, login_job)
+        llm.log("tender-portal", json.dumps(tender, ensure_ascii=False)[:3000])
+        llm.log("supplier-portal", json.dumps(spec, ensure_ascii=False)[:3000])
+        llm.log("webmail", json.dumps(mail, ensure_ascii=False)[:4000])
+
+        async def sweep_tabs():  # the other websites are idle while the ERP searches run: tabs of their own for a sweep
+            return {role: await fresh(tabs[role]) for role in ("tender_portal", "supplier_portal", "webmail")}
+
+        # only calc needs it; one call may use the whole window, a cut call would only be asked again. Commercial facts
+        # it leaves open are looked for on the other websites until the ERP searches are done (I16).
+        erp_done = asyncio.Event()
+        commercials_job = start(sweep.commercials_with_sweep(task, tender, mail, [spec], sweep_tabs, erp_end + 30,
+                                                             erp_done), erp_end + 30, erp_end + 30 - time.time())
+        requirements_job = asyncio.create_task(resolve_requirements((task, tender, spec, mail), erp_end))
+        await asyncio.wait({early, requirements_job}, return_when=asyncio.FIRST_COMPLETED)
+        if not requirements_job.done() and not searches:  # the searches wait for it: it must leave them their time
+            llm.log("requirements", "no early ERP searches: the searches wait for the requirements")
+        rows = await safe("requirements", requirements_job, erp_end if searches else erp_search_end - ERP_SEARCH_MIN,
+                          [])
+        early.cancel()  # once the positions are known, a late specs answer is no use
+        requirements = {"positions": rows}
+        llm.log("requirements", json.dumps(requirements, ensure_ascii=False))
+
+        early_searches = len(searches)
+        for r in rows:
+            if spec_key(r) in searches:
+                continue
+            if time.time() >= erp_search_end:
+                llm.log("erp", f"{r['position']}: no time left to search its requirement")
+                continue
+            if early_searches:
+                llm.log("erp", f"{r['position']}: its requirement differs from the early searches: searching it now")
+            search(r)
+        needed = [key for key in dict.fromkeys(map(spec_key, rows)) if key in searches]
+        for key, (tag, job) in searches.items():
+            if key not in needed and not job.done():
+                job.cancel()
+                llm.log(tag, "no position needs this search: stopped")
+        found = dict(zip(needed, await asyncio.gather(*(safe(*searches[key], erp_end) for key in needed))))
         erp_done.set()  # a sweep still looking for commercial facts stops: calc must not wait for it
-        erp = {r["position"]: found[tuple(str(r.get(k)) for k in spec_keys)] for r in requirements["positions"]}
+        erp = {r["position"]: found[spec_key(r)] for r in rows if spec_key(r) in found}
         llm.log("erp", json.dumps(erp, ensure_ascii=False)[:4000])
         commercials = await safe("commercials", commercials_job, erp_end + 30)
         llm.log("commercials", json.dumps(commercials, ensure_ascii=False))
@@ -255,12 +359,12 @@ async def main() -> int:
                 llm.log("submit", f"posting the answer failed: {type(error).__name__}: {str(error)[:300]}")
             return 0
 
-        specs = {r["position"]: ", ".join(f"{k} {r.get(k)}" for k in spec_keys) for r in requirements["positions"]}
-        # a phase-1 agent that was cut may still be acting on its tab: the submission then works in a tab of its own
-        portal = await fresh(tabs["tender_portal"]) if "tender-portal" in CUT else tabs["tender_portal"]
-        mailbox = await fresh(tabs["webmail"]) if "webmail" in CUT else tabs["webmail"]
-        outcome = await safe("submit", submit_agent.run(task, portal, mailbox, result["answer"], result["omitted"],
-                                                        specs, mail.get("own_address", ""), end - 20), end)
+        specs = {r["position"]: ", ".join(f"{k} {r.get(k)}" for k in SPEC_KEYS) for r in requirements["positions"]}
+        bid_ready.set_result((result["answer"], result["omitted"], specs))
+        if submitting.done():  # the early submission ended before it had the bid (a crash): it starts over
+            llm.log("submit", "the early submission ended before the bid: starting it again")
+            submitting = start(submission(), end)
+        outcome = await safe("submit", submitting, end)
         llm.log("submit", json.dumps(outcome, ensure_ascii=False))
     return 0
 
