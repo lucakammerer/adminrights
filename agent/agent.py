@@ -23,34 +23,126 @@ from browser import Tab
 
 
 CUT: set[str] = set()  # stages cut at their deadline: their task may still hold its tab for a moment
+# The requirements call took 52-184 s on 2026-10-10 (~16k tokens in). It runs until the ERP searches have
+# ERP_SEARCH_MIN left: an answer after that leaves them no search, and every position would be omitted anyway. After a
+# phase 1 that ran to its cut, that leaves requirements only 90 s (the budgets must make room, I4). A low-effort
+# attempt joins once the first has run BACKUP_AFTER seconds.
+ERP_SEARCH_MIN = 60
+BACKUP_AFTER = 60
 
 
-def start(job, until: float) -> asyncio.Task:
-    """Run a job as its own task whose model calls end by `until`."""
+def start(job, until: float, cap: float | None = None) -> asyncio.Task:
+    """Run a job as its own task whose model calls end by `until` and take at most `cap` each. The pages its agents
+    keep stay readable as `task.kept`, for a cut."""
     context = contextvars.copy_context()
     context.run(llm.UNTIL.set, until)
+    if cap:
+        context.run(llm.CAP.set, cap)
+    kept: list[list[str]] = []
+    context.run(llm.KEPT.set, kept)
     task = asyncio.create_task(job, context=context)
+    task.kept = kept
     task.add_done_callback(lambda t: t.cancelled() or t.exception())  # a late failure after a cut stays quiet
     return task
 
 
-async def safe(tag: str, job, until: float, fallback=None):
+def kept_pages(task: asyncio.Task) -> list[str]:
+    """Every page the job's agents kept so far, each once."""
+    return list(dict.fromkeys(page for pages in getattr(task, "kept", []) for page in pages))
+
+
+async def safe(tag: str, job, until: float, fallback=None, cap: float | None = None):
     """One agent's crash or overrun must not end the run: cut it at `until`, log it and carry on with what the
     others found. A hosted model under load can make every step slow, so phase deadlines are hard: the job's model
     calls end by `until` (llm.UNTIL), and the cut doesn't wait for the job to stop (asyncio.wait_for did, and a model
-    call that ignored its cancellation held a 780 s cut until 1093 s)."""
-    task = job if isinstance(job, asyncio.Task) else start(job, until)
+    call that ignored its cancellation held a 780 s cut until 1093 s). A job that is cut or fails still hands on the
+    pages its agents kept, marked `forced`: one webmail agent had kept every message and then stalled."""
+    task = job if isinstance(job, asyncio.Task) else start(job, until, cap)
     await asyncio.wait({task}, timeout=max(1.0, until - time.time()))
     if not task.done():
         task.cancel()
         CUT.add(tag)
         llm.log(tag, "cut at its deadline")
+    elif task.cancelled():
+        llm.log(tag, "cancelled")
     elif task.exception() is None:
         return task.result()
     else:
         error = task.exception()
         llm.log(tag, f"failed: {type(error).__name__}: {str(error)[:300]}")
-    return {} if fallback is None else fallback
+    result = {} if fallback is None else fallback
+    if pages := kept_pages(task):
+        llm.log(tag, f"handing on {len(pages)} kept pages")
+        result = {**result, "evidence": pages, "forced": True}
+    return result
+
+
+def positions(requirements) -> list[dict]:
+    """The resolver's rows that name a position: a malformed answer must not end the run. The position keeps its type
+    as written, because calc.facts matches it against the commercials resolver's rows."""
+    def named(position) -> bool:
+        return (isinstance(position, str) and bool(position.strip())) or \
+            (isinstance(position, (int, float)) and not isinstance(position, bool))
+
+    rows = requirements.get("positions") if isinstance(requirements, dict) else None
+    return [r for r in rows if isinstance(r, dict) and named(r.get("position"))] if isinstance(rows, list) else []
+
+
+async def resolve_requirements(inputs: tuple, until: float) -> list[dict]:
+    """The requirements resolver's positions by `until`. One call may use the whole window (a cut call would only be
+    asked again); if the first attempt has no answer after BACKUP_AFTER seconds, a low-effort one runs alongside and
+    counts only when the first brings nothing."""
+    cap = until - time.time()
+    first = start(resolvers.requirements(*inputs), until, cap)
+    await asyncio.wait({first}, timeout=max(0.0, min(BACKUP_AFTER, cap)))
+    answered = first.done() and not first.cancelled() and first.exception() is None and positions(first.result())
+    backup = None if answered else start(resolvers.requirements(*inputs, effort="low"), until, cap)
+    rows = positions(await safe("requirements", first, until))
+    if rows or backup is None:
+        if backup:
+            backup.cancel()
+        return rows
+    llm.log("requirements", "first attempt brought nothing: taking the low-effort one")
+    return positions(await safe("requirements", backup, until))
+
+
+def bid(tender: dict, requirements: dict, commercials: dict, erp: dict) -> dict:
+    """calc's answer. If the facts of one position break it, the others still count: a position whose facts can't be
+    built or computed loses its ERP finding, or if that is not enough the position itself, and is omitted as
+    unfinished (never no_bid); if even that fails, an answer with the reference and every position omitted, so the
+    run still signs."""
+    def compute(rows: list[dict], found: dict) -> dict:
+        facts = calc.facts(tender, {"positions": rows}, commercials, found)
+        llm.log("facts", json.dumps(facts, ensure_ascii=False))
+        return calc.compute(facts)
+
+    rows = requirements["positions"]
+    try:
+        return compute(rows, erp)
+    except Exception as error:  # noqa: BLE001
+        llm.log("calc", f"failed: {type(error).__name__}: {str(error)[:300]}; retrying position by position")
+    kept_rows, found, dropped = [], {}, []
+    for row in rows:
+        key = row["position"]
+        for finding in (erp.get(key) or {}, {}):
+            try:
+                calc.compute(calc.facts(tender, {"positions": [row]}, commercials, {key: finding}))
+            except Exception as error:  # noqa: BLE001
+                llm.log("calc", f"{key}: {type(error).__name__}: {str(error)[:200]}")
+                continue
+            kept_rows.append(row)
+            found[key] = finding
+            break
+        else:
+            dropped.append(key)
+    try:
+        result = compute(kept_rows, found)
+        return {**result, "omitted": result["omitted"] + dropped}
+    except Exception as error:  # noqa: BLE001
+        llm.log("calc", f"failed again: {type(error).__name__}: {str(error)[:300]}; every position omitted")
+    reference = next((r for r in (commercials.get("tender_reference"), tender.get("tender_reference"))
+                      if isinstance(r, str) and r), "")
+    return {**calc.compute({"tender_reference": reference, "positions": []}), "omitted": [r["position"] for r in rows]}
 
 
 async def fresh(tab: Tab) -> Tab:
@@ -96,10 +188,11 @@ async def main() -> int:
         llm.log("webmail", json.dumps(mail, ensure_ascii=False)[:4000])
 
         erp_end = end - 6 * 60  # leaves the submission six minutes
-        commercials_job = start(resolvers.commercials(task, tender, mail), erp_end + 30)  # only calc needs it
-        requirements = await safe("requirements", resolvers.requirements(task, tender, spec, mail), end - 8 * 60) or \
-            await safe("requirements", resolvers.requirements(task, tender, spec, mail, effort="low"), erp_end - 60,
-                       {"positions": []})
+        # only calc needs it; one call may use the whole window, a cut call would only be asked again
+        commercials_job = start(resolvers.commercials(task, tender, mail), erp_end + 30, erp_end + 30 - time.time())
+        erp_search_end = erp_end - 30 - erp_agent.FINISH_GRACE  # where each ERP agent's own search must end
+        requirements = {"positions": await resolve_requirements((task, tender, spec, mail),
+                                                                erp_search_end - ERP_SEARCH_MIN)}
         llm.log("requirements", json.dumps(requirements, ensure_ascii=False))
 
         erp_tab = tabs["erp"]
@@ -130,9 +223,7 @@ async def main() -> int:
         commercials = await safe("commercials", commercials_job, erp_end + 30)
         llm.log("commercials", json.dumps(commercials, ensure_ascii=False))
 
-        facts = calc.facts(tender, requirements, commercials, erp)
-        result = calc.compute(facts)
-        llm.log("facts", json.dumps(facts, ensure_ascii=False))
+        result = bid(tender, requirements, commercials, erp)
         llm.log("calc", result["trace"])
         llm.log("answer", json.dumps(result["answer"], ensure_ascii=False))
         if os.environ.get("DRY_RUN"):  # local scoring stops before anything binding (tools/score.sh)

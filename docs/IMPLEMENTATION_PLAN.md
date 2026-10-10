@@ -72,8 +72,10 @@ Phase 0, no browser
     resolvers.sites: a model assigns each website its role from the brief (names and ids differ per dataset)
 Phase 1, parallel, one browser each, wrap-up at end − 10 min, hard cut 30 s later
     tender_portal.run · supplier_portal.run · webmail.run · erp.login
-Phase 2, no browser, hard cut end − 8 min (one retry with low effort until end − 7 min)
-    resolvers.requirements (resolvers.commercials starts too and runs alongside phase 3)
+Phase 2, no browser, hard cut end − 8 min, so the ERP searches keep ERP_SEARCH_MIN (60 s) before their own end at
+end − 7 min; after a phase 1 that ran to its cut, requirements gets only 90 s
+    resolvers.requirements (a low-effort attempt joins after BACKUP_AFTER, 60 s, and counts only when the first brings
+    nothing; resolvers.commercials starts too and runs alongside phase 3); a resolver call may use its whole window
 Phase 3, ERP tabs in parallel, hard cut end − 6 min (a cut search → its positions are omitted)
     erp.run per distinct requirement; a no_match is confirmed by a second erp.run when ≥ 150 s remain;
     then resolvers.commercials, hard cut end − 5.5 min
@@ -134,9 +136,12 @@ Every browser agent is the same loop; agents differ only in mission, result sche
 - **`check` bounds:** its model calls take at most `CHECK_TIMEOUT` (60 s) each and end at the agent's deadline; a
   check that fails or runs out of time lets the result through unchecked.
 - **Model:** `AGENT_MODEL`, default the hosted Qwen; browser steps run with low reasoning effort (`STEP_EFFORT`);
-  `chat` tries up to 6 times, each attempt at most `CALL_TIMEOUT` (120 s; no SDK-internal retries) and all of them
+  `chat` tries up to 6 times, each attempt at most `CALL_TIMEOUT` (180 s; no SDK-internal retries) and all of them
   bounded by the stage's `llm.UNTIL`, which `agent.safe`/`agent.start` set per stage; step calls end at the agent's
-  deadline so the forced `finish` keeps its grace.
+  deadline so the forced `finish` keeps its grace. Both limits hold on the wall clock (`asyncio.wait`, the call is
+  dropped at its limit): the SDK's timeout only bounds the silence between bytes.
+- **Cut agents keep their evidence:** every `investigate` registers its evidence list in `llm.KEPT`, one per stage
+  (`agent.start`); a stage that is cut or fails hands those pages on, marked `forced`.
 - **Shared system prompt** `agents/common.py` `SYSTEM`: the sites' traps in general terms, no site and no value.
 
 ### 3.4 Resolvers, calculator, submission
@@ -148,6 +153,9 @@ Every browser agent is the same loop; agents differ only in mission, result sche
   ERP `extract`).
 - **Calculator** (`agent/calc.py`, details in [calc.md](calc.md)): `facts` merges the agents' results, `compute`
   applies rules 3–9, 12, 15–18 and 22–27 in `Decimal` with HALF_UP; exact against the reference (PLAN_COMPARISON §2.3).
+  `agent.bid` calls them: if they raise, a position whose facts break the calculation loses its ERP finding (or the
+  position itself) and is omitted as unfinished, never no_bid; as a last resort every position is omitted, so the run
+  still signs.
 - **Submission** (`agents/submit`): one model agent with the `form` tool and German number formatting; before the TAN
   `verify_summary` checks unit prices and total on the summary page in code; `get_tan`
   runs in the mail tab from the mailbox's start page, and a finish without a TAN is refused while time allows; guardrails in the mission (no extra positions, omit only listed ones, never tick our own terms,
