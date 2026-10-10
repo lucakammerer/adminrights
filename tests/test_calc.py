@@ -54,6 +54,12 @@ class Parsing(unittest.TestCase):
                          ("125,5 g", 0.1255), ("1,375 kg", 1.375), ("1.375 kg", 1.375), ("1.234,5 kg", 1234.5)]:
             self.assertAlmostEqual(calc.grams_to_kg(text), kg, msg=text)
 
+    def test_number_trusts_its_own_format_over_the_hint(self):
+        for text, fmt, value in [("2,743.58", "de-DE", 2743.58), ("2.743,58", "en-US", 2743.58),
+                                 ("1.234.567", "en-US", 1234567), ("186,615", "en-US", 186615),
+                                 ("186,615", "de-DE", 186.615), ("1,0873", "", 1.0873)]:
+            self.assertAlmostEqual(calc.number(text, fmt), value, msg=f"{text} {fmt}")
+
     def test_rate_lookup_tolerates_key_spelling(self):
         rates = {"FX-1": 1.1, "FX-2": 0.9}
         self.assertEqual(calc.lookup(rates, "fx 2"), 0.9)

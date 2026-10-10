@@ -129,20 +129,23 @@ def compute(facts: dict) -> dict:
 
 
 def number(text, fmt: str = "") -> float:
-    """A number as shown, in its locale: de-DE uses a decimal comma, en-US a decimal point."""
+    """A number as shown. When the number itself shows its format (both separators, or one repeated), that wins;
+    a single separator follows the format hint (de-DE: decimal comma), else a lone comma is decimal."""
     match = re.search(r"-?\d[\d.,]*", str(text))
     if not match:
         return 0.0
     s = match.group(0).rstrip(".,")
-    if fmt:
-        german = bool(re.search(r"\bde[-_]de\b|^de\b", fmt.strip(), re.I))
+    if "," in s and "." in s:
+        decimal = "," if s.rfind(",") > s.rfind(".") else "."
+    elif s.count(",") > 1 or s.count(".") > 1:
+        decimal = ""
+    elif fmt:
+        decimal = "," if re.search(r"\bde[-_]de\b|^de\b", fmt.strip(), re.I) else "."
     else:
-        german = "," in s and ("." not in s or s.rfind(",") > s.rfind("."))
-    if german:
-        s = s.replace(".", "").replace(",", ".")
-    else:
-        s = s.replace(",", "")
-    return float(s)
+        decimal = "," if "," in s else "."
+    if decimal == ",":
+        return float(s.replace(".", "").replace(",", "."))
+    return float(s.replace(",", "") if decimal == "." else s.replace(",", "").replace(".", ""))
 
 
 def grams_to_kg(text) -> float:
