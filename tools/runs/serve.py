@@ -1,6 +1,7 @@
 """Local dashboard of the team's Atira runs: what each run tested, where its time went and how to improve it.
 
 usage: python3 tools/runs/serve.py [port]    then open http://127.0.0.1:8770
+       DASHBOARD_HOST=10.0.0.1 python3 tools/runs/serve.py    bind elsewhere, e.g. behind a reverse proxy
 
 Read-only. Uses the personal token (`atira token`, or ATIRA_TOKEN) and the local git history: a run's package is
 matched to the commit whose agent/ tree it equals, or to the closest one plus the files that differ, so every run
@@ -226,5 +227,6 @@ if __name__ == "__main__":
     if not TOKEN:
         sys.exit("no token: run `atira login` or set ATIRA_TOKEN")
     port = int(sys.argv[1]) if len(sys.argv) > 1 else 8770
-    print(f"runs dashboard on http://127.0.0.1:{port}")
-    ThreadingHTTPServer(("127.0.0.1", port), Handler).serve_forever()
+    host = os.environ.get("DASHBOARD_HOST", "127.0.0.1")
+    print(f"runs dashboard on http://{host}:{port}")
+    ThreadingHTTPServer((host, port), Handler).serve_forever()
