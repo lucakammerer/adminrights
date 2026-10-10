@@ -3,7 +3,7 @@ other websites, where the model chooses what to open. See README.md."""
 import asyncio
 
 import llm
-from agents.common import BOOL, STR, SYSTEM, context, login_line, obj
+from agents.common import BOOL, STR, login_line, obj, system
 from calc import lookup
 
 SPEC = ("final_quantity_pieces", "bore_mm", "stroke_mm", "pressure_bar", "catalogue_group")
@@ -55,9 +55,7 @@ def gaps(tender: dict, requirements: dict, commercials: dict, erp: dict | None =
 
 
 def mission(task: dict, tab, gap: dict) -> str:
-    return f"""{context(task)}
-
-{login_line(tab.site)} (you may already be logged in)
+    return f"""{login_line(tab.site)} (you may already be logged in)
 One fact the bid needs is still open after the first pass: {gap['fact']}.
 The brief's rules say where such a record usually is, but this website may hold it instead (a document, a message, a
 record, a Q&A answer). Look for it on this website for the exact tender reference only; you choose what to open and
@@ -74,7 +72,7 @@ async def sweep(task: dict, tabs: dict, gap_list: list[dict], deadline: float) -
         """The open facts one after another on this tab: two loops on one tab would fight over its page."""
         for gap in gap_list:
             try:
-                result = await llm.investigate(tab, SYSTEM, mission(task, tab, gap), RESULT, deadline,
+                result = await llm.investigate(tab, system(task), mission(task, tab, gap), RESULT, deadline,
                                                f"sweep:{role}", max_steps=STEPS)
             except Exception as error:  # noqa: BLE001  this tab contributes nothing more
                 llm.log(f"sweep:{role}", f"failed: {type(error).__name__}: {str(error)[:200]}")

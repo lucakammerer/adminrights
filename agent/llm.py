@@ -18,6 +18,10 @@ KEEP_STEPS = 4  # tool results of the latest steps stay in full; older page read
 # steps have left the KEEP_STEPS window, or earlier when their tool results reach TRIM_CHARS.
 TRIM_EVERY = 6
 TRIM_CHARS = 60_000
+# The API returns the model's reasoning with every reply and reads whatever is sent back as input on every later
+# step. It stays while its step is in the KEEP_STEPS window (the model's train of thought) and goes in the same
+# batches as the older page reads.
+REASONING = ("reasoning", "reasoning_content")
 CALL_TIMEOUT = 180  # one model call; a slower one is retried while its deadline allows (steps took 20-90 s under load,
 # a tender finish 132 s: a cut call starts over, so the cap sits above the slowest calls seen)
 CHECK_TIMEOUT = 60  # one model call inside a finish check (ERP extract: 13-21 s); one hung call cost a position
@@ -154,6 +158,12 @@ BROWSER_TOOLS = [
 ]
 
 
+# One finish tool for every agent, its result schema in the mission: the provider caches a prompt prefix only for
+# the same tool list, so with the same system message and tools every agent's calls share the first ~5,000 tokens.
+FINISH = _fn("finish", "Return your findings when the mission is done (or when told time is up: your best findings). "
+             "result is a JSON object with the fields the mission's schema names.",
+             {"result": {"type": "object", "description": "the findings, as the mission's schema asks"}}, ["result"])
+
 HTTP_STATUS = re.compile(r"Fetched \S+ \(HTTP (\d+)\)")
 FINISH_NOW = "Time is almost up: call finish now with your best findings."
 KEPT_PREFIX = "Kept as evidence #"
@@ -181,12 +191,12 @@ async def investigate(tab, system: str, mission: str, finish_schema: dict, deadl
     deadline; a problem sends the model back to work, a check that fails or runs out of time lets the result through.
     `warning` goes to the model `warn_at` seconds before the deadline. A finish forced by the deadline or the step
     limit, or sent after the warning, is marked `forced`: whatever it says, the agent did not finish its mission."""
-    tools = BROWSER_TOOLS + (extra_tools or []) + [_fn(
-        "finish", "Return your findings when the mission is done (or when told time is up: your best findings).",
-        {"result": finish_schema}, ["result"])]
+    tools = BROWSER_TOOLS + [FINISH] + (extra_tools or [])  # the same for every agent but submit's own extra tools
     messages = [{"role": "system", "content": system},
-                {"role": "user", "content": mission + "\n\nThe page now:\n" + await tab.read()}]
+                {"role": "user", "content": mission + "\n\nfinish takes `result`, a JSON object of this schema:\n" +
+                 json.dumps(finish_schema, ensure_ascii=False) + "\n\nThe page now:\n" + await tab.read()}]
     steps: list[list[dict]] = []
+    said: list[dict] = []  # the model's message of each step, beside its tool results in `steps`
     trimmed = 0  # steps before this index are shortened already
     evidence: list[str] = []
     if (stage := KEPT.get()) is not None:
@@ -239,6 +249,7 @@ async def investigate(tab, system: str, mission: str, finish_schema: dict, deadl
             continue
         results: list[dict] = []
         steps.append(results)
+        said.append(messages[-1])
         for call in message.tool_calls:
             name = call.function.name
             try:
@@ -301,6 +312,9 @@ async def investigate(tab, system: str, mission: str, finish_schema: dict, deadl
                 if len(old["content"]) > 400:
                     old["content"] = old["content"][:300] + (SHORTENED_KEPT if old["content"].startswith(KEPT_PREFIX)
                                                              else SHORTENED)
+            for old in said[trimmed:-KEEP_STEPS]:
+                for key in REASONING:
+                    old.pop(key, None)
             trimmed = len(steps) - KEEP_STEPS
     messages.append({"role": "user", "content": "Stop now and call finish with your best findings."})
     log(tag, "finish forced (deadline or step limit)")

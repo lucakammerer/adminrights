@@ -2,7 +2,7 @@
 import json
 
 import llm
-from agents.common import BOOL, INT, NUM, RESOLVE, STR, SYSTEM, arr, context, login_line, obj
+from agents.common import BOOL, INT, NUM, RESOLVE, STR, arr, login_line, obj, system
 from validate import material_mismatch
 
 
@@ -25,7 +25,7 @@ async def login(task, tab, deadline):
     mission = f"""{login_line(tab.site)}
 Your part: log in to this ERP and get past every cookie, notice or unlock step until you reach its main screen
 (where materials can be searched). Then finish with {{"ok": true}}."""
-    return await llm.investigate(tab, SYSTEM, mission, obj(ok=BOOL), deadline, "erp-login", max_steps=20)
+    return await llm.investigate(tab, system(task), mission, obj(ok=BOOL), deadline, "erp-login", max_steps=20)
 
 
 async def extract(task, requirement: dict, chosen: dict, pages: list[str]) -> tuple[dict, str]:
@@ -80,9 +80,7 @@ def unproven(result: dict, evidence: list[str]) -> str:
 
 
 async def run(task, tab, requirement: dict, deadline):
-    mission = f"""{context(task)}
-
-{login_line(tab.site)} (you should already be logged in)
+    mission = f"""{login_line(tab.site)} (you should already be logged in)
 Your part: find the material for one requirement in this ERP. Requirement: {json.dumps(requirement, ensure_ascii=False)}
 1. Search by the requirement's catalogue group (the brief says how records are found) and read every result page.
 2. Compare each candidate's bore, stroke, pressure, mounting and certification with the requirement: all must be
@@ -119,7 +117,7 @@ Finish with material_number and why; the facts are read from the pages you kept.
 
     tag = f"erp:{requirement.get('catalogue_group')}"
     with llm.limits(deadline):  # a forced finish must not eat the time the extract below needs after it
-        result = await llm.investigate(tab, SYSTEM, mission,
+        result = await llm.investigate(tab, system(task), mission,
                                        obj(material_number=STR, no_match=BOOL, why=STR, candidates=CANDIDATES),
                                        deadline - FINISH_GRACE, tag, max_steps=40, check=check)
     if result.get("material_number") and not result.get("price_condition"):

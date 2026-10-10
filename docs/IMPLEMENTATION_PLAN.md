@@ -123,6 +123,13 @@ Every browser agent is the same loop; agents differ only in mission, result sche
   to copy values (`llm.SHORTENED_KEPT`). They shrink in batches, once 6 steps have left the window (`TRIM_EVERY`) or
   their results reach 60,000 characters (`TRIM_CHARS`): every shortening invalidates the prompt cache from that point
   on, and between batches the history only grows, so the model reads it from the cache.
+- **Shared prefix:** every agent sends the same system message, the website rules and the brief
+  (`agents.common.system`), and the same tools: the browser tools and one `finish` whose result schema is in the
+  mission (`llm.FINISH`); submit's own tools come after them. The provider caches a prompt prefix only for the same
+  tool list (measured: same system text, another finish schema, no cache hit), so now all agents of a run share their
+  first ~4,500 tokens and every model replica soon serves them from its cache. The model's reasoning stays while its
+  step is in the `KEEP_STEPS` window and goes in the same batches as the older page reads (the API reads reasoning
+  sent back as input on every later step).
 - **`finish`:** a result that isn't a JSON object is refused while more than 30 s remain; fields sent without the
   `result` wrapper are taken as the result.
 - **Tools:** a browser tool runs at most `TOOL_TIMEOUT` (60 s) and never past the agent's deadline, an extra tool
