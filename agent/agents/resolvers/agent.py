@@ -154,20 +154,63 @@ Messages from the sales mailbox:
 Decide from the pages kept as evidence: the agents' own summaries above them can be incomplete or wrong.
 Resolve, by the brief's rules (exact reference, authorized sender, latest record no later than the scenario date,
 newer replaces older, future-dated records never apply):
-- discount: the latest director approval for this exact reference: percent and, if it is conditional, its minimum
+"""
+    llm.log("commercials", f"asking {len(COMMERCIAL_PARTS)} parts at once with {len(question)} chars")
+    answers = await asyncio.gather(*(llm.ask_json(RESOLVE, f"{question}{ask}\nJSON: {{{shape}}}\n{NUMBERS}",
+                                                  effort="medium") for ask, shape in COMMERCIAL_PARTS),
+                                   return_exceptions=True)
+    for answer in answers:
+        if isinstance(answer, BaseException):
+            llm.log("commercials", f"a part failed: {type(answer).__name__}: {str(answer)[:200]}")
+    parts = [a for a in answers if isinstance(a, dict)]
+    if not parts:
+        raise answers[0]
+    return merge_parts(parts)
+
+
+# Commercials as three questions over the same evidence, asked at once: each call reasons about its part only, so the
+# slowest is much faster than one call for everything (247 s on the critical path on 2026-10-10), and the evidence
+# comes first, so the calls share its cached prefix.
+COMMERCIAL_PARTS = (
+    ("""- discount: the latest director approval for this exact reference: percent and, if it is conditional, its minimum
   undiscounted net order value (else null);
 - per position: which condition group (the brief's term) applies and therefore whether the discount applies to "base",
-  "base_and_surcharge" or "none" (no group: "base"); the packaging tariff in EUR per carton; the delivery commitment
-  assigned to it (material number, max pooled pieces, weeks) or null; whether it is a setup-pool member; whether it
-  is a project-bonus member; any ordinary setup fee in EUR stated for it (else 0);
-- fx_rates: EUR per one unit of each foreign currency, by FX key; metal_indices: EUR per kg by index key, the rate
-  valid on the scenario date; setup_pool_fee in EUR; project_bonus_bands as marginal bands.
-JSON: {{"tender_reference": "the exact reference", "discount": {{"percent": 0, "min_order_value": null, "source": "..."}},
-"positions": [{{"position": "...", "discount_applies_to": "base", "carton_price": 0,
-"delivery_commitment": {{"material_number": "...", "max_pieces": 0, "weeks": 0}} or null,
-"setup_pool_member": false, "project_bonus_member": false, "setup_fee": 0, "reasoning": "..."}}],
-"fx_rates": {{"<FX key>": 0.0}}, "metal_indices": {{"<index key>": 0.0}}, "setup_pool_fee": 0,
-"project_bonus_bands": [{{"from": 0, "to": null, "percent": 0}}]}}
-Every amount, rate and percent is a plain JSON number (decimal point, no units)."""
-    llm.log("commercials", f"asking with {len(question)} chars")
-    return await llm.ask_json(RESOLVE, question, effort="medium")
+  "base_and_surcharge" or "none" (no group: "base").""",
+     '"tender_reference": "the exact reference", "discount": {"percent": 0, "min_order_value": null, "source": "..."}, '
+     '"positions": [{"position": "...", "discount_applies_to": "base", "reasoning": "one sentence"}]'),
+    ("""- per position: the packaging tariff in EUR per carton; the delivery commitment assigned to it (material number,
+  max pooled pieces, weeks) or null; whether it is a setup-pool member; whether it is a project-bonus member; any
+  ordinary setup fee in EUR stated for it (else 0);
+- setup_pool_fee in EUR; project_bonus_bands as marginal bands.""",
+     '"positions": [{"position": "...", "carton_price": 0, "delivery_commitment": {"material_number": "...", '
+     '"max_pieces": 0, "weeks": 0} or null, "setup_pool_member": false, "project_bonus_member": false, "setup_fee": 0, '
+     '"reasoning": "one sentence"}], "setup_pool_fee": 0, "project_bonus_bands": [{"from": 0, "to": null, "percent": 0}]'),
+    ("""- fx_rates: EUR per one unit of each foreign currency, by FX key; metal_indices: EUR per kg by index key, the rate
+  valid on the scenario date.""",
+     '"fx_rates": {"<FX key>": 0.0}, "metal_indices": {"<index key>": 0.0}'),
+)
+NUMBERS = "Every amount, rate and percent is a plain JSON number (decimal point, no units)."
+
+
+def merge_parts(parts: list[dict]) -> dict:
+    """One commercials answer from its parts: top-level fields side by side, the positions merged by their number (each
+    keeps the type it was written with, which calc.facts matches), their reasoning joined."""
+    merged: dict = {}
+    rows: dict[str, dict] = {}
+    for part in parts:
+        for key, value in part.items():
+            if key != "positions":
+                merged.setdefault(key, value)
+                continue
+            for row in value if isinstance(value, list) else []:
+                if not isinstance(row, dict) or row.get("position") is None:
+                    continue
+                into = rows.setdefault(str(row["position"]).strip(), {})
+                for field, item in row.items():
+                    if field == "reasoning" and into.get(field):
+                        into[field] = f"{into[field]} {item}"
+                    else:
+                        into.setdefault(field, item)
+    if rows:
+        merged["positions"] = list(rows.values())
+    return merged
