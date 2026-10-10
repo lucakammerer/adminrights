@@ -13,7 +13,8 @@ on the server `luca-kammerer` from a clone of the repo (`python tools/ci.py`, on
 2. Skip what was tested: the key is the git tree of `agent/`, the only part that gets uploaded.
 3. Free gates: compile, `tools/audit_package.py` (no public-1 value, no own browser), and the unit tests in `tests/`
    (among them the calc golden test, which must score 100).
-4. `atira test-run`, at most 2 at once (more distort the time), never while a submission runs.
+4. `atira test-run` while fewer than 4 of the team's test runs are active (manual ones count), never while a
+   submission runs. The rest wait for the next tick in this order.
 5. When a run ends: its log goes to `bench/.ci/logs/`, the logged answer is scored with `eval/compare.py`, and a row is
    added to `bench/RUNS.md`. The outcome column is filled by hand: which phase lost the points and whose code it is.
 

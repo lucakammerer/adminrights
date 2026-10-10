@@ -456,7 +456,7 @@ Every item has exactly one owner. When it touches a file someone else owns (§14
   submits.
 - **Shared capacity:** one run uses at most about 5 of the team's 32 concurrent model calls. Nothing else runs while a
   scored submission runs, and timing measurements run alone; ordinary local dry runs may overlap. Only Luca starts
-  sandbox test runs, at most 2 at once. Test run 2 waited 15 min in the model queue in total: Finn finds out why
+  sandbox test runs, at most 4 at once. Test run 2 waited 15 min in the model queue in total: Finn finds out why
   before budgets are calibrated.
 - **Freeze:** no experimental submissions in the last 3 hours; the last one must be at least as good as the release
   candidate (T4.5).
