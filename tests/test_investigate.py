@@ -1,5 +1,5 @@
 """llm.investigate with a fake model: a finish sent after the time warning is marked forced, so a search the agent
-never completed can't count as no_match (I1).
+never completed can't count as no_match (I1); a finish without its wrapper and a tool that never answers.
 
 Run from the repo root: uv run --project agent --no-sync python -m unittest discover -s tests -v
 """
@@ -20,10 +20,14 @@ class FakeTab:
     async def read(self, offset=0):
         return "a page"
 
+    async def act(self, name, args):
+        await asyncio.sleep(3600)  # a fetch that never answers
 
-def finish(result: dict):
-    """A model reply that calls finish(result)."""
-    call = SimpleNamespace(id="1", function=SimpleNamespace(name="finish", arguments=json.dumps({"result": result})))
+
+def finish(result: dict, arguments: dict | None = None, tool: str = "finish"):
+    """A model reply that calls finish(result), or `tool` with `arguments` as sent."""
+    arguments = {"result": result} if arguments is None else arguments
+    call = SimpleNamespace(id="1", function=SimpleNamespace(name=tool, arguments=json.dumps(arguments)))
     message = SimpleNamespace(content=None, tool_calls=[call],
                               model_dump=lambda **_: {"role": "assistant", "content": None})
     return SimpleNamespace(choices=[SimpleNamespace(message=message)])
@@ -59,6 +63,22 @@ class Investigate(unittest.TestCase):
     def test_custom_warning_counts_too(self):
         result = self.run_agent(150, warn_at=180, warning="sign now")
         self.assertIn("sign now", self.prompts[0])
+        self.assertTrue(result["forced"])
+
+    def test_finish_without_its_result_wrapper_keeps_the_fields(self):
+        """run_4e7ea298c3d0b9bd: a found material was lost and two positions were omitted."""
+        async def chat(*_, **__):
+            return finish({}, {"material_number": "M"})
+        llm.chat = chat
+        self.assertEqual(self.run_agent(300)["material_number"], "M")
+
+    def test_a_hung_tool_ends_at_the_deadline_with_a_forced_finish(self):
+        """run_1a7115a6522f64a1: a fetch hung until the stage cut and the tender agent's kept pages were lost."""
+        async def chat(*_, **__):
+            return finish({}, {"url": "/document.zip"}, tool="fetch")
+        llm.chat = chat
+        result = asyncio.run(asyncio.wait_for(llm.investigate(FakeTab(), "", "", {}, time.time() + 2, "test",
+                                                              warn_at=0), 10))
         self.assertTrue(result["forced"])
 
 

@@ -31,13 +31,17 @@ def sh(*cmd, cwd=ROOT, check=True, timeout=300) -> str:
 
 
 def atira(*args) -> dict:
-    """The platform sometimes doesn't answer for minutes: two short tries, then the tick ends and the next retries."""
+    """The platform sometimes doesn't answer for minutes or answers 503: two short tries, then the tick ends and the
+    next retries."""
     for attempt in range(2):
         try:
             return json.loads(sh("atira", *args, "--json", timeout=60))
-        except subprocess.TimeoutExpired:
+        except (subprocess.TimeoutExpired, RuntimeError) as error:
+            if isinstance(error, RuntimeError) and "503" not in str(error):
+                raise
             if attempt:
                 raise SystemExit(f"wait: atira {' '.join(args)} did not answer")
+            time.sleep(10)
 
 
 def load() -> dict:
@@ -76,7 +80,8 @@ def gates(path: Path) -> list[str]:
     if subprocess.run([sys.executable, str(ROOT / "tools/audit_package.py"), "--agent", str(path / "agent"), *logs],
                       capture_output=True).returncode:
         failed.append("audit")
-    tests = subprocess.run(["uv", "run", "--project", str(ROOT / "agent"), "python", "-m", "unittest",
+    # the candidate's own environment: a branch may add a dependency (uv's cache makes the sync quick)
+    tests = subprocess.run(["uv", "run", "--project", str(path / "agent"), "python", "-m", "unittest",
                             "discover", "-s", "tests"], cwd=path, capture_output=True, text=True)
     if tests.returncode:
         failed.append("tests: " + (re.findall(r"^(?:FAIL|ERROR): (\S+)", tests.stderr, re.M) or ["see unittest"])[0])

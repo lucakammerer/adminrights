@@ -14,6 +14,7 @@ STEP_EFFORT = os.environ.get("STEP_EFFORT", "low")  # reasoning per browser step
 KEEP_STEPS = 4  # tool results of the latest steps stay in full; older page reads shrink so the context stays small
 CALL_TIMEOUT = 120  # one model call; a slower one is retried while its deadline allows (steps took 20-90 s under load)
 CHECK_TIMEOUT = 60  # one model call inside a finish check (ERP extract: 13-21 s); one hung call cost a position
+TOOL_TIMEOUT = 60  # one browser tool; a fetch that hung 109 s held the tender agent to its cut, its kept pages lost
 
 # The time by which every model call in this task must be over (set by agent.safe for each stage) and the longest
 # one call may take. Calls end on their own HTTP timeout: a phase cut must never wait for a cancelled call.
@@ -223,7 +224,7 @@ async def investigate(tab, system: str, mission: str, finish_schema: dict, deadl
                 args = {}
             log(tag, f"{step}: {name} {json.dumps(args, ensure_ascii=False)[:300]}")
             if name == "finish":
-                result = args.get("result")
+                result = args["result"] if "result" in args else args  # Qwen sometimes drops the wrapper
                 if isinstance(result, str):
                     result = parse_object(result)
                     if result is None and deadline - time.time() > 30:
@@ -248,21 +249,24 @@ async def investigate(tab, system: str, mission: str, finish_schema: dict, deadl
                     log(tag, "finish after the time warning: marked forced")  # for a search it never completed)
                     return {**result, "evidence": evidence, "forced": True}
                 return {**result, "evidence": evidence}
+            # a tool never outlasts the deadline, so the forced finish below still returns what was kept
+            handler = handlers.get(name) if handlers else None
+            limit = max(1.0, deadline - time.time() if handler else min(TOOL_TIMEOUT, deadline - time.time()))
             try:
                 if name == "note":
                     output = "Saved."
                 elif name == "save_evidence":
-                    output = await keep(args)
-                elif handlers and name in handlers:
-                    output = await handlers[name](args)
+                    output = await asyncio.wait_for(keep(args), limit)
+                elif handler:
+                    output = await asyncio.wait_for(handler(args), limit)
                 elif name == "read":
-                    output = await tab.read(int(args.get("offset") or 0))
+                    output = await asyncio.wait_for(tab.read(int(args.get("offset") or 0)), limit)
                 else:
-                    output = await tab.act(name, args)
+                    output = await asyncio.wait_for(tab.act(name, args), limit)
             except Exception as error:  # noqa: BLE001  the model sees the error and decides what to do
                 output = f"Error: {type(error).__name__}: {str(error)[:500]}"
                 try:
-                    output += "\n\n" + await tab.read()
+                    output += "\n\n" + await asyncio.wait_for(tab.read(), 15)
                 except Exception:  # noqa: BLE001
                     pass
             entry = {"role": "tool", "tool_call_id": call.id, "content": output}

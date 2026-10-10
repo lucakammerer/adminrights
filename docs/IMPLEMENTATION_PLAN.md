@@ -119,7 +119,11 @@ Every browser agent is the same loop; agents differ only in mission, result sche
 - **Small context:** tool results of the last 4 steps stay in full (`KEEP_STEPS`); older ones shrink to 300 characters, and a
   shortened `save_evidence` result tells the model the page is kept in full for the analyst, so it doesn't reopen it
   to copy values (`llm.SHORTENED_KEPT`).
-- **`finish`:** a result that isn't a JSON object is refused while more than 30 s remain.
+- **`finish`:** a result that isn't a JSON object is refused while more than 30 s remain; fields sent without the
+  `result` wrapper are taken as the result.
+- **Tools:** a browser tool runs at most `TOOL_TIMEOUT` (60 s) and never past the agent's deadline, an extra tool
+  (`get_tan`) until the deadline; a timeout reaches the model as an error, so a hung fetch can't hold the agent to
+  its stage cut and lose what it kept.
 - **`check`:** optional validator on `finish`: a problem refuses `finish` and the agent keeps working.
 - **Time:** 60 s before the deadline the agent is told to finish (the caller may send its own warning earlier: submit
   does, see §3.4); at the deadline or the step limit `finish` is forced via `tool_choice` and the result is marked
@@ -397,7 +401,7 @@ Every item has exactly one owner. When it touches a file someone else owns (§14
 
 | ID | Change | Where | Acceptance | Rules | Owner |
 | --- | --- | --- | --- | --- | --- |
-| I1 | Unfinished ≠ no match (§4.4). Since PR #5 a search cut by its hard deadline is omitted, and `investigate` marks every forced `finish` (deadline, step limit, or sent after the time warning), whose `no_match` `main` drops; remaining: a `no_match` only with evidence that every candidate was compared | `llm.py` (the mark), `agents/erp`, `validate.py`, `calc.compute` | a run with a starved ERP stage never answers no_bid | 3, 8, 9 | L |
+| I1 | Unfinished ≠ no match (§4.4). Since PR #5 a search cut by its hard deadline is omitted, and `investigate` marks every forced `finish` (deadline, step limit, or sent after the time warning), whose `no_match` `main` drops; `calc.facts` drops a `no_match` without kept pages; remaining: a `no_match` only with evidence that every candidate was compared | `llm.py` (the mark), `agents/erp`, `validate.py`, `calc.compute` | a run with a starved ERP stage never answers no_bid | 3, 8, 9 | L |
 | I2 | Model calls bounded by the caller's deadline; concurrency cap. Since PR #5 the phase cuts cancel slow calls; remaining: the bound inside a phase, the cap | `llm.py` | test with a fake slow client | T1.3 | F |
 | I3 | ✅ Site roles from the brief (PR #5); the run's submission target pins the tender portal, and an unclear assignment falls back by elimination instead of crashing (F21). Tests: `tests/test_sites.py`, `tools/stress/s1_sites.py` | `agent.py`, `agents/resolvers` | stress level S1 passes (§14.1) | T1.12 | Y |
 | I4 | Dependency graph + per-stage budgets (§4.1, §4.2). Since PR #5 every phase has a hard cut; remaining: start stages when their inputs exist, budgets computed at stage start | `agent.py`, `budget.py`, `agents/erp` | dry run: ERP starts during the first stage; answer < 8 min | T1.3, T3.2 | F |
@@ -417,7 +421,7 @@ Every item has exactly one owner. When it touches a file someone else owns (§14
 | I12 | Mail topics and senders parsed from the brief; generic wording for the approval search | `agents/webmail` | no public mail subject in prompts | T0.11, 5, 10, 21 | Y |
 | I13 | Code-side retry of transient error pages; auto re-login; adaptive settle | `browser.py` | fewer model turns on the ERP in the dry-run log | T3.2 | Y |
 | I14 | ✅ Calculator tests (`tests/test_calc.py`): golden test, values written as text, allocation ties, band edges, inclusive ceilings and thresholds, shared stock | `tests/` | green | 4–9, 12, 15–18, 22–27 | L |
-| I15 | Loud failures instead of silent fallbacks (FX, metal index): tolerant key match and `MISSING` in the trace ✅; omitted positions per rule 9 ✅ (also when all are omitted) | `calc.py` | tests | 9, 22, 28 | L |
+| I15 | Loud failures instead of silent fallbacks (FX, metal index): tolerant key match and `MISSING` in the trace ✅; omitted positions per rule 9 ✅ (also when all are omitted); a material without prices is submitted with its other fields ✅ | `calc.py` | tests | 9, 22, 28 | L |
 | I23 | Cost: cache-friendly loop (append-only history; when it grows too long, restart from the notes and kept evidence); measure Clef against Qwen for yes/no and pick decisions, then use it or drop it | `llm.py` | cached share of input up; cost per run ≤ $0.10 | T3.4 | F |
 | I24 | Stress harness for levels S1–S3 (§14.1) | `tools/stress/` | S1 and S3 pass; S2 time-boxed to 2 h | T1.12, 3, 19 | Y |
 
