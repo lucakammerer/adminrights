@@ -6,7 +6,7 @@ usage: python3 tools/runs/serve.py [port]    then open http://127.0.0.1:8770
 Stops a test run on request; scored runs can't be stopped here. Uses the personal token (`atira token`, or
 ATIRA_TOKEN) and the local git history: a run's package is matched to the commit whose agent/ tree it equals, or
 to the closest one plus the files that differ, so every run shows the code it ran, with or without a label. Each
-run is compared with the previous run that signed a bid: the commits since that change agent/, with their pull
+run is compared with the previous run of main that signed a bid: the commits since that change agent/, with their pull
 requests.
 """
 import io
@@ -83,7 +83,10 @@ def ci_run(run_id: str) -> dict:
 
 def closest_commit(tree: str) -> tuple[str, list[str]]:
     """The commit whose agent/ tree is the package, else the one with the fewest differing files, and those files."""
-    commits = git("rev-list", "--branches", "--remotes", "--date-order", "--max-count=300").split()
+    # main first: a package with main's agent/ is main, even when a branch commit holds the same tree
+    main = git("rev-list", "--max-count=300", "origin/main").split()
+    commits = main + [c for c in git("rev-list", "--branches", "--remotes", "--date-order", "--max-count=300").split()
+                      if c not in main]
     trees = git("cat-file", "--batch-check=%(objectname)", stdin="".join(f"{c}:agent\n" for c in commits)).split("\n")
     if tree in trees:
         return commits[trees.index(tree)], []
@@ -140,8 +143,9 @@ def changes(base: str, head: str) -> list[dict]:
 
 
 def compare(listed: list[dict]) -> None:
-    """Point each run at the previous run that signed a bid and the commits since."""
-    bids = [r for r in listed if r.get("has_answer") and r.get("score")]
+    """Point each run at the previous run of main that signed a bid and the commits since: a branch counts as better
+    only against main, never against another unmerged branch."""
+    bids = [r for r in listed if r.get("has_answer") and r.get("score") and r["source"].get("on_main")]
     for run in listed:
         run["baseline"] = None
         base = next((b for b in bids if b["created_at"] < run["created_at"]), None)

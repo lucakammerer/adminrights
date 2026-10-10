@@ -200,12 +200,12 @@ function shift(run) {
   const base = baseline(run);
   if (!base) return "";
   const d = delta(run, base);
-  return `<span class="${d > 0 ? "up" : d < 0 ? "down" : ""}" title="against the previous bid at ${esc(base.source.commit)}">${signed(d)}</span>`;
+  return `<span class="${d > 0 ? "up" : d < 0 ? "down" : ""}" title="against main's previous bid at ${esc(base.source.commit)}">${signed(d)}</span>`;
 }
 
 function changed(run) {
   const base = baseline(run);
-  if (!base) return '<p class="muted">No earlier bid to compare with.</p>';
+  if (!base) return '<p class="muted">No earlier bid of main to compare with.</p>';
   const link = (url, text) => `<a href="${esc(url)}" target="_blank">${esc(text)}</a>`;
   const commits = run.baseline.commits.length
     ? `<table><tr><th>Commit</th><th>Change</th><th>PR</th></tr>${run.baseline.commits.map((c) =>
@@ -218,7 +218,11 @@ function changed(run) {
   const moved = Object.keys({ ...was, ...now }).map((k) => [k, (now[k] || 0) - (was[k] || 0)]).filter(([, d]) => Math.abs(d) > 0.005);
   const points = moved.length ? `<table><tr><th>Field</th><th>Points</th></tr>${moved.map(([k, d]) =>
     `<tr><th>${esc(k)}</th><td class="${d > 0 ? "ok" : "miss"}">${signed(d)}</td></tr>`).join("")}</table>` : "";
-  return `<p>Q ${base.score.quality} at ${esc(base.source.commit)} → ${answered(run) ? `Q ${run.score.quality}` : "no bid"}</p>
+  const pct = (a, b) => (a ? `${signed((100 * (b - a)) / a)} %` : "");
+  const work = (r) => r.cost_micro_usd * seconds(r);
+  return `<p>Q ${base.score.quality} at ${esc(base.source.commit)} → ${answered(run) ? `Q ${run.score.quality}` : "no bid"}
+    · ${clock(seconds(base))} → ${clock(seconds(run))} · ${dollars(base.cost_micro_usd)} → ${dollars(run.cost_micro_usd)}
+    · cost × time ${pct(work(base), work(run))}</p>
     <div class="tables">${commits}${points}</div>`;
 }
 
@@ -284,7 +288,7 @@ function renderRun(run) {
     <div class="details">
       ${run.error ? `<div class="error">${esc(run.error)}</div>` : ""}
       <h3>What ran</h3>${whatRan(src)}
-      <h3>Since the previous bid</h3>${changed(run)}
+      <h3>Against main's previous bid</h3>${changed(run)}
       <h3>Where the time went</h3>${timeline(run)}
       <h3>How to improve</h3>${improve(run)}
       <h3>Points per field</h3>${points(run)}

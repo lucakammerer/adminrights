@@ -1,8 +1,6 @@
 """Tender portal agent: positions and every Q&A from the tender portal. See README.md."""
-import re
-
 import llm
-from agents.common import INT, STR, NUM, SYSTEM, arr, context, login_line, obj
+from agents.common import INT, STR, NUM, SYSTEM, arr, context, login_line, obj, reference
 
 
 RESULT = obj(
@@ -13,11 +11,11 @@ RESULT = obj(
 
 
 async def run(task, tab, deadline):
-    ref = re.search(r"\(([^()]+)\)\.", task["brief"])
+    ref = reference(task["brief"])
     mission = f"""{context(task)}
 
 {login_line(tab.site)}
-Your part: on this tender portal, find the tender in the brief (exact reference{f' {ref.group(1)}' if ref else ''}).
+Your part: on this tender portal, find the tender in the brief (exact reference{f' {ref}' if ref else ''}).
 If its documents need an expression of interest (the brief's Submission section names that step), give it. Collect:
 1. the bill of quantities: every position with its id, description, quantity and unit exactly as written (pieces,
    sets, ...);

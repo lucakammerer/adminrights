@@ -1,0 +1,78 @@
+// Stress level S2 mutations (I24, I20, rule 19): rewrite a page the way another site would show the same facts.
+// Applied live by run_agents.py --mutate (each read-only page rewritten before the agent sees it) and offline by
+// tests/test_mutations.py (recorded pages). Called as (opts) => {relabelled, decoys, shuffled, reformatted}; opts.seed
+// makes every choice repeatable. It never changes a fact: labels get synonyms, numbers that carry an explicit locale
+// hint are rewritten in the other locale with the hint changed to match, menus are shuffled, hidden decoys are added.
+(opts) => {
+  let seed = (opts && opts.seed) || 1
+  const rand = () => ((seed = (seed * 16807) % 2147483647) / 2147483647)
+  const doc = (opts && opts.doc) || document
+  const stats = { relabelled: 0, decoys: 0, shuffled: 0, reformatted: 0 }
+
+  // 1. Labels: whole-word synonyms on controls, headings and table headers only (never in data cells).
+  const SYNONYMS = {
+    "Suche": "Recherche", "Suchen": "Recherchieren", "Weiter": "Fortfahren", "Zurück": "Vorherige",
+    "Anmelden": "Einloggen", "Nachricht": "Mitteilung", "Nachrichten": "Mitteilungen", "Posteingang": "Eingang",
+    "Archiv": "Ablage", "Dokumente": "Unterlagen", "Status": "Zustand", "Datum": "Stand", "Menge": "Anzahl",
+    "Preis": "Betrag", "Lieferzeit": "Lieferfrist", "Bestand": "Vorrat", "Search": "Find", "Next": "Continue",
+    "Date": "Dated", "Quantity": "Amount", "Price": "Cost"}
+  const words = new RegExp(`(^|[^\\p{L}])(${Object.keys(SYNONYMS).join("|")})(?=$|[^\\p{L}])`, "gu")
+  for (const el of doc.querySelectorAll("button, a, th, h1, h2, h3, h4, label, summary, legend, [role=tab]")) {
+    for (const node of el.childNodes) {
+      if (node.nodeType !== 3) continue
+      const next = node.textContent.replace(words, (m, pre, w) => pre + SYNONYMS[w])
+      if (next !== node.textContent) { node.textContent = next; stats.relabelled++ }
+    }
+  }
+
+  // 2. Number formats: "1,234.5 (en-US)" <-> "1.234,5 (de-DE)", only where the page states the locale, also when the
+  // number and its hint sit in separate elements (an aria-label that repeats them is rewritten alike).
+  const swap = (n) => n.replace(/[.,]/g, (c) => (c === "." ? "," : "."))
+  const other = (loc) => (loc === "de-DE" ? "en-US" : "de-DE")
+  const HINTED = /^\s*(\d[\d.,]*\d|\d)\s*\((de-DE|en-US)\)\s*$/
+  for (const el of doc.querySelectorAll("body *")) {
+    if (!HINTED.test(el.textContent) || [...el.children].some((c) => HINTED.test(c.textContent))) continue
+    const walker = doc.createTreeWalker(el, NodeFilter.SHOW_TEXT)
+    while (walker.nextNode()) {
+      const node = walker.currentNode
+      node.textContent = node.textContent.replace(/\d[\d.,]*\d|\d/g, swap).replace(/de-DE|en-US/g, other)
+    }
+    const label = el.getAttribute("aria-label")
+    if (label) el.setAttribute("aria-label", label.replace(/\d[\d.,]*\d|\d/g, swap).replace(/de-DE|en-US/g, other))
+    stats.reformatted++
+  }
+  // 3. Shuffle lists whose order carries no meaning: navigation menus and option-like lists.
+  for (const list of doc.querySelectorAll("nav ul, nav ol, ul[role=menu], ul.menu")) {
+    const items = [...list.children]
+    if (items.length < 3) continue
+    for (let i = items.length - 1; i > 0; i--) {
+      const j = Math.floor(rand() * (i + 1));
+      [items[i], items[j]] = [items[j], items[i]]
+    }
+    items.forEach((it) => list.appendChild(it))
+    stats.shuffled++
+  }
+
+  // 4. Hidden decoys (last, so they never change what the steps above match): a copy of a number-bearing text with other digits, hidden in one of four ways.
+  const HIDE = [
+    (e) => { e.className = "s2-hidden-rule" },
+    (e) => { e.setAttribute("aria-hidden", "true") },
+    (e) => { e.style.cssText = "display:none" },
+    (e) => { e.hidden = true }]
+  const style = doc.createElement("style")
+  style.textContent = ".s2-hidden-rule { display: none }"
+  ;(doc.head || doc.documentElement).appendChild(style)
+  const ownText = (e) => [...e.childNodes].filter((n) => n.nodeType === 3).map((n) => n.textContent).join("")
+  const carriers = [...doc.querySelectorAll("td, dd, p, li, span, div")].filter((e) => /\d/.test(ownText(e)) &&
+    ownText(e).length < 160 && !e.closest("script, style, select, button, a"))
+  const step = Math.max(1, Math.floor(carriers.length / 12))
+  for (const el of carriers.filter((_, i) => i % step === 0).slice(0, 12)) {
+    const decoy = doc.createElement("span")
+    decoy.textContent = " " + ownText(el).trim().replace(/\d/g, (d) => String((+d + 7) % 10)) + " S2DECOY"
+    HIDE[stats.decoys % HIDE.length](decoy)
+    el.appendChild(decoy)
+    stats.decoys++
+  }
+
+  return stats
+}

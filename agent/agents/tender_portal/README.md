@@ -13,7 +13,8 @@ packaging tariff, delivery commitment, setup pool). Decisions happen in [resolve
 
 ## Input / output
 
-- Input: brief (up to "## Site access"), portal login, reference taken from the brief by regex.
+- Input: brief (up to "## Site access"), portal login, reference from `common.reference` (the brief's first
+  identifier in parentheses, a bare number such as a year only if there is no other).
 - Output `RESULT`: `tender_reference`, `title`, `positions[]` (`position`, `description`, `quantity`, `unit`),
   `clarifications[]` (`number`, `date`, `evidence`: the number it is kept as), `other_relevant_facts`, plus `evidence`.
   The Q&A text reaches the resolvers only through the kept pages: copying it into `finish` cost output tokens and
@@ -22,8 +23,8 @@ packaging tariff, delivery commitment, setup pool). Decisions happen in [resolve
 ## Implementation
 
 `agent.py` `run` → `llm.investigate`, tag `tender-portal`, at most 45 steps, phase 1 deadline.
-Registers interest (the step the brief's Submission section names) if documents are behind it. Keeps the bill of quantities and every Q&A page
-with `save_evidence`.
+Registers interest (the step the brief's Submission section names) if documents are behind it. Keeps the bill of
+quantities and every Q&A page with `save_evidence`.
 
 ## Pitfalls
 

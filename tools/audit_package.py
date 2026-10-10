@@ -1,6 +1,6 @@
 """Audit the package before it is uploaded (I8): no public-1 value anywhere in it (every string and larger number in
-eval/expected.json, plus ids, hosts, site-specific path segments and addresses from run logs), no browser of its own
-outside browsers.py, no API key.
+eval/expected.json, plus ids, hosts, site-specific path segments and addresses from run logs), no German word of the
+public sites the brief doesn't tell every team, no browser of its own outside browsers.py, no API key.
 
 usage: python tools/audit_package.py [--agent DIR | --package <run_|reh_|sub_ id>] [run.log ...]
 """
@@ -42,8 +42,19 @@ def public_values(logs: list[str]) -> set[str]:
     return {value for value in found if len(value) >= 4}
 
 
+def site_words() -> set[str]:
+    """UI labels, error pages and status words typed from the public sites: German words from the quoted labels in the
+    scouting notes and from the scouted Q&A. Words the brief or the challenge tell every team are allowed."""
+    public = ROOT / "eval/public-1"
+    told = set(re.findall(r"\w+", ((public / "run-brief.md").read_text() + (public / "challenge-rfq.md").read_text()).lower()))
+    labels = re.findall(r'"([^"\n]+)"|„([^“\n]+)“|`([^`\n]+)`', (public / "scouting-notes.md").read_text())
+    text = " ".join(part for label in labels for part in label) + (public / "scout-public-qa.txt").read_text()
+    return {word for word in re.findall(r"[A-Za-zÄÖÜäöüß]{5,}", text)
+            if word.lower() not in told and (word[0].isupper() or re.search("[äöüß]", word))}
+
+
 def audit(agent: Path, logs: list[str]) -> list[str]:
-    values = public_values(logs)
+    values, words = public_values(logs), site_words()
     problems = [] if (agent / "agent.py").is_file() else [f"no agent.py in {agent}"]
     for path in sorted(agent.rglob("*")):
         if not path.is_file() or ".venv" in path.parts or "__pycache__" in path.parts or path.suffix == ".lock":
@@ -51,6 +62,7 @@ def audit(agent: Path, logs: list[str]) -> list[str]:
         text = path.read_text(errors="ignore")
         name = str(path.relative_to(agent))
         problems += [f"{name}: public-1 value {value}" for value in values if value in text]
+        problems += [f"{name}: public site word {word}" for word in sorted(words) if re.search(rf"(?<!\w){word}(?!\w)", text)]
         if path.suffix == ".py" and path.name != "browsers.py" and re.search(r"\.launch(_persistent_context)?\(", text):
             problems.append(f"{name}: launches its own browser")
         if re.search(r"\bsk-[A-Za-z0-9_-]{20,}|api[_-]?key\s*=\s*[\"'][^\"']{12,}", text, re.I):

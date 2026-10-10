@@ -1,5 +1,5 @@
-"""Continuous test runs: every new head of origin/p1/* and origin/p2/* is merged onto the base (origin/main plus this
-branch's pushed head) in a scratch worktree, passes the free gates, then goes to `atira test-run`. Finished runs are
+"""Continuous test runs: origin/main, and every new head of origin/p1/*, origin/p2/* and this clone's pushed branch merged
+onto origin/main in a scratch worktree, passes the free gates, then goes to `atira test-run`. Finished runs are
 scored with eval/compare.py and appended to bench/RUNS.md. Nothing is pushed. One call is one tick; cron repeats it.
 
 usage: python tools/ci.py            # one tick
@@ -49,13 +49,15 @@ def load() -> dict:
 
 
 def candidates() -> list[tuple[str, list[str]]]:
-    """(name, refs merged onto origin/main), in priority order: base, each branch, all branches together."""
+    """(name, refs merged onto origin/main), in priority order: main alone, each branch, all branches together.
+    Each branch is measured against main alone: an unmerged branch in the base hides or blocks the others."""
     heads = sh("git", "for-each-ref", "--format=%(refname:short)", "refs/remotes/origin").split()
     branches = sorted(h for h in heads if h.removeprefix("origin/").startswith(BRANCHES))
-    # the pushed head of this branch when it tracks one (a server clone only fetches), else the local HEAD
-    base = [sh("git", "rev-parse", "@{upstream}", check=False) or sh("git", "rev-parse", "HEAD")]
-    out = [("base", base)] + [(b.removeprefix("origin/"), base + [b]) for b in branches]
-    return out + [("all", base + branches)] * (len(branches) > 1)
+    # this clone's pushed branch is one more candidate (a server clone only fetches)
+    own = sh("git", "rev-parse", "--abbrev-ref", "@{upstream}", check=False)
+    branches += [own] * (own.startswith("origin/") and own not in branches + ["origin/main"])
+    out = [("main", [])] + [(b.removeprefix("origin/"), [b]) for b in branches]
+    return out + [("all", branches)] * (len(branches) > 1)
 
 
 def build(name: str, refs: list[str]) -> tuple[Path, str, str]:
@@ -67,7 +69,7 @@ def build(name: str, refs: list[str]) -> tuple[Path, str, str]:
         if subprocess.run(["git", "merge", "--no-edit", "-q", ref], cwd=path, capture_output=True).returncode:
             sh("git", "merge", "--abort", cwd=path, check=False)
             raise RuntimeError(f"merge conflict with {ref}")
-    label = f"{name}@{sh('git', 'rev-parse', '--short', refs[-1])}"
+    label = f"{name}@{sh('git', 'rev-parse', '--short', refs[-1] if refs else 'origin/main')}"
     return path, sh("git", "rev-parse", "HEAD:agent", cwd=path), label
 
 

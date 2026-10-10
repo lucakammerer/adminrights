@@ -15,6 +15,8 @@ RESULT = obj(
                         number_format=STR, scales=arr(obj(from_quantity=NUM, price_as_shown=STR))),
     other_relevant_facts=STR)
 FINISH_GRACE = 30  # seconds for a forced finish, which before ran to the stage cut and left the extract none
+NO_MATCH_REFUSALS = 2  # an unproven no_match goes back this often; then main's second agent confirms it
+CANDIDATES = arr(obj(material=STR, differs_in=STR, blocked=BOOL))
 REQUIRED = ("material_number", "available_stock_pieces", "lead_time_stock_weeks", "lead_time_production_weeks",
               "pieces_per_carton", "allocation_mass", "surcharge_mass", "price_condition")
 
@@ -57,6 +59,26 @@ as shown and the record's own number format and price unit.
                   "the scenario date), keep them with save_evidence, then call finish again.")
 
 
+def unproven(result: dict, evidence: list[str]) -> str:
+    """Why a no_match is not proven by the kept pages yet (rules 3, 8): a no_bid costs the whole bid, so it needs the
+    search's result pages and every candidate with its difference, each candidate on a kept page."""
+    candidates = [c for c in result.get("candidates") or [] if isinstance(c, dict) and str(c.get("material") or "").strip()]
+    if not evidence:
+        return ("Not done: a no_match needs proof. Keep every result page of the catalogue-group search with "
+                "save_evidence, then finish again with candidates (each material and what differs or that it is blocked). "
+                "An empty or over-broad search is not \"no match\": narrow or vary the query.")
+    if not candidates:
+        return ("Not done: list every candidate of the search in candidates, each with the attribute that differs from "
+                "the requirement (differs_in) or blocked true. If the search listed none, it was empty or too broad: "
+                "narrow or vary the query.")
+    text = "\n".join(evidence)
+    missing = [str(c["material"]).strip() for c in candidates if str(c["material"]).strip() not in text]
+    if missing:
+        return (f"Not done: no kept page shows {', '.join(missing)}. Keep the result or detail pages that show every "
+                "candidate with save_evidence, then finish again.")
+    return ""
+
+
 async def run(task, tab, requirement: dict, deadline):
     mission = f"""{context(task)}
 
@@ -65,8 +87,10 @@ Your part: find the material for one requirement in this ERP. Requirement: {json
 1. Search by the requirement's catalogue group (the brief says how records are found) and read every result page.
 2. Compare each candidate's bore, stroke, pressure, mounting and certification with the requirement: all must be
    exactly equal. The material must be active/released, not blocked (the site may show that in German or as a status
-   code). If you checked every candidate and none qualifies, finish with material_number empty, no_match true and say
-   why.
+   code). An empty or over-broad search is not "no match": narrow or vary the query until it lists candidates. If you
+   checked every candidate and none qualifies, keep every result page of the search with save_evidence and finish
+   with material_number empty, no_match true, why, and candidates: each candidate's material number with the
+   attribute that differs (differs_in) or blocked true.
 3. For the chosen material, keep with save_evidence every page that shows its facts: pieces per carton, allocation
    mass, surcharge mass, price index key, technical data, status, lead times (from stock and production), the stock
    by storage location / stock type, and the price condition valid on the scenario date including its quantity-scale
@@ -74,9 +98,16 @@ Your part: find the material for one requirement in this ERP. Requirement: {json
 Finish with material_number and why; the facts are read from the pages you kept."""
     pages: list[str] = []
     doubted: set[str] = set()
+    refusals = [0]
 
     async def check(result, evidence):
         pages[:] = evidence
+        if result.get("no_match") and not result.get("material_number"):
+            problem = unproven(result, evidence)
+            if problem and refusals[0] < NO_MATCH_REFUSALS:
+                refusals[0] += 1
+                return result, problem
+            return result, ""
         data, problem = await extract(task, requirement, result, evidence)
         differences = material_mismatch(requirement, data) if data.get("material_number") else []
         if differences and data["material_number"] not in doubted:  # once per material: a re-check that keeps it wins
@@ -88,7 +119,8 @@ Finish with material_number and why; the facts are read from the pages you kept.
 
     tag = f"erp:{requirement.get('catalogue_group')}"
     with llm.limits(deadline):  # a forced finish must not eat the time the extract below needs after it
-        result = await llm.investigate(tab, SYSTEM, mission, obj(material_number=STR, no_match=BOOL, why=STR),
+        result = await llm.investigate(tab, SYSTEM, mission,
+                                       obj(material_number=STR, no_match=BOOL, why=STR, candidates=CANDIDATES),
                                        deadline - FINISH_GRACE, tag, max_steps=40, check=check)
     if result.get("material_number") and not result.get("price_condition"):
         try:
