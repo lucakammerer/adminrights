@@ -5,9 +5,12 @@ import os
 import re
 import time
 from contextlib import contextmanager
+from urllib.parse import urljoin
 from contextvars import ContextVar
 
 from openai import AsyncOpenAI
+
+import paging
 
 MODEL = os.environ.get("AGENT_MODEL", "qwen3.8-flash-next")
 STEP_EFFORT = os.environ.get("STEP_EFFORT", "low")  # reasoning per browser step; latency is mostly thinking tokens
@@ -110,9 +113,12 @@ def _fn(name: str, description: str, properties: dict | None = None, required: l
 
 
 REF = {"ref": {"type": "integer", "description": "the number in [n:...] on the last page read"}}
+ALL_PAGES = {"all_pages": {"type": "boolean", "description": (
+    "true for a paged list (search results, messages, Q&A): code also reads every further page of it by the list's "
+    "own page links and returns them together, so one call does what took one per page")}}
 BROWSER_TOOLS = [
     _fn("read", "Read the current page again (text with [n:control] refs). Use offset to continue a long page.",
-        {"offset": {"type": "integer"}}),
+        {"offset": {"type": "integer"}, **ALL_PAGES}),
     _fn("goto", "Open a URL (absolute, or relative to the current page).", {"url": {"type": "string"}}, ["url"]),
     _fn("click", "Click a link, button, summary, menu item or tab by its ref.", REF, ["ref"]),
     _fn("fill", "Type text into an input or textarea by ref (replaces its value). For a slider, the value.",
@@ -136,13 +142,15 @@ BROWSER_TOOLS = [
             "ref": {"type": "integer"}}}}}, ["steps"]),
     _fn("fetch", "Read a same-site URL (e.g. a link's href, a document, a later results page) without leaving the "
         "current page. Faster than goto when you only need to read; returns text without refs; files and ZIPs are "
-        "opened.", {"url": {"type": "string"}}, ["url"]),
+        "opened.", {"url": {"type": "string"}, **ALL_PAGES}, ["url"]),
     _fn("save_evidence", "Keep a page as evidence for the bid, word for word (a message, a document, a requirements "
         "page, a Q&A page, a material record). Give its URL (a link target or results page) or leave it empty for the "
         "current page. The analyst reads exactly what you keep, so keep every page that holds facts the rules need, "
-        "and nothing unrelated.", {"url": {"type": "string"}, "label": {"type": "string",
-                                   "description": "what the page is, e.g. 'approval message in archive'"}},
-        ["label"]),
+        "and nothing unrelated. A page you have read already is kept without being shown again. Keep pages as soon "
+        "as you know you need them, several in one turn, and in the turn you are done, call finish right after them.",
+        {"url": {"type": "string"}, "label": {"type": "string",
+                                              "description": "what the page is, e.g. 'approval message in archive'"},
+         **ALL_PAGES}, ["label"]),
     _fn("note", "Save facts you have verified, so you keep them when old page reads are shortened. Be exact: "
         "copy ids, numbers, dates and wording.", {"text": {"type": "string"}}, ["text"]),
 ]
@@ -156,6 +164,11 @@ SHORTENED = "\n[older page read shortened: what you noted is kept; read it again
 # six Q&A pages 35 times)
 SHORTENED_KEPT = ("\n[older page read shortened; the page is kept word for word and the analyst reads it in full, so "
                   "don't open it again just to copy its values]")
+# Tools whose result is the tab's page after them: of several in one turn, only the last one's result carries the page
+# (the earlier pages are gone by the time the model reads them), unless a read reports something code or the browser
+# did (a download, a dialog).
+PAGE_ACTIONS = {"read", "goto", "click", "fill", "select", "check", "press", "back", "form"}
+QUIET_READ = re.compile(r"(Form steps: [^\n]*\n\n)?URL: [^\n]*\nTitle: [^\n]*\n\n")
 
 
 async def page_status(tab) -> int:
@@ -176,7 +189,8 @@ async def investigate(tab, system: str, mission: str, finish_schema: dict, deadl
     `warning` goes to the model `warn_at` seconds before the deadline. A finish forced by the deadline or the step
     limit, or sent after the warning, is marked `forced`: whatever it says, the agent did not finish its mission."""
     tools = BROWSER_TOOLS + (extra_tools or []) + [_fn(
-        "finish", "Return your findings when the mission is done (or when told time is up: your best findings).",
+        "finish", "Return your findings when the mission is done (or when told time is up: your best findings). "
+        "Tools of one turn run in order, so call finish in the same turn as your last save_evidence calls.",
         {"result": finish_schema}, ["result"])]
     messages = [{"role": "system", "content": system},
                 {"role": "user", "content": mission + "\n\nThe page now:\n" + await tab.read()}]
@@ -186,10 +200,10 @@ async def investigate(tab, system: str, mission: str, finish_schema: dict, deadl
         stage.append(evidence)
 
     kept: dict[str, int] = {}  # page text -> evidence number, so a page kept twice reaches the analyst once
+    shown: set[str] = set()  # pages the model has read (paging.body): keeping one again needn't show it again
 
-    async def keep(args):
-        """An error page is never evidence: retry a URL a few times, else tell the model it was not kept."""
-        url = (args.get("url") or "").strip()
+    async def load(url: str) -> tuple[str, int]:
+        """A page to keep and its HTTP status; a URL that answers with an error page is retried a few times."""
         for attempt in range(3):
             if url:
                 text = await tab.fetch(url)
@@ -200,15 +214,48 @@ async def investigate(tab, system: str, mission: str, finish_schema: dict, deadl
             if status < 400 or not url or attempt == 2:
                 break
             await asyncio.sleep(2 + 2 * attempt)
+        return text, status
+
+    def store(text: str, status: int, label: str, where: str) -> str:
+        """An error page is never evidence: the model is told it was not kept."""
         if status >= 400:
-            log(tag, f"evidence not kept: HTTP {status} {url or tab.page.url}")
+            log(tag, f"evidence not kept: HTTP {status} {where}")
             return (f"Not kept: the page answered HTTP {status} (an error page, usually transient). Open it again and "
                     f"keep it once it shows its content.\n{text[:1500]}")
         if text in kept:
             return f"Already kept as evidence #{kept[text]} (same content); not kept again."
-        evidence.append(f"### {args.get('label', '')}\n{text}")
+        evidence.append(f"### {label}\n{text}")
         kept[text] = len(evidence)
+        if paging.body(text) in shown:
+            return f"{KEPT_PREFIX}{len(evidence)}: {where}, the page as you read it before, kept word for word."
+        shown.add(paging.body(text))
         return f"{KEPT_PREFIX}{len(evidence)}.\n{text}"
+
+    async def keep(args):
+        url, label = (args.get("url") or "").strip(), args.get("label", "")
+        text, status = await load(url)
+        output = store(text, status, label, url or "the current page")
+        if not args.get("all_pages") or status >= 400:
+            return output
+        where, statuses = urljoin(tab.page.url, url), {}
+
+        async def fetch(page_url: str) -> str:
+            page, statuses[page_url] = await load(page_url)
+            return page
+        pages, note = await paging.rest(fetch, where, text)
+        return "\n\n".join([output] + [store(page, statuses.get(u, 0), f"{label} (further page)", u)
+                                        for u, page in pages] + [note])
+
+    async def whole_list(name: str, args: dict) -> str:
+        """read or fetch with all_pages: the page and every further page of its list, in one result."""
+        if name == "read":
+            url, first = tab.page.url, await tab.read()
+        else:
+            url = urljoin(tab.page.url, args.get("url") or "")
+            first = await tab.fetch(url)
+        pages, note = await paging.rest(tab.fetch, url, first)
+        shown.update(paging.body(page) for page in [first] + [page for _, page in pages])
+        return "\n\n".join([first] + [page for _, page in pages] + [note])
     warned = False
     for step in range(max_steps):
         left = deadline - time.time()
@@ -232,7 +279,9 @@ async def investigate(tab, system: str, mission: str, finish_schema: dict, deadl
             continue
         results: list[dict] = []
         steps.append(results)
-        for call in message.tool_calls:
+        names = [call.function.name for call in message.tool_calls]
+        last_action = max((i for i, name in enumerate(names) if name in PAGE_ACTIONS), default=-1)
+        for i, call in enumerate(message.tool_calls):
             name = call.function.name
             try:
                 args = json.loads(call.function.arguments or "{}")
@@ -267,7 +316,9 @@ async def investigate(tab, system: str, mission: str, finish_schema: dict, deadl
                 return {**result, "evidence": evidence}
             # a tool never outlasts the deadline, so the forced finish below still returns what was kept
             handler = handlers.get(name) if handlers else None
-            limit = max(1.0, deadline - time.time() if handler else min(TOOL_TIMEOUT, deadline - time.time()))
+            listed = bool(args.get("all_pages")) and name in ("read", "fetch", "save_evidence")
+            limit = max(1.0, deadline - time.time() if handler else
+                        min(TOOL_TIMEOUT * (2 if listed else 1), deadline - time.time()))
             try:
                 if name == "note":
                     output = "Saved."
@@ -275,6 +326,8 @@ async def investigate(tab, system: str, mission: str, finish_schema: dict, deadl
                     output = await asyncio.wait_for(keep(args), limit)
                 elif handler:
                     output = await asyncio.wait_for(handler(args), limit)
+                elif listed:
+                    output = await asyncio.wait_for(whole_list(name, args), limit)
                 elif name == "read":
                     output = await asyncio.wait_for(tab.read(int(args.get("offset") or 0)), limit)
                 else:
@@ -285,6 +338,12 @@ async def investigate(tab, system: str, mission: str, finish_schema: dict, deadl
                     output += "\n\n" + await asyncio.wait_for(tab.read(), 15)
                 except Exception:  # noqa: BLE001
                     pass
+            quiet = QUIET_READ.match(output) if name in PAGE_ACTIONS and i < last_action else None
+            if quiet:  # a later action of this turn shows the page
+                output = ((quiet.group(1) or f"Done: {name}.").rstrip() +
+                          "\n(The page after this turn's actions is in the result of its last one.)")
+            elif (name in PAGE_ACTIONS or name == "fetch") and not listed and not output.startswith("Error"):
+                shown.add(paging.body(output))
             entry = {"role": "tool", "tool_call_id": call.id, "content": output}
             messages.append(entry)
             results.append(entry)
