@@ -111,6 +111,11 @@ async def main() -> int:
             result = await erp_agent.run(task, tab, req, erp_end - 30)
             if result.get("forced"):  # cut off: its search did not finish, so it can't have proven "no match"
                 result.pop("no_match", None)
+            if result.get("no_match") and erp_end - 30 - time.time() > 150:  # a no_bid costs the bid: confirm it (I11)
+                second = await erp_agent.run(task, await fresh(erp_tab), req, erp_end - 30)
+                llm.log(f"erp:{req.get('catalogue_group')}", f"no-match check found {second.get('material_number')!r}")
+                if second.get("material_number") and not second.get("forced"):
+                    return second
             return result
 
         async def erp_for(key, req, first):
