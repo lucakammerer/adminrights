@@ -2,8 +2,8 @@
 checkout's HEAD) in a scratch worktree, passes the free gates, then goes to `atira test-run`. Finished runs are scored
 with eval/compare.py and appended to bench/RUNS.md. Nothing is pushed. One call is one tick; /loop repeats it.
 
-usage: python bench/ci.py            # one tick
-       python bench/ci.py --dry-run  # everything except starting test runs
+usage: python tools/ci.py            # one tick
+       python tools/ci.py --dry-run  # everything except starting test runs
 """
 import json
 import re
@@ -62,27 +62,17 @@ def build(name: str, refs: list[str]) -> tuple[Path, str, str]:
 
 def gates(path: Path) -> list[str]:
     """Free checks before a test run is spent. Returns the failures."""
-    agent = path / "agent"
     failed = []
-    if subprocess.run([sys.executable, "-m", "compileall", "-q", str(agent)], capture_output=True).returncode:
+    if subprocess.run([sys.executable, "-m", "compileall", "-q", str(path / "agent")], capture_output=True).returncode:
         failed.append("compile")
     logs = [str(p) for p in (CI / "logs").glob("*.log")]
-    if subprocess.run([sys.executable, str(ROOT / "eval/leak.py"), "--agent", str(agent), *logs],
+    if subprocess.run([sys.executable, str(ROOT / "tools/audit_package.py"), "--agent", str(path / "agent"), *logs],
                       capture_output=True).returncode:
-        failed.append("leak")
-    own = [str(p.relative_to(agent)) for p in agent.rglob("*.py")
-           if p.name != "browsers.py" and ".venv" not in p.parts and re.search(r"\.launch\(", p.read_text())]
-    if own:
-        failed.append(f"own browser in {own}")
-    replay = subprocess.run([sys.executable, "-c", (
-        "import json, sys; sys.path.insert(0, sys.argv[1]); import calc; "
-        "print(json.dumps(calc.compute(json.load(open(sys.argv[2])))['answer']))"),
-        str(agent), str(ROOT / "bench/fixtures/facts.json")], capture_output=True, text=True)
-    answer = CI / "replay.json"
-    answer.write_text(replay.stdout)
-    scored = subprocess.run([sys.executable, str(ROOT / "eval/compare.py"), str(answer)], capture_output=True, text=True)
-    if "quality 100.00" not in scored.stdout:
-        failed.append("calc replay below 100")
+        failed.append("audit")
+    tests = subprocess.run(["uv", "run", "--project", str(ROOT / "agent"), "--no-sync", "python", "-m", "unittest",
+                            "discover", "-s", "tests"], cwd=path, capture_output=True, text=True)
+    if tests.returncode:
+        failed.append("tests: " + (re.findall(r"^(?:FAIL|ERROR): (\S+)", tests.stderr, re.M) or ["see unittest"])[0])
     return failed
 
 
@@ -106,7 +96,7 @@ def collect(state: dict) -> list[str]:
             evaluated = (re.findall(r"quality ([\d.]+)", scored) or ["–"])[0]
         score = detail.get("score") or {}
         platform = f"{score.get('quality', 0)}, {'eligible' if score.get('eligible') else 'not eligible'}"
-        minutes = (score.get("duration_ms") or 0) / 60000
+        minutes = (score.get("duration_ms") or (detail.get("finished_at") or 0) - (detail.get("started_at") or 0)) / 60000
         cost = (detail.get("cost_micro_usd") or 0) / 1e6
         started = time.strftime("%Y-%m-%d %H:%M", time.gmtime((detail.get("started_at") or 0) / 1000))
         row = (f"| {started} | {run_id} | {info['label']} | {platform} | {evaluated} | {minutes:.0f} min | "

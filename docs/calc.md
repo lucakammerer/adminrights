@@ -29,6 +29,9 @@ reference, discount, pool fee, bonus bands.
 6. Final price = base (discounted per rule) + surcharge (discounted only for `base_and_surcharge`)
    + (setup + pool share + packaging − bonus) / quantity, HALF_UP once.
 7. Lead time: commitment if the material matches and demand ≤ ceiling; else stock if stock ≥ demand; else production.
-8. Total = Σ quantity × final price, to the cent. Plus a calculation trace (`trace`) for the logs.
+8. Total = Σ quantity × final price, to the cent. Plus a calculation trace (`trace`) for the logs; a position priced
+   without its FX rate or metal index is marked `MISSING` there.
+
+Tests: `tests/test_calc.py` (public-1 golden test from `tests/fixtures/facts.json`, values written as text, parsing).
 
 Reported fields: base, surcharge per piece (mass + setup, before discount), packaging per piece, bonus per position.

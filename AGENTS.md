@@ -31,7 +31,8 @@ you as a coding agent; humans read `README.md`.
 - `agent/run.py`, `agent/browsers.py`: run contract and browsers (starter kit)
 - `docs/`: what spans agents: `RULES.md` (every rule we are judged by), `IMPLEMENTATION_PLAN.md` (the system, the
   target, the backlog), `challenge.md`, `calc.md`; start at `docs/README.md`
-- `eval/`: reference answers, the scorer `compare.py` and public-1 data; `tools/`: dev helpers (`dev-env.sh`)
+- `eval/`: reference answers, the scorer `compare.py` and public-1 data; `tests/`: unit tests; `tools/`: dev
+  helpers (`dev-env.sh`), the package audit `audit_package.py`, the test loop `ci.py`; `bench/RUNS.md`: every run
 
 ## Who owns what
 
@@ -53,14 +54,16 @@ runs.
 atira models proxy                                  # terminal 1, keep it open
 cd agent && eval "$(atira scout --env)"             # terminal 2: scouting logins, model variables
 HEADLESS=1 uv run --no-sync python agent.py         # one local run, never counts
+uv run --project agent --no-sync python -m unittest discover -s tests   # from the repo root, in seconds
+python tools/audit_package.py                       # no public-1 value, no own browser in agent/
 atira test-run .                                    # sandbox, points per field, not on the leaderboard
 atira submit .                                      # only after Luca approves and docs/RULES.md §9 holds
 ```
 
 ## Branches and test runs
 
-Push to `p1/<topic>` (Person 1) or `p2/<topic>` (Person 2), started from main. `bench/ci.py` tests every new head
-within minutes; results land in `bench/RUNS.md`. Details and the submission gate: `docs/release.md`.
+Finn pushes to `p1/<topic>`, Yazan to `p2/<topic>`, started from main. `tools/ci.py` tests every new head within
+minutes; results land in `bench/RUNS.md`. Details and the submission gate: `docs/release.md`.
 
 ## Glossary
 
