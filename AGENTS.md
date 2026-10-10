@@ -54,6 +54,7 @@ runs.
 atira models proxy                                  # terminal 1, keep it open
 cd agent && eval "$(atira scout --env)"             # terminal 2: scouting logins, model variables
 HEADLESS=1 uv run --no-sync python agent.py         # one local run, never counts
+# runs need OPENROUTER_API_KEY (Haiku); AGENT_MODEL=qwen3.8-flash-next runs on the hosted Qwen instead
 tools/score.sh                                      # from the repo root: local dry run (DRY_RUN=1, no submission) + points per field
 uv run --project agent --no-sync python -m unittest discover -s tests   # from the repo root, in seconds
 tools/check_release.sh                              # before every submit: audit, tests, agent.json
