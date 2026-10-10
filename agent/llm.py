@@ -15,7 +15,9 @@ OPENROUTER = "/" in MODEL  # "<provider>/<model>" runs on OpenRouter with the te
 CACHE = {"extra_body": {"cache_control": {"type": "ephemeral"}}} if MODEL.startswith("anthropic/") else {}
 STEP_EFFORT = os.environ.get("STEP_EFFORT", "low")  # reasoning per browser step; latency is mostly thinking tokens
 KEEP_STEPS = 4  # tool results of the latest steps stay in full; older page reads shrink so the context stays small
-CALL_TIMEOUT = 120  # one model call; a slower one is retried while its deadline allows (steps took 20-90 s under load)
+# one model call; a slower one is retried while its deadline allows. Qwen steps took 20-90 s under load; Haiku's
+# slowest took 17 s, while about one in six OpenRouter calls through the run proxy never came back
+CALL_TIMEOUT = 45 if OPENROUTER else 120
 CHECK_TIMEOUT = 60  # one model call inside a finish check (ERP extract: 13-21 s); one hung call cost a position
 TOOL_TIMEOUT = 60  # one browser tool; a fetch that hung 109 s held the tender agent to its cut, its kept pages lost
 
