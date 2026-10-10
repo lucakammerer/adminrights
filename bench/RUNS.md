@@ -5,6 +5,7 @@ logged answer scored by `eval/compare.py` (what the bid would have scored if sig
 
 | Date (UTC) | Run | Commit | Platform | Eval | Time | Cost | Outcome and top problem (owner) |
 | --- | --- | --- | --- | --- | --- | --- | --- |
+| 2026-10-10 18:03 | run_84f19f49ee5beba6 | p1/configurator-by-label@d40b028 | 41, eligible | 100.00 | 18 min | $0.190 | Correct answer (eval 100) at 716 s, signed with 2 of 5 positions: one submit model step took 145 s (811→956 s, timeout and retry), then the time warning omitted 01.01/01.03/01.05. Not the label change itself; a slow step in the submit phase costs whole positions (Finn: a submit step bounded below `CALL_TIMEOUT`, or the answer earlier). |
 | 2026-10-10 17:45 | run_7c8e518250acf788 | base@6345945 | 100, eligible | 100.00 | 16 min | $0.179 | Second 100 on the same package as run_acc211d89c011277 (PR #28): submission gate met. |
 | 2026-10-10 17:28 | run_546683ad6ca0d354 | (teammate, unlabeled) | 100, eligible | – | 15 min | $0.182 | Signed 100. |
 | 2026-10-10 17:26 | run_acc211d89c011277 | luca/submit-unpriced-positions@41e9cec | 100, eligible | 100.00 | 13 min | $0.181 | Main 08b39c5 plus the quality fixes: 100 in 13:17, the best cost × time so far (144 $·s). |
