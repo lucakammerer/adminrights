@@ -19,7 +19,8 @@ senders), read at run time by `common.mail_records`, not from public-1.
 ## Implementation
 
 `agent.py` `run` → `llm.investigate`, tag `webmail` (`webmail-2`, `webmail-3` for the others), at most 60 steps,
-phase 1 deadline. `agent.main` runs up to `AGENTS` (3) of them at once, each in its own tab with its share of the
+phase 1 deadline. `agent.main` first runs `login` (tag `webmail-login`: three logins at once in one browser expired each
+other's form and cost 150 s), then up to `AGENTS` (3) of them at once, each in its own tab with its share of the
 records (`groups`): the technical release alone first, since the specification resolver and with it the ERP searches
 wait only for that share, then the other records in turns; with fewer records than agents, one agent takes all.
 `merge` joins their results (each kept page once). Under load a step took 15-30 s and one agent for every record

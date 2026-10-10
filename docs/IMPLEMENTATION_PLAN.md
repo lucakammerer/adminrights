@@ -68,13 +68,13 @@ The work goes in this order (backlog §12):
 Phase 0, no browser
     resolvers.sites: a model assigns each website its role from the brief (names and ids differ per dataset)
 Phase 1, parallel, one browser each, wrap-up at end − 10 min, hard cut 30 s later
-    tender_portal.run · supplier_portal.run · webmail.run (up to 3 at once, each with its share of the brief's mail
-    records, the technical release first) · erp.login
+    tender_portal.run · supplier_portal.run · webmail.login, then webmail.run (up to 3 at once, each with its share of
+    the brief's mail records, the technical release first; one login first, three at once expired each other) · erp.login
     submit.run starts once webmail.run is done (not with DRY_RUN=1 or an API target), in a fresh tender-portal tab,
     deadline end − 20 s: bidder data and offer kind, then it waits in bid_values for the bid (phase 5)
 Phase 2, no browser
-    resolvers.specs once supplier_portal and the technical-release share of webmail are done, unless the tender agent is done already (then
-    requirements starts at once): the governing requirements without the tender (cut where the ERP searches keep
+    resolvers.specs once supplier_portal and the technical-release share of webmail are done, unless all of phase 1 is done
+    already (then requirements starts at once): the governing requirements without the tender (cut where the ERP searches keep
     ERP_SEARCH_MIN, 60 s: end − 8 min); each distinct one starts its ERP search (phase 3) once erp.login is done,
     while the tender agent is still working
     resolvers.requirements and resolvers.commercials once all of phase 1 is done; with early ERP searches,

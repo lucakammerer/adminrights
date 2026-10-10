@@ -47,9 +47,9 @@ means. The output is typed facts for `calc`, which does all the arithmetic.
   model assigns the other roles (two attempts of at most `SITES_TIMEOUT` seconds each, the second asking only for the
   roles still open; answers that aren't one of the websites are ignored); a role still open gets a remaining website
   by elimination. It never fails the run.
-- `specs` runs as soon as the supplier portal and webmail agents are done, effort medium, while the tender agent is
-  still working: the ERP searches start from its answer, not from `requirements`. It is skipped when the tender agent
-  is done first (or no specification was kept): `requirements` then starts at once and a second call would only
+- `specs` runs as soon as the supplier portal agent and the webmail agent with the technical release are done, effort
+  medium, while the tender agent or the other webmail agents are still working: the ERP searches start from its
+  answer, not from `requirements`. It is skipped when all of phase 1 is done by then (or no specification was kept): `requirements` then starts at once and a second call would only
   compete with it. Its governing-requirement text
   (`GOVERNING`) and value schema (`SPEC_JSON`) are the ones `requirements` uses, so both decide the same values.
 - `requirements` runs after phase 1, effort medium, alongside the ERP searches; `agent.main` matches its positions to

@@ -221,10 +221,15 @@ async def main() -> int:
 
         phase1 = end - 10 * 60  # agents wrap up here; hard cut 30 s later
         # several webmail agents at once, each with its share of the brief's records; the first (the technical release)
-        # works the mailbox's own tab, the others fresh ones. The specification resolver needs only the first.
+        # works the mailbox's own tab, the others fresh ones, once one login is through. The specification resolver
+        # needs only the first.
         shares = webmail.groups(task["brief"])
+        mail_login = asyncio.create_task(safe("webmail-login", webmail.login(task, tabs["webmail"], phase1),
+                                              phase1 + 30)) if len(shares) > 1 else None
 
         async def mail_share(i: int, records: list[dict]):
+            if mail_login:
+                await mail_login
             tag = "webmail" if i == 0 else f"webmail-{i + 1}"
             tab = tabs["webmail"] if i == 0 else await fresh(tabs["webmail"])
             return await safe(tag, webmail.run(task, tab, phase1, records, len(shares) == 1, tag), phase1 + 30)
@@ -278,13 +283,14 @@ async def main() -> int:
 
         async def search_early():
             """The ERP searches need the governing requirements, not the quantities: they start once the
-            specification, the mail and the ERP login are in, while the tender agent may still be working."""
+            specification, the technical mail and the ERP login are in, while the tender agent or the other mail agents
+            may still be working."""
             spec, mail = await asyncio.gather(spec_job, mail_jobs[0])
             if not spec.get("evidence"):  # nothing to decide from: the searches wait for the requirements
                 llm.log("specs", "no specification kept: no early ERP searches")
                 return
-            if tender_job.done():  # requirements starts now and decides the same values: specs would only compete
-                llm.log("specs", "tender agent already done: no early ERP searches")
+            if tender_job.done() and mail_job.done():  # requirements starts now and decides the same values
+                llm.log("specs", "phase 1 already done: no early ERP searches")
                 return
             rows = await resolve("specs", lambda effort: resolvers.specs(task, spec, mail, effort),
                                  erp_search_end - ERP_SEARCH_MIN, governing)

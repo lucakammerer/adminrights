@@ -1,6 +1,6 @@
 """Webmail agent: approvals and condition mails from the sales mailbox. See README.md."""
 import llm
-from agents.common import ALSO_KEEP, STR, login_line, mail_records, obj, system, technical_records
+from agents.common import ALSO_KEEP, BOOL, STR, login_line, mail_records, obj, system, technical_records
 
 
 RESULT = obj(kept=STR, own_address=STR, search_url=STR, other_relevant_facts=STR)
@@ -43,6 +43,15 @@ def wanted(records: list[dict]) -> str:
     return ("The records the brief's rules name, as the brief states them. Every sender is the local part at the "
             "bidder's own mailbox domain (the mailbox shows its own address); a sender with another domain, even a "
             "similar one, is someone else:\n" + "\n".join(lines))
+
+
+async def login(task, tab, deadline):
+    """Log in once before the parallel agents start: three logins at once in one browser expired each other's form
+    and cost the mailbox 150 s."""
+    mission = f"""{login_line(tab.site)}
+Your part: log in to this mailbox and get past every cookie, notice or unlock step until you see its messages. Then
+finish with {{"ok": true}}."""
+    return await llm.investigate(tab, system(task), mission, obj(ok=BOOL), deadline, "webmail-login", max_steps=20)
 
 
 async def run(task, tab, deadline, records: list[dict] | None = None, alone: bool = True, tag: str = "webmail"):
