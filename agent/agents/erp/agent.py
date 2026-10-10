@@ -42,7 +42,7 @@ available_stock_pieces is the freely usable/unrestricted stock only (not blocked
 price_condition is the condition record valid on the scenario date (inclusive), with every scale and its price exactly
 as shown and the record's own number format and price unit.
 {json.dumps(RESULT['properties'], ensure_ascii=False)}"""
-    data = await llm.ask_json(RESOLVE, question)
+    data = await llm.ask_json(RESOLVE, question, effort="low")
     data["material_number"] = data.get("material_number") or chosen["material_number"]
     pc = data.get("price_condition") or {}
     missing = [f for f in REQUIRED if data.get(f) in (None, "", [], {})]

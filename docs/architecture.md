@@ -7,12 +7,12 @@ and its documentation (`README.md`); `agent/agents/common.py` holds what they sh
 ```
 main (budget = min(time left, 19 min), end = start + budget)
  ├─ Phase 0: resolvers.sites assigns each website its role from the brief (names and ids differ per dataset)
- ├─ Phase 1, parallel, one browser each, deadline end − 9 min
+ ├─ Phase 1, parallel, one browser each, wrap-up at end − 10 min, hard cut 30 s later
  │   tender_portal.run · supplier_portal.run · webmail.run · erp.login
- ├─ Phase 2, no browser
+ ├─ Phase 2, no browser, hard cut end − 8 min (one retry with effort low until end − 7 min)
  │   resolvers.requirements (resolvers.commercials starts too, runs alongside phase 3)
- ├─ Phase 3, parallel in ERP tabs, deadline end − 6 min
- │   erp.run per distinct requirement; then await resolvers.commercials
+ ├─ Phase 3, parallel in ERP tabs, hard cut end − 6 min (unfinished requirements → positions omitted)
+ │   erp.run per distinct requirement; then resolvers.commercials, hard cut end − 5.5 min
  ├─ Phase 4, code
  │   calc.facts → calc.compute
  └─ Phase 5, deadline end − 20 s
@@ -20,6 +20,10 @@ main (budget = min(time left, 19 min), end = start + budget)
 ```
 
 With fewer than 4 browsers, `main` opens the remaining sites as tabs in browser 1.
+
+Every phase is cut hard by `safe` in `main`: an agent that overruns or crashes yields an empty result and the run
+moves on. Under load the hosted model can take 20–90 s per step; without hard cuts one run spent its whole budget
+before the submission and scored 0. Browser steps run with `reasoning_effort` low (`STEP_EFFORT`).
 
 ## The tool loop (`agent/llm.py` `investigate`)
 

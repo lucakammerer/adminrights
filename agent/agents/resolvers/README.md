@@ -46,7 +46,9 @@ older, future-dated records never apply. Without a condition group, `base` appli
 
 ## Implementation
 
-`agent.py` `sites`, `requirements`, `commercials`; system prompt `RESOLVE` in `agents/common.py`. `agent/llm.py` `ask_json`:
+`agent.py` `sites`, `requirements`, `commercials`; system prompt `RESOLVE` in `agents/common.py`. Reasoning effort:
+`sites` low, `requirements` and `commercials` medium. On public-1, low/medium/default all resolved every field
+correctly; medium took 129 s for both, default 238 s. `agent/llm.py` `ask_json`:
 JSON mode, up to 3 attempts.
 
 ## Open

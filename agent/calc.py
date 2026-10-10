@@ -7,6 +7,9 @@ CENT = Decimal("0.01")
 
 
 def d(value) -> Decimal:
+    """Models sometimes write numbers as text ("1.0873 EUR"): read the number in it."""
+    if isinstance(value, str):
+        value = number(value.split("=")[-1])  # "1 USD = 1.0873 EUR": the rate is right of "="
     return Decimal(str(value if value is not None else 0))
 
 
