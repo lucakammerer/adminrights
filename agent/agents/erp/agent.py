@@ -14,6 +14,7 @@ RESULT = obj(
     price_condition=obj(valid_from=STR, valid_to=STR, currency=STR, fx_key=STR, price_unit_pieces=NUM,
                         number_format=STR, scales=arr(obj(from_quantity=NUM, price_as_shown=STR))),
     other_relevant_facts=STR)
+FINISH_GRACE = 30  # seconds for a forced finish, which before ran to the stage cut and left the extract none
 REQUIRED = ("material_number", "available_stock_pieces", "lead_time_stock_weeks", "lead_time_production_weeks",
               "pieces_per_carton", "allocation_mass", "surcharge_mass", "price_condition")
 
@@ -84,8 +85,14 @@ Finish with material_number and why; the facts are read from the pages you kept.
                           "and choose the one that matches exactly, or finish with no_match if none does.")
         return data, problem
 
-    result = await llm.investigate(tab, SYSTEM, mission, obj(material_number=STR, no_match=BOOL, why=STR), deadline,
-                                   f"erp:{requirement.get('catalogue_group')}", max_steps=40, check=check)
+    tag = f"erp:{requirement.get('catalogue_group')}"
+    with llm.limits(deadline):  # a forced finish must not eat the time the extract below needs after it
+        result = await llm.investigate(tab, SYSTEM, mission, obj(material_number=STR, no_match=BOOL, why=STR),
+                                       deadline - FINISH_GRACE, tag, max_steps=40, check=check)
     if result.get("material_number") and not result.get("price_condition"):
-        result, _ = await extract(task, requirement, result, result.get("evidence", []))
+        try:
+            data, _ = await extract(task, requirement, result, result.get("evidence", []))
+            result = {**result, **data}
+        except Exception as error:  # noqa: BLE001  out of time: the material and its kept pages still count
+            llm.log(tag, f"extract failed: {type(error).__name__}: {str(error)[:200]}")
     return result
