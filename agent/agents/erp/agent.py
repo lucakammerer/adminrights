@@ -3,6 +3,7 @@ import json
 
 import llm
 from agents.common import BOOL, INT, NUM, RESOLVE, STR, SYSTEM, arr, context, login_line, obj
+from validate import material_mismatch
 
 
 RESULT = obj(
@@ -70,10 +71,18 @@ Your part: find the material for one requirement in this ERP. Requirement: {json
    date including its quantity-scale prices (prices may only be on a separate scales view).
 Finish with material_number and why; the facts are read from the pages you kept."""
     pages: list[str] = []
+    doubted: set[str] = set()
 
     async def check(result, evidence):
         pages[:] = evidence
-        return await extract(task, requirement, result, evidence)
+        data, problem = await extract(task, requirement, result, evidence)
+        differences = material_mismatch(requirement, data) if data.get("material_number") else []
+        if differences and data["material_number"] not in doubted:  # once per material: a re-check that keeps it wins
+            doubted.add(data["material_number"])
+            return data, (f"Not this material: per the kept pages {data['material_number']} differs from the "
+                          f"requirement: {'; '.join(differences)}. Compare every candidate of the catalogue group again "
+                          "and choose the one that matches exactly, or finish with no_match if none does.")
+        return data, problem
 
     result = await llm.investigate(tab, SYSTEM, mission, obj(material_number=STR, no_match=BOOL, why=STR), deadline,
                                    f"erp:{requirement.get('catalogue_group')}", max_steps=40, check=check)

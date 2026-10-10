@@ -27,7 +27,7 @@ flowchart LR
   end
 
   subgraph P3["3 · Materials · ⏱ −6 min"]
-    erp["🏭 ERP search<br/>one tab per spec"]
+    erp["🏭 ERP search<br/>one tab per spec<br/>no match checked twice"]
   end
 
   subgraph P4["4 · Calculate"]
@@ -35,7 +35,7 @@ flowchart LR
   end
 
   subgraph P5["5 · Submit · ⏱ −20 s"]
-    submit["✍️ Fill #amp; sign<br/>TAN from webmail"]
+    submit["✍️ Fill · read back<br/>sign with TAN from webmail"]
   end
 
   roles --> tender & supplier & mail & login
@@ -73,5 +73,6 @@ has. Source of truth: `main` in [`agent/agent.py`](agent/agent.py).
 atira models proxy                                  # terminal 1, keep it open
 cd agent && eval "$(atira scout --env)"             # terminal 2
 HEADLESS=1 uv run --no-sync python agent.py         # one local run
+tools/score.sh                                      # from the repo root: local dry run with points per field
 atira test-run .                                    # sandbox run with points per field
 ```

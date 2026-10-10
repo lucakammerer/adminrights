@@ -65,19 +65,20 @@ def compute(facts: dict) -> dict:
         return {"answer": {"tender_reference": reference, "decision": "no_bid", "currency": "EUR",
                            "discount_percent": float(percent), "positions": [], "total_net": 0},
                 "omitted": [], "trace": "a position has no matching active material: no_bid"}
-    omitted = [p["position"] for p in positions if not p.get("material_number") or not p.get("scales")]
+    omitted = [p["position"] for p in positions
+               if not p.get("material_number") or not p.get("scales") or p["quantity_pieces"] <= 0]
     positions = [p for p in positions if p["position"] not in omitted]
 
     rows = {}
     for p in positions:
-        qty = int(p["quantity_pieces"])
+        qty = int(d(p["quantity_pieces"]))
         unit = d(p.get("price_unit") or 1)
         fx = d(p.get("fx_eur_per_currency_unit") or 1) if (p.get("currency") or "EUR") != "EUR" else Decimal(1)
         base = cents(scale_price(p["scales"], qty) / unit * fx)
         mass = d(p.get("surcharge_mass_kg_per_piece")) * d(p.get("metal_index_eur_per_kg"))
         rows[p["position"]] = {"p": p, "qty": qty, "base": base, "mass": mass}
 
-    order_value = cents(sum(r["qty"] * r["base"] for r in rows.values()))
+    order_value = cents(sum((r["qty"] * r["base"] for r in rows.values()), Decimal(0)))
     if threshold not in (None, "") and order_value < d(threshold):
         percent = Decimal(0)
     rate = percent / 100
@@ -100,58 +101,84 @@ def compute(facts: dict) -> dict:
         base_net = base * (1 - rate) if rule in ("base", "base_and_surcharge") else base
         mass_net = mass * (1 - rate) if rule == "base_and_surcharge" else mass
         setup = d(p.get("setup_fee")) + pool.get(key, Decimal(0))
-        cartons = ceil(qty / int(p["pieces_per_carton"])) if p.get("pieces_per_carton") else 0
+        per_carton = int(d(p.get("pieces_per_carton")))
+        cartons = ceil(qty / per_carton) if per_carton else 0
         packaging = cartons * d(p.get("carton_price"))
         rebate = bonus.get(key, Decimal(0))
         unit_price = cents(base_net + mass_net + (setup + packaging - rebate) / qty)
         commitment = p.get("delivery_commitment") or {}
         ceiling = commitment.get("max_pieces", commitment.get("max_pooled_pieces"))
         if (commitment.get("material_number") or commitment.get("material")) == material and ceiling is not None \
-                and demand[material] <= int(ceiling):
-            weeks = int(commitment["weeks"])
+                and demand[material] <= d(ceiling):
+            weeks = int(d(commitment["weeks"]))
         elif d(p.get("stock")) >= demand[material]:
-            weeks = int(p["lead_time_stock_weeks"])
+            weeks = int(d(p["lead_time_stock_weeks"]))
         else:
-            weeks = int(p["lead_time_production_weeks"])
+            weeks = int(d(p["lead_time_production_weeks"]))
         total += qty * unit_price
         answer_rows.append({"position": key, "material_number": material, "quantity": qty,
                             "unit_price": float(unit_price), "lead_time_weeks": weeks,
                             "base_unit_price": float(base), "surcharge_per_unit": float(cents(mass + setup / qty)),
                             "packaging_per_unit": float(cents(packaging / qty)), "rebate_total": float(rebate)})
         trace.append(f"{key}: {qty} pcs {material} base {base} mass {mass} rule {rule} setup {setup} "
-                     f"cartons {cartons} packaging {packaging} rebate {rebate} -> {unit_price} x {qty}, {weeks} weeks")
+                     f"cartons {cartons} packaging {packaging} rebate {rebate} -> {unit_price} x {qty}, {weeks} weeks"
+                     + "".join(f" MISSING {gap}" for gap in p.get("gaps") or []))
     return {"answer": {"tender_reference": reference, "decision": "bid", "currency": "EUR",
                        "discount_percent": float(percent), "positions": answer_rows, "total_net": float(cents(total))},
             "omitted": omitted, "trace": "\n".join(trace + [f"omitted (unfinished): {omitted}"] * bool(omitted))}
 
 
 def number(text, fmt: str = "") -> float:
-    """A number as shown, in its locale: de-DE uses a decimal comma, en-US a decimal point."""
+    """A number as shown. When the number itself shows its format (both separators, or one repeated), that wins;
+    a single separator follows the format hint (de-DE: decimal comma), else a lone comma is decimal."""
     match = re.search(r"-?\d[\d.,]*", str(text))
     if not match:
         return 0.0
     s = match.group(0).rstrip(".,")
-    if fmt:
-        german = bool(re.search(r"\bde[-_]de\b|^de\b", fmt.strip(), re.I))
+    if "," in s and "." in s:
+        decimal = "," if s.rfind(",") > s.rfind(".") else "."
+    elif s.count(",") > 1 or s.count(".") > 1:
+        decimal = ""
+    elif fmt:
+        decimal = "," if re.search(r"\bde[-_]de\b|^de\b", fmt.strip(), re.I) else "."
     else:
-        german = "," in s and ("." not in s or s.rfind(",") > s.rfind("."))
-    if german:
-        s = s.replace(".", "").replace(",", ".")
-    else:
-        s = s.replace(",", "")
-    return float(s)
+        decimal = "," if "," in s else "."
+    if decimal == ",":
+        return float(s.replace(".", "").replace(",", "."))
+    return float(s.replace(",", "") if decimal == "." else s.replace(",", "").replace(".", ""))
 
 
 def grams_to_kg(text) -> float:
-    value = number(text, "de-DE" if re.search(r"\d,\d", str(text)) else "en-US")
-    return value / 1000 if re.search(r"\bg\b|g/", str(text)) and "kg" not in str(text) else value
+    """A mass as shown, in g or kg. Grams carry no decimals in practice, so "2.125 g" and "2,125 g" are 2125 g."""
+    s = str(text)
+    if re.search(r"\d\s*(g|gr|gramm|grams?)\b", s, re.I) and not re.search(r"kg|kilo", s, re.I):
+        return number(re.sub(r"(?<=\d)[.,](?=\d{3}\b)", "", s)) / 1000
+    return number(s, "de-DE" if re.search(r"\d,\d", s) else "en-US")
+
+
+def lookup(table: dict | None, *keys):
+    """A rate by its key as two models wrote it ("FX 6282" vs "fx-6282 (USD)"): exact match first, then one key
+    containing the other; a table with a single rate needs no key."""
+    def norm(key) -> str:
+        return re.sub(r"[^0-9A-Z]", "", str(key or "").upper())
+
+    rates = {norm(k): v for k, v in (table or {}).items()}
+    wanted = [k for k in map(norm, keys) if k]
+    for match in (lambda k, w: k == w, lambda k, w: k and (w in k or k in w)):
+        for key in wanted:
+            for k, v in rates.items():
+                if match(k, key):
+                    return v
+    return next(iter(rates.values())) if len(rates) == 1 else None
 
 
 def facts(tender, requirements, commercials, erp: dict) -> dict:
     by_pos = {c["position"]: c for c in commercials.get("positions", [])}
     positions = []
-    for req in requirements["positions"]:
-        key = req["position"]
+    for req in requirements.get("positions") or []:
+        key = req.get("position")
+        if not key:
+            continue
         e = erp.get(key) or {}
         c = by_pos.get(key, {})
         pc = e.get("price_condition") or {}
@@ -159,14 +186,10 @@ def facts(tender, requirements, commercials, erp: dict) -> dict:
         currency = (pc.get("currency") or "EUR").upper()
         fx = None
         if currency != "EUR":
-            fx = (commercials.get("fx_rates") or {}).get(pc.get("fx_key") or "")
-            if fx is None and len(commercials.get("fx_rates") or {}) == 1:
-                fx = next(iter(commercials["fx_rates"].values()))
-        index = (commercials.get("metal_indices") or {}).get(e.get("price_index_key") or "")
-        if index is None and len(commercials.get("metal_indices") or {}) == 1:
-            index = next(iter(commercials["metal_indices"].values()))
+            fx = lookup(commercials.get("fx_rates"), pc.get("fx_key"), currency)
+        index = lookup(commercials.get("metal_indices"), e.get("price_index_key"))
         positions.append({
-            "position": key, "quantity_pieces": int(req["final_quantity_pieces"]),
+            "position": key, "quantity_pieces": int(d(req.get("final_quantity_pieces"))),
             "material_number": e.get("material_number") or None, "no_match": e.get("no_match") is True,
             "scales": [{"min_quantity": s["from_quantity"], "price": number(s["price_as_shown"], fmt)}
                        for s in pc.get("scales") or []],
@@ -174,7 +197,7 @@ def facts(tender, requirements, commercials, erp: dict) -> dict:
             "fx_eur_per_currency_unit": fx,
             "surcharge_mass_kg_per_piece": grams_to_kg(e.get("surcharge_mass") or 0),
             "metal_index_eur_per_kg": index or 0,
-            "setup_fee": float(c.get("setup_fee") or 0) + number(e.get("setup_fee") or 0),
+            "setup_fee": float(d(c.get("setup_fee")) + d(e.get("setup_fee"))),
             "discount_applies_to": c.get("discount_applies_to") or "base",
             "stock": e.get("available_stock_pieces") or 0,
             "lead_time_stock_weeks": e.get("lead_time_stock_weeks") or 0,
@@ -184,6 +207,8 @@ def facts(tender, requirements, commercials, erp: dict) -> dict:
             "setup_pool_member": bool(c.get("setup_pool_member")),
             "allocation_mass": grams_to_kg(e.get("allocation_mass") or 0) * 1000,
             "project_bonus_member": bool(c.get("project_bonus_member")),
+            "gaps": [gap for gap, missing in (("FX rate", currency != "EUR" and fx is None),
+                                              ("metal index", e.get("surcharge_mass") and index is None)) if missing],
         })
     reference = commercials.get("tender_reference") or tender.get("tender_reference") or ""
     return {"tender_reference": reference, "discount": commercials.get("discount") or {},

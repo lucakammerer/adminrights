@@ -75,14 +75,16 @@ Phase 1, parallel, one browser each, wrap-up at end − 10 min, hard cut 30 s la
 Phase 2, no browser, hard cut end − 8 min (one retry with low effort until end − 7 min)
     resolvers.requirements (resolvers.commercials starts too and runs alongside phase 3)
 Phase 3, ERP tabs in parallel, hard cut end − 6 min (a cut search → its positions are omitted)
-    erp.run per distinct requirement; then resolvers.commercials, hard cut end − 5.5 min
+    erp.run per distinct requirement; a no_match is confirmed by a second erp.run when ≥ 150 s remain;
+    then resolvers.commercials, hard cut end − 5.5 min
 Phase 4, code
     calc.facts → calc.compute
-Phase 5, deadline end − 20 s
-    submit.run (+ get_tan in the webmail tab)
+Phase 5, deadline end − 20 s (DRY_RUN=1 stops before it)
+    submit.run (+ verify_summary read-back, get_tan in the webmail tab)
 ```
 
-With fewer than 4 browsers, the remaining sites open as tabs in browser 1. Every phase is cut hard by `safe`: the job
+With fewer than 4 browsers, the remaining sites open as tabs in browser 1. A site whose first load fails is logged
+(`first load failed`); its agent opens the URL itself. Every phase is cut hard by `safe`: the job
 runs as its own task whose model calls end by the cut (`llm.UNTIL`), and at the cut `safe` returns the fallback without
 waiting for the task to stop (`asyncio.wait_for` waited, and a call that ignored its cancellation held a 780 s cut until
 1093 s). A stage that was cut is in `CUT`; the submission then works in a fresh tab of that site. The submission is
@@ -100,7 +102,7 @@ Each agent is a folder `agent/agents/<name>/` with `agent.py` (mission, result s
 | `supplier_portal` | supplier portal | the revision marked current and all its requirements | 40 steps |
 | `webmail` | webmail | every message the rules need, inbox and archive | 60 steps |
 | `erp.login` | ERP | get past login, cookies, notices, gates | 20 steps |
-| `erp.run` | ERP (one tab each) | the material for one requirement; its pages kept; `check` → `extract` reads the facts | 40 steps |
+| `erp.run` | ERP (one tab each) | the material for one requirement; its pages kept; `check` → `extract` reads the facts, `validate.material_mismatch` refuses a wrong pick once | 40 steps |
 | `resolvers` | — | three `ask_json` calls: sites, requirements, commercials | 3 attempts each |
 | `submit` | tender portal | fill the wizard, sign | 70 steps |
 | `get_tan` | webmail | the newest TAN for the request just made | 12 steps, 2 min |
@@ -139,7 +141,8 @@ Every browser agent is the same loop; agents differ only in mission, result sche
   ERP `extract`).
 - **Calculator** (`agent/calc.py`, details in [calc.md](calc.md)): `facts` merges the agents' results, `compute`
   applies rules 3–9, 12, 15–18 and 22–27 in `Decimal` with HALF_UP; exact against the reference (PLAN_COMPARISON §2.3).
-- **Submission** (`agents/submit`): one model agent with the `form` tool and German number formatting; `get_tan`
+- **Submission** (`agents/submit`): one model agent with the `form` tool and German number formatting; before the TAN
+  `verify_summary` checks unit prices and total on the summary page in code; `get_tan`
   runs in the mail tab; guardrails in the mission (no extra positions, omit only listed ones, never tick our own terms,
   one TAN request). One `form` call per page, a configurator's dependent choices each followed by its apply button.
   First watchdog slice: `SIGN_BY` (180 s) before its deadline the agent is told to omit what isn't entered, request the
@@ -154,10 +157,10 @@ appears as `[tag  123s] n: tool {args}`.
 
 ### 3.6 Measured behaviour
 
-Full local dry run (PLAN_COMPARISON §2.4): every resolver fact correct; answer only at 1029 s, a false no-bid scored
-5 / 100; the tender agent took 12 minutes re-fetching the same pages, the ERP agents started after their deadline, and
-one resolver call took about 5 minutes. That run was on `3accb38`, before PR #5's hard phase cuts; measure again with
-the first test run (I9).
+Every test run is a row in [`bench/RUNS.md`](../bench/RUNS.md). Up to `3accb38` plus PR #5: the resolvers got every
+fact right in every run, and `calc` scores 100 on complete facts (`tests/test_calc.py`), but no run signed: ERP
+agents ran into the end − 6 min cut and the submit agent ran out of time (one model call hung 371 s). PR #9 bounds
+both; its first test run is the next row.
 
 ---
 
@@ -339,7 +342,7 @@ Same jobs and rules, different software, look, navigation, site names and data, 
 | --- | --- | --- |
 | Unit tests | calc golden test with facts as the pages show them, allocation ties, band edges, inclusive ceilings and thresholds; number parser; validators; selection | I10, I11, I14, I18 |
 | Recorded pages | pages saved from dry runs; reader tests for every trap category | I17 |
-| Dry run + score | `DRY_RUN=1` stops before the binding confirmation and writes `answer.json`; `eval/compare.py` scores it with the official weights | I7 |
+| Dry run + score | `tools/score.sh`: a local run with `DRY_RUN=1` stops after the answer, `eval/compare.py` scores the logged answer with the official weights | I7 |
 | Mutation tests | recorded pages relabelled, locale-swapped, nested in iframes, with injected decoys and shuffled rows: extraction must not change | I20 |
 | Chaos runs *(stretch)* | local runs with random 503s, a forced session expiry, slow responses: the run must still sign | — |
 | Mirror world *(stretch)* | a small local re-skin of the four jobs with information split differently and a synthetic scenario with a known answer | — |
@@ -372,9 +375,9 @@ AdminRights/
 ├── eval/                  # local: references, scorer, public-1 data
 │   ├── expected.json, derivation.md, compare.py, oracle.py
 │   └── public-1/          # scouting notes, brief, Q&A extract, scouting JSON, challenge and start pages (logins)
-├── tests/                 # local: calculator, parser and validator tests
+├── tests/                 # local: calculator, parser and validator tests; fixtures/
 ├── bench/                 # local: RUNS.md, one row per test run and submission
-└── tools/                 # local: dev-env.sh; later the audit, release check, score script and stress/ harness
+└── tools/                 # local: dev-env.sh, audit_package.py, ci.py (test loop, docs/release.md), stress/
 ```
 
 ---
@@ -394,21 +397,21 @@ Every item has exactly one owner. When it touches a file someone else owns (§14
 | I4 | Dependency graph + per-stage budgets (§4.1, §4.2). Since PR #5 every phase has a hard cut; remaining: start stages when their inputs exist, budgets computed at stage start | `agent.py`, `budget.py`, `agents/erp` | dry run: ERP starts during the first stage; answer < 8 min | T1.3, T3.2 | F |
 | I5 | Slimmer missions and inputs: no word-for-word copies in `finish` schemas when the evidence holds them; "every needed page kept → finish"; resolvers get only the evidence they need (object `finish` done in PR #5) | `agents/tender_portal`, `agents/supplier_portal`, `agents/resolvers`, `llm.py` | no page fetched twice without reason; commercials resolver much faster | T3.2, T4.2 | F |
 | I6 | Submit in two stages + watchdog: stage 1 at start, stage 2 with the answer, watchdog at end − 3 min | `agents/submit` | a short-budget run still signs | T1.3, 9 | F |
-| I6b | Read-back of the review page before the TAN: every entered value matches the answer | `agents/submit`, `validate.py` | a mistyped value is corrected before signing | T1.9, 7 | L |
-| I7 | Dry-run mode + `tools/score.sh` (run + `eval/compare.py`) | `agents/submit`, `tools/` | one command → a score | T4.3 | L |
-| I8 | Release tools: `tools/audit_package.py` + `tools/check_release.sh` (audit, tests, `agent.json`). The audit also runs on the uploaded package (`atira run_package`), not only on the repo | `tools/` | green on `main` and on the last uploaded package | T0.1, T0.2, T0.6, T1.1 | L |
+| I6b | ✅ Read-back before the TAN: `verify_summary` checks every unit price and the total net on the summary page in code | `agents/submit`, `validate.py` | a mistyped value is corrected before signing | T1.9, 7 | L |
+| I7 | Built, first full run pending: `DRY_RUN=1` stops `main` after the answer; `tools/score.sh` (run + `eval/compare.py`) | `agent.py`, `tools/` | one command → a score | T4.3 | L |
+| I8 | ✅ `tools/check_release.sh` (audit, tests, `agent.json`), `tools/audit_package.py` (public-1 values, site paths, own browsers, API keys; repo and `--package`), `tools/ci.py` (gates before every test run, docs/release.md). Was: release tools: `tools/audit_package.py` + `tools/check_release.sh` (audit, tests, `agent.json`). The audit also runs on the uploaded package (`atira run_package`), not only on the repo | `tools/` | green on `main` and on the last uploaded package | T0.1, T0.2, T0.6, T1.1 | L |
 | I9 | Right after I1's first slice: a sandbox test run of `main`, then the first scored submission as a safety net (we have none yet) | — | eligible, signed, on the leaderboard | D2, D3 | L |
 
 ### P1: correctness under pressure
 
 | ID | Change | Where | Acceptance | Rules | Owner |
 | --- | --- | --- | --- | --- | --- |
-| I10 | Strict numbers: inline format hints used; ambiguous forms refused (the agent re-reads); thousands separators in grams; `Decimal` end to end | `numbers.py`, `calc.py` | parser tests incl. the probes in PLAN_COMPARISON §2.3 | 4, 22 | L |
-| I11 | ERP match check in code + no-bid gate (§4.4); answer schema and arithmetic validated before signing | `agents/erp`, `validate.py`, `agents/submit` | tests with look-alike and blocked candidates | T1.6, 3, 7, 8 | L |
+| I10 | Strict numbers: a number's own format beats the hint ✅, thousands separators in grams ✅, text values ✅ (`tests/test_calc.py`); remaining: ambiguous forms refused (the agent re-reads); `Decimal` end to end | `numbers.py`, `calc.py` | parser tests incl. the probes in PLAN_COMPARISON §2.3 | 4, 22 | L |
+| I11 | ERP match check in code ✅ (`validate.material_mismatch` in the ERP `check`, `tests/test_validate.py`); no-bid gate ✅ (`main` `erp_search`: a `no_match` with ≥ 150 s left gets a second agent in a fresh tab; a material it finds wins); remaining: answer schema validated before signing | `agents/erp`, `validate.py`, `agents/submit` | tests with look-alike and blocked candidates | T1.6, 3, 7, 8 | L |
 | I12 | Mail topics and senders parsed from the brief; generic wording for the approval search | `agents/webmail` | no public mail subject in prompts | T0.11, 5, 10, 21 | Y |
 | I13 | Code-side retry of transient error pages; auto re-login; adaptive settle | `browser.py` | fewer model turns on the ERP in the dry-run log | T3.2 | Y |
-| I14 | Calculator tests: golden test, allocation ties, band edges, inclusive ceilings and thresholds | `tests/` | green | 4–9, 12, 15–18, 22–27 | L |
-| I15 | Loud failures instead of silent fallbacks (FX, metal index); omitted positions per rule 9 | `calc.py` | tests | 9, 22, 28 | L |
+| I14 | ✅ Calculator tests (`tests/test_calc.py`): golden test, values written as text, allocation ties, band edges, inclusive ceilings and thresholds, shared stock | `tests/` | green | 4–9, 12, 15–18, 22–27 | L |
+| I15 | Loud failures instead of silent fallbacks (FX, metal index): tolerant key match and `MISSING` in the trace ✅; omitted positions per rule 9 ✅ (also when all are omitted) | `calc.py` | tests | 9, 22, 28 | L |
 | I23 | Cost: cache-friendly loop (append-only history; when it grows too long, restart from the notes and kept evidence); measure Clef against Qwen for yes/no and pick decisions, then use it or drop it | `llm.py` | cached share of input up; cost per run ≤ $0.10 | T3.4 | F |
 | I24 | Stress harness for levels S1–S3 (§14.1) | `tools/stress/` | S1 and S3 pass; S2 time-boxed to 2 h | T1.12, 3, 19 | Y |
 

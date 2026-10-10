@@ -48,7 +48,7 @@ include it.
 
 | ID | Rule | Check |
 | --- | --- | --- |
-| T0.1 | MUST NOT put values from the public scenario or its websites into the package: references, material numbers, keys of any kind, prices, quantities, totals, discounts, dates, logins, TANs, receipt numbers. Applies to code, config, prompts, few-shot examples, notes, defaults and fallbacks, **and to the agent READMEs, which are uploaded with the package**. | `tools/audit_package.py` (I8); 0 hits on `main` `3accb38` |
+| T0.1 | MUST NOT put values from the public scenario or its websites into the package: references, material numbers, keys of any kind, prices, quantities, totals, discounts, dates, logins, TANs, receipt numbers. Applies to code, config, prompts, few-shot examples, notes, defaults and fallbacks, **and to the agent READMEs, which are uploaded with the package**. | `tools/audit_package.py` (I8), also on the uploaded package with `--package`; runs before every test run (`tools/ci.py`) |
 | T0.2 | MUST NOT ship site-specific navigation: no site URLs, paths, element ids or click sequences. Generic heuristics are fine. | audit; review |
 | T0.3 | A model MUST choose navigation targets, searches and relevant documents from what it observes at run time, and make the important decisions. | every navigation step is a model tool call in the log |
 | T0.4 | Helpers MAY extract a page the model chose, parse a document it chose, page through a result set it chose, calculate, validate, retry and fill forms. They MUST NOT discover and traverse the sites on their own to assemble the evidence (no crawler, no fixed script with the model as a fallback). | review |
@@ -72,7 +72,7 @@ include it.
 | T1.6 | The answer matches the run's `answer_schema` (read from the run, not copied). | ⚠️ not validated before signing (→ I11) |
 | T1.7 | Money in the form in German number format, two decimals. | ✅ `agents/submit` `german` |
 | T1.8 | Signing: request one TAN only when everything is entered; use the newest TAN mail for the exact reference after that request; valid 5 min; a new request invalidates the old TAN. | ✅ `get_tan` |
-| T1.9 | Saving is not submitting: sign and submit, also when positions are omitted. | ⚠️ no watchdog (F5 → I6) |
+| T1.9 | Saving is not submitting: sign and submit, also when positions are omitted. | ⚠️ watchdog is a warning to the model (`SIGN_BY`), not code (I6) |
 | T1.10 | Read the run from `GET /v1/runs/current` with `x-api-key` and our own User-Agent (Python's default is refused). | ✅ `run.py` |
 | T1.11 | Wizards: going back clears later steps; an expired session loses unsaved entries. Move forward step by step, saving each. | ✅ in the mission |
 | T1.12 | Site roles and the submission target come from the run (`access`, `submission`), never from assumed ids; an unknown id must not crash the run. | ✅ roles assigned by a model from the brief (PR #5); the `submission` target pins the tender portal, and an unclear assignment falls back by elimination instead of crashing (I3) |

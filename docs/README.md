@@ -9,6 +9,7 @@ checkpoints.
 | [RULES.md](RULES.md) | Every rule we are judged by: fair play, run validity, the 29 bid rules with where they live and their status, the Definition of Done |
 | [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) | The system today (run outline, tool loop, agents), the target, the backlog, process and work split |
 | [calc.md](calc.md) | Facts assembly and the arithmetic |
+| [release.md](release.md) | Test loop, gates, run log, submission gate |
 | [PLAN_COMPARISON.md](PLAN_COMPARISON.md) | Why the plan looks like this: evidence and verdicts from the merge (delete once read) |
 | [platform/](platform/) | Dated copies of the platform docs: API, CLI, fair play, run contract, scoring, submitting, building an agent |
 

@@ -3,6 +3,7 @@ code does the arithmetic, and a model enters and signs the bid. Each agent lives
 import asyncio
 import contextvars
 import json
+import os
 import sys
 import time
 
@@ -78,7 +79,10 @@ async def main() -> int:
         roles = await roles_job
         llm.log("sites", json.dumps({role: entry["siteId"] for role, entry in roles.items()}))
         for (role, entry), page in zip(roles.items(), pages):
-            await page.goto(entry["url"], wait_until="domcontentloaded")
+            try:
+                await page.goto(entry["url"], wait_until="domcontentloaded")
+            except Exception as error:  # noqa: BLE001  a slow site must not end the run: its agent opens the URL itself
+                llm.log(role, f"first load failed: {type(error).__name__}")
             tabs[role] = Tab(page, entry)
 
         phase1 = end - 10 * 60  # agents wrap up here; hard cut 30 s later
@@ -110,6 +114,11 @@ async def main() -> int:
             result = await erp_agent.run(task, tab, req, erp_end - 30)
             if result.get("forced"):  # cut off: its search did not finish, so it can't have proven "no match"
                 result.pop("no_match", None)
+            if result.get("no_match") and erp_end - 30 - time.time() > 150:  # a no_bid costs the bid: confirm it (I11)
+                second = await erp_agent.run(task, await fresh(erp_tab), req, erp_end - 30)
+                llm.log(f"erp:{req.get('catalogue_group')}", f"no-match check found {second.get('material_number')!r}")
+                if second.get("material_number") and not second.get("forced"):
+                    return second
             return result
 
         async def erp_for(key, req, first):
@@ -126,6 +135,8 @@ async def main() -> int:
         llm.log("facts", json.dumps(facts, ensure_ascii=False))
         llm.log("calc", result["trace"])
         llm.log("answer", json.dumps(result["answer"], ensure_ascii=False))
+        if os.environ.get("DRY_RUN"):  # local scoring stops before anything binding (tools/score.sh)
+            return 0
 
         specs = {r["position"]: ", ".join(f"{k} {r.get(k)}" for k in spec_keys) for r in requirements["positions"]}
         # a phase-1 agent that was cut may still be acting on its tab: the submission then works in a tab of its own
