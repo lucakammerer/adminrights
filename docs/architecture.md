@@ -33,6 +33,8 @@ Every browser agent is the same loop. Agents differ only in mission, result sche
 - **Evidence:** `save_evidence` keeps a page word for word. Only this evidence reaches the resolvers and `erp.extract`.
 - **Small context:** tool results of the last 4 steps stay in full (`KEEP_STEPS`); older ones are cut to 300
   characters. Whatever the agent wants to keep, it pins with `note`.
+- **`finish`:** a result that isn't a JSON object (Qwen sometimes sends a string with broken JSON) is refused while
+  more than 30 s remain.
 - **`check`:** optional validator on `finish`. If it reports a problem, `finish` is refused and the agent keeps
   working (used by the ERP agent).
 - **Time:** 60 s before the deadline the agent is told to finish now; after that `finish` is forced via `tool_choice`.

@@ -35,11 +35,13 @@ async def chat(messages: list, tools: list | None = None, **kwargs):
             await asyncio.sleep(2 + 3 * attempt)
 
 
-def parse_object(text: str) -> dict:
+def parse_object(text: str) -> dict | None:
+    """An object the model sent as a string; raw line breaks inside its strings are tolerated."""
     try:
-        return json.loads(text[text.find("{"):text.rfind("}") + 1])
+        value = json.loads(text[text.find("{"):text.rfind("}") + 1], strict=False)
     except ValueError:
-        return {"text": text}
+        return None
+    return value if isinstance(value, dict) else None
 
 
 async def ask_json(system: str, user: str) -> dict:
@@ -144,6 +146,12 @@ async def investigate(tab, system: str, mission: str, finish_schema: dict, deadl
                 result = args.get("result")
                 if isinstance(result, str):
                     result = parse_object(result)
+                    if result is None and deadline - time.time() > 30:
+                        log(tag, "finish refused: result is not a JSON object")
+                        messages.append({"role": "tool", "tool_call_id": call.id, "content":
+                                         "Not done: result must be a JSON object with the asked fields, not a string. "
+                                         "Call finish again with an object."})
+                        continue
                 result = result or {}
                 if check and deadline - time.time() > 45:
                     result, problem = await check(result, evidence)
@@ -179,7 +187,7 @@ async def investigate(tab, system: str, mission: str, finish_schema: dict, deadl
     messages.append({"role": "user", "content": "Stop now and call finish with your best findings."})
     reply = await chat(messages, tools, tool_choice={"type": "function", "function": {"name": "finish"}})
     for call in reply.choices[0].message.tool_calls or []:
-        result = json.loads(call.function.arguments or "{}").get("result")
-        result = json.loads(result) if isinstance(result, str) else (result or {})
-        return {**result, "evidence": evidence}
+        result = (parse_object(call.function.arguments or "{}") or {}).get("result")
+        result = parse_object(result) if isinstance(result, str) else result
+        return {**(result or {}), "evidence": evidence}
     return {"evidence": evidence}

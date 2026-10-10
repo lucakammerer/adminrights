@@ -30,6 +30,4 @@ with `save_evidence`.
 
 ## Open
 
-- `finish` sometimes comes back as a string; `llm.parse_object` recovers the object, else `{"text": ...}`. The answer's
-  reference then still comes from `resolvers.commercials`, but the agent's structured fields are lost.
 - Only searches the tender portal. If the private dataset puts Q&A elsewhere, they are missed.
