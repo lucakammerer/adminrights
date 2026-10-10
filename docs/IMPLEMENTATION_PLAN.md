@@ -135,7 +135,8 @@ Every browser agent is the same loop; agents differ only in mission, result sche
   check that fails or runs out of time lets the result through unchecked.
 - **Model:** `AGENT_MODEL`, default the hosted Qwen; browser steps run with low reasoning effort (`STEP_EFFORT`);
   `chat` tries up to 6 times, each attempt at most `CALL_TIMEOUT` (180 s; no SDK-internal retries) and all of them
-  bounded by the stage's `llm.UNTIL`, which `agent.safe`/`agent.start` set per stage; step calls end at the agent's
+  bounded by the stage's `llm.UNTIL`; an attempt without a reply after `HEDGE_AFTER` (45 s) sends the same request
+  again alongside and takes the first answer, since hung calls never answer while a fresh one answers in seconds, which `agent.safe`/`agent.start` set per stage; step calls end at the agent's
   deadline so the forced `finish` keeps its grace. Both limits hold on the wall clock (`asyncio.wait`, the call is
   dropped at its limit): the SDK's timeout only bounds the silence between bytes.
 - **Cut agents keep their evidence:** every `investigate` registers its evidence list in `llm.KEPT`, one per stage
