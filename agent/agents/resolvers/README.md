@@ -8,7 +8,8 @@ after phase 1, apply the rules to the evidence and return typed facts for `calc`
 **Input:** brief and the run's websites (id and URL, no logins). **Output:** one website per role: `tender_portal`,
 `supplier_portal`, `erp`, `webmail`. Runs first, while the browsers connect; `main` only addresses websites by role,
 because ids and names differ between datasets. The run's submission target is the tender portal; the model assigns
-the other roles (two attempts, at most `SITES_TIMEOUT` seconds; answers that aren't one of the websites are ignored);
+the other roles (two attempts of at most `SITES_TIMEOUT` seconds each, the second asking only for the roles still
+open; answers that aren't one of the websites are ignored);
 a role still open gets a remaining website by elimination. It never fails the run.
 
 ## requirements
