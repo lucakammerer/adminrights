@@ -6,6 +6,7 @@ import copy
 import json
 import sys
 import unittest
+from decimal import Decimal
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -46,6 +47,46 @@ class Golden(unittest.TestCase):
         self.assertEqual(result["answer"]["positions"], [])
         self.assertEqual(result["answer"]["tender_reference"], FACTS["tender_reference"])
         self.assertEqual(len(result["omitted"]), len(FACTS["positions"]))
+
+
+def synthetic(**position):
+    """One synthetic position at 10.00 EUR per piece, nothing else priced."""
+    base = {"position": "1", "quantity_pieces": 10, "material_number": "M", "scales": [{"min_quantity": 1, "price": 10}],
+            "stock": 100, "lead_time_stock_weeks": 1, "lead_time_production_weeks": 9}
+    return {"tender_reference": "T", "positions": [{**base, **position}]}
+
+
+class Edges(unittest.TestCase):
+    def test_discount_threshold_is_inclusive(self):
+        facts = synthetic()
+        facts["discount"] = {"percent": 10, "min_order_value": 100}
+        self.assertEqual(calc.compute(facts)["answer"]["discount_percent"], 10.0)
+        facts["discount"]["min_order_value"] = 100.01
+        self.assertEqual(calc.compute(facts)["answer"]["discount_percent"], 0.0)
+
+    def test_delivery_ceiling_is_inclusive_over_shared_demand(self):
+        commitment = {"material_number": "M", "max_pieces": 20, "weeks": 3}
+        facts = synthetic(delivery_commitment=commitment)
+        facts["positions"].append({**facts["positions"][0], "position": "2"})
+        self.assertEqual({p["lead_time_weeks"] for p in calc.compute(facts)["answer"]["positions"]}, {3})
+        commitment["max_pieces"] = 19
+        self.assertEqual({p["lead_time_weeks"] for p in calc.compute(facts)["answer"]["positions"]}, {1})
+
+    def test_stock_is_shared_across_positions(self):
+        facts = synthetic(stock=15)
+        facts["positions"].append({**facts["positions"][0], "position": "2"})
+        self.assertEqual({p["lead_time_weeks"] for p in calc.compute(facts)["answer"]["positions"]}, {9})
+
+    def test_bonus_bands_are_marginal(self):
+        bands = [{"from": 0, "to": 100, "percent": 0}, {"from": 100, "to": None, "percent": 10}]
+        self.assertEqual(calc.bonus_credit(Decimal("100"), bands), Decimal("0.00"))
+        self.assertEqual(calc.bonus_credit(Decimal("150"), bands), Decimal("5.00"))
+
+    def test_allocation_leftover_cents_go_to_largest_remainder_then_position(self):
+        self.assertEqual(calc.allocate(Decimal("1.00"), {"a": Decimal(1), "b": Decimal(1), "c": Decimal(1)}),
+                         {"a": Decimal("0.34"), "b": Decimal("0.33"), "c": Decimal("0.33")})
+        self.assertEqual(calc.allocate(Decimal("1.00"), {"a": Decimal(1), "b": Decimal(2)}),
+                         {"a": Decimal("0.33"), "b": Decimal("0.67")})
 
 
 class Parsing(unittest.TestCase):
