@@ -267,7 +267,7 @@ on disagreement it logs both, re-asks once, then the rule wins.
 
 | # | Rule | Status |
 | --- | --- | --- |
-| 1 | Visibility truth: drop `display:none`, `visibility:hidden`, zero opacity or font size, `hidden`, `aria-hidden` | ✅ |
+| 1 | Visibility truth: drop `display:none`, `visibility:hidden`, zero opacity or font size, `hidden`, `aria-hidden`; a checkbox or radio made transparent under a styled label stays a control (only display and visibility hide it) | ✅ |
 | 1b | Off-screen and screen-reader-only (clipped) text kept but marked `(off-screen text: …)` and counted: recorded pages showed no such hiding, and real values can live there (decided on the recordings) | ✅ I17 |
 | 2 | Reveal real values: image and canvas labels, tooltips (also `title` of plain elements), CSS-generated text (`::before`/`::after`), collapsed `<details>`, select options, input values; a canvas without text is marked; names, labels and tooltips skip hidden descendants (decoys inside them) | ✅ I17 |
 | 3 | Normalize text: remove invisible characters; keep number-format hints verbatim | ✅ |
@@ -326,10 +326,12 @@ Same jobs and rules, different software, look, navigation, site names and data, 
 | --- | --- |
 | Other site ids or names | roles and submission target from the run (I3) |
 | Other navigation and labels | model navigation over page text; generic prompts ✅ |
-| Information on other sites | gap sweep for missing facts and unresolved keys: agent ✅ (`agents/sweep`), stage in `main` open (I16) |
-| Other mail subjects | topics and senders from the brief ✅ (I12) |
+| Information on other sites | every gathering agent keeps rule-relevant records it finds on its site (`common.ALSO_KEEP`); resolvers get such pages by content (mail naming a position, pages naming a commercial record); gap sweep for open commercial facts during the ERP stage ✅ (I16) |
+| Other mail subjects | topics and senders from the brief, in several list shapes ✅ (I12) |
 | Other document formats | ZIP, CSV, TXT, HTML, PDF ✅ (I17) |
 | Other number and date conventions | strict parsing with hints (I10); UTC comparison |
+| More positions | at most 6 ERP searches at once (`erp.PARALLEL`); facts only some rules need are asked for once, not until the deadline |
+| An API submission target | the answer is posted by API when the run's `submission.kind` is `api` |
 | A no-bid scenario | unfinished ≠ no match (I1); no-bid gate (I11); mutation test with a blocked match |
 | More positions, other units | nothing assumes a count or a unit ✅ |
 | Known traps in a new skin | trap catalogue (RULES §8); mutation tests ✅ (I20); live S2 (I24) |
@@ -428,7 +430,7 @@ Every item has exactly one owner. When it touches a file someone else owns (§14
 
 | ID | Change | Where | Acceptance | Rules | Owner |
 | --- | --- | --- | --- | --- | --- |
-| I16 | Gap sweep: `agents/sweep` ✅ (`gaps` in code, one mission per open fact and website, `tests/test_sweep.py`); remaining: a stage in `main` and a second resolver call with the swept pages (I4) | `agent.py`, `agents/sweep` | a fake run with Q&A on another site still finds them (S4) | 10, 19 | Y |
+| I16 | Gap sweep ✅: `agents/sweep` (`gaps` in code, one mission per open fact and website, `tests/test_sweep.py`); wired into `main` as `commercials_with_sweep` alongside the ERP searches, only in free time (stops when the ERP searches are done; the first answer stands), `tests/test_generalize.py`; open requirement facts are not swept (their ERP search would have to run again); live S4 not yet proven | `agent.py`, `agents/sweep` | a fake run with Q&A on another site still finds them (S4) | 10, 19 | Y |
 | I17 | ✅ Reader hardening (§5.1 rows 1b, 2, 8); `pypdf` dependency (`tests/test_reader.py`) | `reader.js`, `pyproject.toml` | recorded-page tests; a PDF is read | traps 8, 9 | Y |
 | I18 | Code-side selection cross-check (§4.4) | `agents/resolvers`, `select.py` | synthetic-record tests per trap category | 1, 2, 5, 12–14, 16, 17, 20–26, 28 | L |
 | I19 | Extraction while browsing: each kept page read into records right away (small parallel calls), so resolvers only select | `llm.py`, `agents/*` | resolvers finish in seconds after the last agent | T3.2, T4.2 | F |

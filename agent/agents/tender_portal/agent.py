@@ -1,6 +1,6 @@
 """Tender portal agent: positions and every Q&A from the tender portal. See README.md."""
 import llm
-from agents.common import INT, STR, NUM, SYSTEM, arr, context, login_line, obj, reference
+from agents.common import ALSO_KEEP, INT, NOT_HERE, STR, NUM, SYSTEM, arr, context, login_line, obj, reference
 
 
 RESULT = obj(
@@ -26,5 +26,6 @@ If its documents need an expression of interest (the brief's Submission section 
    kept as; don't copy the text, not into notes either (a kept page needs no note);
 3. anything else the brief's rules need that you find here (documents, ZIPs).
 Keep the bill of quantities and every Q&A page with save_evidence as you read them.
+{ALSO_KEEP} {NOT_HERE}
 Do not start the bid submission yet. Finish with the result."""
     return await llm.investigate(tab, SYSTEM, mission, RESULT, deadline, "tender-portal", max_steps=45)
