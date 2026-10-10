@@ -5,6 +5,9 @@ logged answer scored by `eval/compare.py` (what the bid would have scored if sig
 
 | Date (UTC) | Run | Commit | Platform | Eval | Time | Cost | Outcome and top problem (owner) |
 | --- | --- | --- | --- | --- | --- | --- | --- |
+| 2026-10-10 21:14 | run_0bf3628e04112a0c | luca/haiku-openrouter@6f9adc4 | 100, eligible | – | 6 min | $0.215 | Claude Haiku 5.5 on OpenRouter: 100 in 5:55 (76 $·s); sites done at 68 s, answer at 156 s; no call lost. Only 48 % of the input cached: the trimming of old reads breaks the prefix (Finn). |
+| 2026-10-10 21:00 | run_cd3f96f25f803950 | luca/haiku-openrouter@6f9adc4 | 0, no answer | – | 12 min | $0.116 | The tender portal never loaded: its agent hung on the first read until its cut, then `fresh` crashed the run (fixed in efe748a). |
+| 2026-10-10 20:32 | run_834abcf85968c21b | luca/haiku-openrouter@ba32c35 | 0, not signed | – | 19 min | $0.118 | About one in six OpenRouter calls through the run proxy never came back; each held 120 s (45 s since 6f9adc4), 01.02/01.03 omitted, submit ran out. |
 | 2026-10-10 17:45 | run_7c8e518250acf788 | base@6345945 | 100, eligible | 100.00 | 16 min | $0.179 | Second 100 on the same package as run_acc211d89c011277 (PR #28): submission gate met. |
 | 2026-10-10 17:28 | run_546683ad6ca0d354 | (teammate, unlabeled) | 100, eligible | – | 15 min | $0.182 | Signed 100. |
 | 2026-10-10 17:26 | run_acc211d89c011277 | luca/submit-unpriced-positions@41e9cec | 100, eligible | 100.00 | 13 min | $0.181 | Main 08b39c5 plus the quality fixes: 100 in 13:17, the best cost × time so far (144 $·s). |
