@@ -14,6 +14,8 @@ STEP_EFFORT = os.environ.get("STEP_EFFORT", "low")  # reasoning per browser step
 KEEP_STEPS = 4  # tool results of the latest steps stay in full; older page reads shrink so the context stays small
 CALL_TIMEOUT = 180  # one model call; a slower one is retried while its deadline allows (steps took 20-90 s under load,
 # a tender finish 132 s: a cut call starts over, so the cap sits above the slowest calls seen)
+HEDGE_AFTER = 45  # a call without a reply by then gets a twin and the first answer wins: hung calls never answered,
+# while the retry 180 s later answered in 2-14 s (five hung calls cost the 2026-10-10 runs their positions; p95 32 s)
 CHECK_TIMEOUT = 60  # one model call inside a finish check (ERP extract: 13-21 s); one hung call cost a position
 TOOL_TIMEOUT = 60  # one browser tool; a fetch that hung 109 s held the tender agent to its cut, its kept pages lost
 
@@ -54,29 +56,49 @@ def client() -> AsyncOpenAI:
     return _client
 
 
+def send(messages: list, tools: list | None, limit: float, kwargs: dict) -> asyncio.Future:
+    call = asyncio.ensure_future(client().chat.completions.create(model=MODEL, messages=messages, tools=tools,
+                                                                  timeout=limit, **kwargs))
+    call.add_done_callback(lambda c: c.cancelled() or c.exception())  # a dropped call's failure stays quiet
+    return call
+
+
 async def chat(messages: list, tools: list | None = None, **kwargs):
-    """One model reply, each attempt bounded by CAP and all of them by UNTIL; raises TimeoutError when time is up."""
+    """One model reply, each attempt bounded by CAP and all of them by UNTIL; raises TimeoutError when time is up.
+    An attempt without a reply after HEDGE_AFTER sends the same request again alongside it."""
     for attempt in range(6):
         left = UNTIL.get() - time.time() - 1
         if left < 3:
             raise TimeoutError("no time left for a model call")
         limit = min(CAP.get(), left)
-        call = asyncio.ensure_future(client().chat.completions.create(model=MODEL, messages=messages, tools=tools,
-                                                                      timeout=limit, **kwargs))
-        call.add_done_callback(lambda c: c.cancelled() or c.exception())  # a dropped call's failure stays quiet
+        end = time.time() + limit
+        twin_at = time.time() + HEDGE_AFTER
+        calls = [send(messages, tools, limit, kwargs)]
         try:
-            # asyncio.wait, not wait_for: wait_for waits until the cancelled call has stopped, a cut never does
-            await asyncio.wait({call}, timeout=limit)
-            if not call.done():
-                raise TimeoutError(f"model call over {limit:.0f} s")
-            return call.result()
+            while True:
+                running = [c for c in calls if not c.done()]
+                if not running:
+                    return calls[-1].result()  # every call failed: raises the latest error
+                # asyncio.wait, not wait_for: wait_for waits until the cancelled call has stopped, a cut never does
+                until = min(twin_at, end) if len(calls) == 1 else end
+                await asyncio.wait(running, timeout=max(0.0, until - time.time()),
+                                   return_when=asyncio.FIRST_COMPLETED)
+                for call in calls:
+                    if call.done() and not call.exception():
+                        return call.result()
+                if time.time() >= end:
+                    raise TimeoutError(f"model call over {limit:.0f} s")
+                if len(calls) == 1 and not calls[0].done():
+                    print(f"[llm] no reply after {HEDGE_AFTER} s: asking again alongside", flush=True)
+                    calls.append(send(messages, tools, end - time.time(), kwargs))
         except Exception as error:  # noqa: BLE001  the hosted model may hiccup: retry like any provider
             if attempt == 5:
                 raise
             print(f"[llm] retry after {type(error).__name__}: {str(error)[:200]}", flush=True)
             await asyncio.sleep(min(2 + 3 * attempt, max(0.0, UNTIL.get() - time.time() - 5)))
         finally:
-            call.cancel()  # no-op once done; frees the connection of a call over its time or of a cut stage
+            for call in calls:
+                call.cancel()  # no-op once done; frees the connection of a call over its time or of a cut stage
 
 
 def parse_object(text: str) -> dict | None:
