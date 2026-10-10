@@ -137,7 +137,10 @@ Every browser agent is the same loop; agents differ only in mission, result sche
   `chat` tries up to 6 times, each attempt at most `CALL_TIMEOUT` (180 s; no SDK-internal retries) and all of them
   bounded by the stage's `llm.UNTIL`, which `agent.safe`/`agent.start` set per stage; step calls end at the agent's
   deadline so the forced `finish` keeps its grace. Both limits hold on the wall clock (`asyncio.wait`, the call is
-  dropped at its limit): the SDK's timeout only bounds the silence between bytes.
+  dropped at its limit): the SDK's timeout only bounds the silence between bytes. A call still unanswered after
+  `HEDGE_AFTER` (30 s) gets one identical twin and the first answer wins (`first_reply`): single calls hang to their
+  cap while the next call answers in seconds. The commercials resolver twins after 120 s; the requirements resolver,
+  already asked twice, gets no twins.
 - **Cut agents keep their evidence:** every `investigate` registers its evidence list in `llm.KEPT`, one per stage
   (`agent.start`); a stage that is cut or fails hands those pages on, marked `forced`.
 - **Shared system prompt** `agents/common.py` `SYSTEM`: the sites' traps in general terms, no site and no value.

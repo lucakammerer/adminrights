@@ -105,7 +105,9 @@ JSON: {{"positions": [{{"position": "...", "final_quantity_pieces": 0, "quantity
 "catalogue_group": "...", "requirement_reasoning": "..."}}]}}"""
     llm.log("requirements", f"asking twice with {len(question)} chars, effort {effort}")  # its size drives the critical path
     # it holds up the ERP phase, and one hosted call in a few hangs until its timeout: the faster of two answers
-    return await first(llm.ask_json(RESOLVE, question, effort=effort), llm.ask_json(RESOLVE, question, effort=effort))
+    once = float("inf")  # already asked twice, with a low-effort backup in main: no twins on top
+    return await first(llm.ask_json(RESOLVE, question, effort=effort, hedge_after=once),
+                       llm.ask_json(RESOLVE, question, effort=effort, hedge_after=once))
 
 
 async def commercials(task, tender, mail, others: list[dict] | None = None) -> dict:
@@ -141,4 +143,4 @@ JSON: {{"tender_reference": "the exact reference", "discount": {{"percent": 0, "
 "project_bonus_bands": [{{"from": 0, "to": null, "percent": 0}}]}}
 Every amount, rate and percent is a plain JSON number (decimal point, no units)."""
     llm.log("commercials", f"asking with {len(question)} chars")
-    return await llm.ask_json(RESOLVE, question, effort="medium")
+    return await llm.ask_json(RESOLVE, question, effort="medium", hedge_after=120)  # long reasoning, off the critical path

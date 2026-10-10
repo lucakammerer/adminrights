@@ -36,6 +36,7 @@ its subject in each folder. Never search without the reference: a word or a send
 record without a subject is recognised by its sender and its meaning (e.g. an approval for this reference). Once a
 search URL's shape is known, fetch independent searches and result pages in one turn. Stop searching once every record
 above is kept or its searches came back empty. Keep superseded and conditional records too (they are judged later);
-skip messages for other, merely similar references and the signing-TAN mails. {ALSO_KEEP} Finish with a one-line list
+skip messages for other, merely similar references and the signing-TAN mails. {ALSO_KEEP} A kept message reaches the
+analyst word for word: it needs no note and no second reading. Finish with a one-line list
 of what you kept and the mailbox's own e-mail address (own_address) as shown on the site."""
     return await llm.investigate(tab, SYSTEM, mission, RESULT, deadline, "webmail", max_steps=60)

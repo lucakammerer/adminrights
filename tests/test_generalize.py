@@ -43,7 +43,7 @@ class Asked:
     def __init__(self, answer):
         self.answer, self.questions = answer, []
 
-    async def __call__(self, system, question, effort=None):
+    async def __call__(self, system, question, effort=None, hedge_after=None):
         self.questions.append(question)
         return dict(self.answer)
 

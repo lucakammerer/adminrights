@@ -26,7 +26,7 @@ the records from the brief's rules. The model first searches the reference alone
 record's message as soon as a result list shows it, via its own URL so sender, date and body are complete; then it
 searches the reference plus one word of each subject still missing (mail search combines words with AND, as the
 brief says). It never searches a word or sender without the reference, and stops once every record is kept or its
-searches came back empty. Skips TAN mails; `get_tan` fetches those ([submit](../submit/README.md)). The mission
+searches came back empty, without notes or second readings of kept messages. Skips TAN mails; `get_tan` fetches those ([submit](../submit/README.md)). The mission
 ends with `common.ALSO_KEEP` (keep any other record the rules need on a page opened anyway, never browse for one, finish
 when the part is done: the private sites may split the information differently) and, except in the mailbox, `common.NOT_HERE` (finish early when the site doesn't hold the
 part's records).
