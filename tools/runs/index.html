@@ -56,6 +56,8 @@
   .red { background: var(--red-bg); color: var(--red); }
   .amber { background: var(--amber-bg); color: var(--amber); }
   .blue { background: var(--blue-bg); color: var(--blue); }
+  .up { color: var(--green); }
+  .down { color: var(--red); }
 
   .dot { width: 14px; height: 14px; border-radius: 50%; }
   .dot.success { background: var(--green); }
@@ -124,6 +126,10 @@ const dollars = (micro) => `$${(micro / 1e6).toFixed(3)}`;
 const clock = (s) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
 const answered = (run) => run.has_answer && run.score;
 const num = (x) => (typeof x === "number" ? Number(x.toFixed(2)) : x);
+const signed = (d) => `${d > 0 ? "+" : d < 0 ? "−" : "±"}${num(Math.abs(d))}`;
+const scored = (b) => Object.entries(b || {}).filter(([, v]) => v && typeof v === "object" && "points" in v && !Array.isArray(v));
+const baseline = (run) => run.finished_at && run.baseline && runs.find((r) => r.run_id === run.baseline.run_id);
+const delta = (run, base) => (answered(run) ? run.score.quality : 0) - base.score.quality;
 
 function state(run) {
   if (!run.finished_at) return run.started_at ? "running" : "queued";
@@ -185,6 +191,31 @@ function whatRan(src) {
     <ul>${ahead}</ul>${files}${differs}`;
 }
 
+function shift(run) {
+  const base = baseline(run);
+  if (!base) return "";
+  const d = delta(run, base);
+  return `<span class="${d > 0 ? "up" : d < 0 ? "down" : ""}" title="against the previous bid at ${esc(base.source.commit)}">${signed(d)}</span>`;
+}
+
+function changed(run) {
+  const base = baseline(run);
+  if (!base) return '<p class="muted">No earlier bid to compare with.</p>';
+  const link = (url, text) => `<a href="${esc(url)}" target="_blank">${esc(text)}</a>`;
+  const commits = run.baseline.commits.length
+    ? `<table><tr><th>Commit</th><th>Change</th><th>PR</th></tr>${run.baseline.commits.map((c) =>
+      `<tr><td>${link(c.url, c.commit)}</td><td>${esc(c.subject)}</td><td>${c.pr ? link(c.pr.url, `#${c.pr.number}`) : ""}</td></tr>`).join("")}</table>`
+    : '<p class="muted">Same agent code: the difference is run-to-run variance.</p>';
+  const flat = (b) => Object.fromEntries([...scored(b).map(([k, v]) => [words(k), v.points]),
+    ...(b?.positions || []).map((p) => [p.position, p.points])]);
+  const was = flat(base.score.breakdown), now = flat(answered(run) ? run.score.breakdown : null);
+  const moved = Object.keys({ ...was, ...now }).map((k) => [k, (now[k] || 0) - (was[k] || 0)]).filter(([, d]) => Math.abs(d) > 0.005);
+  const points = moved.length ? `<table><tr><th>Field</th><th>Points</th></tr>${moved.map(([k, d]) =>
+    `<tr><th>${esc(k)}</th><td class="${d > 0 ? "ok" : "miss"}">${signed(d)}</td></tr>`).join("")}</table>` : "";
+  return `<p>Q ${base.score.quality} at ${esc(base.source.commit)} → ${answered(run) ? `Q ${run.score.quality}` : "no bid"}</p>
+    <div class="tables">${commits}${points}</div>`;
+}
+
 function timeline(run) {
   if (!run.phases?.length) return '<p class="muted">No phase timings in this run\'s logs.</p>';
   const total = Math.max(seconds(run), ...run.phases.map((p) => p.end), 1);
@@ -205,7 +236,7 @@ function points(run) {
   const b = run.score.breakdown;
   const cell = (f) => (f == null ? "<td></td>"
     : `<td class="${f.points > 0 ? "ok" : "miss"}" title="entered ${esc(JSON.stringify(f.got))}">${num(f.points)}</td>`);
-  const top = Object.entries(b).filter(([, v]) => v && typeof v === "object" && "points" in v && !Array.isArray(v));
+  const top = scored(b);
   const rows = (b.positions || []).map((p) =>
     `<tr><th>${esc(p.position)}</th>${FIELDS.map((f) => cell(p[f])).join("")}<td><b>${num(p.points)}</b></td></tr>`);
   return `<div class="tables">
@@ -237,6 +268,7 @@ function renderRun(run) {
       </div>
       <div class="metrics">
         ${badge(run)}
+        ${shift(run)}
         <span title="run time">⏱ <span data-clock="${run.run_id}">${clock(seconds(run))}</span></span>
         <span title="LLM cost">${dollars(run.cost_micro_usd)}</span>
         <span title="cost × time, as ranked">${(cost * Math.max(seconds(run), 1)).toFixed(0)} $·s</span>
@@ -245,6 +277,7 @@ function renderRun(run) {
     <div class="details">
       ${run.error ? `<div class="error">${esc(run.error)}</div>` : ""}
       <h3>What ran</h3>${whatRan(src)}
+      <h3>Since the previous bid</h3>${changed(run)}
       <h3>Where the time went</h3>${timeline(run)}
       <h3>How to improve</h3>${improve(run)}
       <h3>Points per field</h3>${points(run)}
