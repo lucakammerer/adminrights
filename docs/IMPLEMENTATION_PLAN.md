@@ -72,12 +72,19 @@ Phase 0, no browser
     resolvers.sites: a model assigns each website its role from the brief (names and ids differ per dataset)
 Phase 1, parallel, one browser each, wrap-up at end − 10 min, hard cut 30 s later
     tender_portal.run · supplier_portal.run · webmail.run · erp.login
-Phase 2, no browser, hard cut end − 8 min, so the ERP searches keep ERP_SEARCH_MIN (60 s) before their own end at
-end − 7 min; after a phase 1 that ran to its cut, requirements gets only 90 s
-    resolvers.requirements (a low-effort attempt joins after BACKUP_AFTER, 60 s, and counts only when the first brings
-    nothing; resolvers.commercials starts too and runs alongside phase 3); a resolver call may use its whole window
+Phase 2, no browser
+    resolvers.specs once supplier_portal and webmail are done, unless the tender agent is done already (then
+    requirements starts at once): the governing requirements without the tender (cut where the ERP searches keep
+    ERP_SEARCH_MIN, 60 s: end − 8 min); each distinct one starts its ERP search (phase 3) once erp.login is done,
+    while the tender agent is still working
+    resolvers.requirements and resolvers.commercials once all of phase 1 is done; with early ERP searches,
+    requirements runs until the ERP cut (end − 6 min), without them only until end − 8 min, so the searches that wait
+    for it keep ERP_SEARCH_MIN. specs and requirements get a low-effort attempt after BACKUP_AFTER (60 s) that counts
+    only when the first brings nothing; a resolver call may use its whole window
 Phase 3, ERP tabs in parallel, hard cut end − 6 min (a cut search → its positions are omitted)
-    erp.run per distinct requirement; a no_match is confirmed by a second erp.run when ≥ 150 s remain;
+    erp.run per distinct governing requirement (agent.spec_key compares the values however a model wrote them); a
+    position whose values no early search had gets its own search while search time is left (else it is omitted), a
+    search no position needs is stopped; a no_match is confirmed by a second erp.run when ≥ 150 s remain;
     then resolvers.commercials, hard cut end − 5.5 min
 Phase 4, code
     calc.facts → calc.compute
@@ -105,7 +112,7 @@ Each agent is a folder `agent/agents/<name>/` with `agent.py` (mission, result s
 | `webmail` | webmail | every message the rules need, inbox and archive | 60 steps |
 | `erp.login` | ERP | get past login, cookies, notices, gates | 20 steps |
 | `erp.run` | ERP (one tab each) | the material for one requirement; its pages kept; `check` → `extract` reads the facts, `validate.material_mismatch` refuses a wrong pick once | 40 steps |
-| `resolvers` | — | three `ask_json` calls: sites, requirements, commercials | 3 attempts each |
+| `resolvers` | — | four `ask_json` calls: sites, specs, requirements, commercials | 3 attempts each |
 | `submit` | tender portal | fill the wizard, sign | 70 steps |
 | `get_tan` | webmail | the newest TAN for the request just made | 12 steps, 2 min |
 
@@ -147,9 +154,10 @@ Every browser agent is the same loop; agents differ only in mission, result sche
 ### 3.4 Resolvers, calculator, submission
 
 - **Resolvers** (`agents/resolvers`): one `ask_json` call each (JSON mode, up to 3 attempts). `sites`: which website
-  plays which role, from the brief. `requirements`: final quantities and governing requirements; `commercials`:
+  plays which role, from the brief. `specs`: the governing requirements from the specification and the technical
+  mail alone, so the ERP searches start early; `requirements`: final quantities and governing requirements; `commercials`:
   discount, clauses, tariffs, commitments, pool and bonus membership, setup fees, FX rates, metal indices, pool fee,
-  bonus bands. Reasoning effort is medium for `requirements` and `commercials`, low for copying values (`sites`,
+  bonus bands. Reasoning effort is medium for `specs`, `requirements` and `commercials`, low for copying values (`sites`,
   ERP `extract`).
 - **Calculator** (`agent/calc.py`, details in [calc.md](calc.md)): `facts` merges the agents' results, `compute`
   applies rules 3–9, 12, 15–18 and 22–27 in `Decimal` with HALF_UP; exact against the reference (PLAN_COMPARISON §2.3).
@@ -169,7 +177,8 @@ Every browser agent is the same loop; agents differ only in mission, result sche
 ### 3.5 Logs
 
 Every line goes through `llm.log` as `[tag  123s] ...` (seconds since start). `main` logs one line per stage
-(`sites`, `tender-portal`, `supplier-portal`, `webmail`, `requirements`, `commercials`, `erp`, `facts`, `calc`, `answer`,
+(`sites`, `specs`, `tender-portal`, `supplier-portal`, `webmail`, `requirements`, `commercials`, `erp`, `facts`, `calc`,
+`answer`,
 `submit`); every agent step
 appears as `[tag  123s] n: tool {args}`.
 
