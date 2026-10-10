@@ -233,14 +233,15 @@ class Bid(unittest.TestCase):
     TENDER = {"tender_reference": "REF"}
     COMMERCIALS = {"tender_reference": "REF", "positions": []}
 
-    def test_broken_erp_finding_omits_only_its_position(self):
+    def test_broken_prices_keep_the_material_and_omit_only_the_broken_position(self):
         requirements = {"positions": [{"position": "1", "final_quantity_pieces": 2},
                                       {"position": "2", "final_quantity_pieces": "no number"}]}
         erp = {"1": {"material_number": "M", "price_condition": {"scales": [{"price": "1"}]}}}  # no from_quantity
         result = agent.bid(self.TENDER, requirements, self.COMMERCIALS, erp)
         self.assertEqual(result["answer"]["decision"], "bid")
         self.assertEqual(result["answer"]["tender_reference"], "REF")
-        self.assertEqual(sorted(result["omitted"]), ["1", "2"])
+        self.assertEqual(result["omitted"], ["2"])
+        self.assertEqual([p["material_number"] for p in result["answer"]["positions"]], ["M"])
 
     def test_broken_commercials_still_give_an_answer(self):
         requirements = {"positions": [{"position": "1", "final_quantity_pieces": 2}]}
