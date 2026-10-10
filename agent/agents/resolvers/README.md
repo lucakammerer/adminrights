@@ -35,8 +35,9 @@ means. The output is typed facts for `calc`, which does all the arithmetic.
 `ask_json` (JSON mode, up to 3 attempts).
 
 - `sites` runs first, while the browsers connect, effort low. The run's submission target is the tender portal; the
-  model assigns the other roles (two attempts, at most `SITES_TIMEOUT` seconds; answers that aren't one of the
-  websites are ignored); a role still open gets a remaining website by elimination. It never fails the run.
+  model assigns the other roles (two attempts of at most `SITES_TIMEOUT` seconds each, the second asking only for the
+  roles still open; answers that aren't one of the websites are ignored); a role still open gets a remaining website
+  by elimination. It never fails the run.
 - `requirements` runs after phase 1, effort medium, and is on the critical path: the ERP agents wait for it. It gets
   only the technical mail because all mail doubles its time (66 s instead of 34 s on public-1). Prompt: tender
   quantity replaced by the latest dated clarification, a withdrawn answer as if never given (an older change it

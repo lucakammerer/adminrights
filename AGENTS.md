@@ -90,6 +90,7 @@ minutes; results land in `bench/RUNS.md`. Details and the submission gate: `docs
 
 ## Keeping docs current
 
-When an agent's behaviour changes, `docs/` changes in the same commit. Point to code by file and function name, never
+When an agent's behaviour changes, `docs/` changes in the same commit. When the phases, deadlines or data flow in
+`agent.py` `main` change, the diagram in `README.md` changes with them. Point to code by file and function name, never
 by line number. Delete what is outdated instead of marking it. How things came to be lives in the Entire
 checkpoints, not in `docs/`. Everything in the repo is written in English.
