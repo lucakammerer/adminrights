@@ -316,7 +316,7 @@ async def investigate(tab, system: str, mission: str, finish_schema: dict, deadl
         pages, note = await paging.rest(tab.fetch, url, first)
         shown.update(paging.body(page) for page in [first] + [page for _, page in pages])
         return "\n\n".join([first] + [page for _, page in pages] + [note])
-    warned = False
+    warned = refused = False
     for step in range(max_steps):
         left = deadline - time.time()
         if left < warn_at and not warned:
@@ -352,8 +352,12 @@ async def investigate(tab, system: str, mission: str, finish_schema: dict, deadl
             if name == "finish":
                 result = args["result"] if "result" in args else args  # Qwen sometimes drops the wrapper
                 if isinstance(result, str):
-                    result = parse_object(result)
+                    text, result = result, parse_object(result)
+                    if result is None and refused and not check:  # asked once: the kept pages are what counts
+                        log(tag, "finish taken as text: result is still not a JSON object")
+                        result = {"summary": text[:3000]}
                     if result is None and deadline - time.time() > 30:
+                        refused = True
                         log(tag, "finish refused: result is not a JSON object")
                         messages.append({"role": "tool", "tool_call_id": call.id, "content":
                                          "Not done: result must be a JSON object with the asked fields, not a string. "

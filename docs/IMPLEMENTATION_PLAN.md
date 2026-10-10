@@ -146,8 +146,9 @@ Every browser agent is the same loop; agents differ only in mission, result sche
   first ~4,500 tokens and every model replica soon serves them from its cache. The model's reasoning stays while its
   step is in the `KEEP_STEPS` window and goes in the same batches as the older page reads (the API reads reasoning
   sent back as input on every later step).
-- **`finish`:** a result that isn't a JSON object is refused while more than 30 s remain; fields sent without the
-  `result` wrapper are taken as the result.
+- **`finish`:** a result that isn't a JSON object is refused while more than 30 s remain; an agent without a `check`
+  (its kept pages are what counts) that sends broken text a second time has it taken as `summary` (a supplier agent
+  without thinking sent it twice and lost 30 s each); fields sent without the `result` wrapper are taken as the result.
 - **Tools:** a browser tool, and the first page read before step 0, runs at most `TOOL_TIMEOUT` (60 s) and never past
   the agent's deadline, an extra tool (`get_tan`) until the deadline; a timeout reaches the model as an error, so a
   hung fetch can't hold the agent to its stage cut and lose what it kept.

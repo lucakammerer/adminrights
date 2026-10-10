@@ -79,8 +79,8 @@ minutes; results land in `bench/RUNS.md`. Details and the submission gate: `docs
 
 ## Ways to hurt yourself
 
-- Qwen sometimes sends `finish` as a string with broken JSON. `investigate` refuses it while time allows; a result
-  that still arrives broken loses its fields (a position without material is then omitted, not `no_bid`). A `finish`
+- Qwen sometimes sends `finish` as a string with broken JSON. `investigate` refuses it while time allows (an agent
+  without a `check` only once, then the text is kept as `summary`); a result that still arrives broken loses its fields (a position without material is then omitted, not `no_bid`). A `finish`
   whose fields come without the `result` wrapper is taken as the result.
 - `no_bid` only follows an explicit `no_match` from the ERP agent. Don't derive it from an empty field.
 - Looking a website up by its `siteId`: ids and names differ in the private dataset. Use the roles from
