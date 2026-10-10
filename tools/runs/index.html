@@ -205,7 +205,8 @@ function changed(run) {
   const commits = run.baseline.commits.length
     ? `<table><tr><th>Commit</th><th>Change</th><th>PR</th></tr>${run.baseline.commits.map((c) =>
       `<tr><td>${link(c.url, c.commit)}</td><td>${esc(c.subject)}</td><td>${c.pr ? link(c.pr.url, `#${c.pr.number}`) : ""}</td></tr>`).join("")}</table>`
-    : '<p class="muted">Same agent code: the difference is run-to-run variance.</p>';
+    : `<p class="muted">${run.baseline.same ? "Same agent code: the difference is run-to-run variance."
+      : "No new commits, but the packages differ: a rollback or uncommitted changes, see What ran."}</p>`;
   const flat = (b) => Object.fromEntries([...scored(b).map(([k, v]) => [words(k), v.points]),
     ...(b?.positions || []).map((p) => [p.position, p.points])]);
   const was = flat(base.score.breakdown), now = flat(answered(run) ? run.score.breakdown : null);

@@ -142,8 +142,9 @@ def compare(listed: list[dict]) -> None:
         run["baseline"] = None
         base = next((b for b in bids if b["created_at"] < run["created_at"]), None)
         if base and base["source"].get("commit") and run["source"].get("commit"):
-            commits = changes(base["source"]["commit"], run["source"]["commit"])
-            run["baseline"] = {"run_id": base["run_id"], "commits": commits}
+            a, b = base["source"], run["source"]
+            same = not (a["differs"] or b["differs"] or git("diff", "--name-only", a["commit"], b["commit"], "--", "agent"))
+            run["baseline"] = {"run_id": base["run_id"], "commits": changes(a["commit"], b["commit"]), "same": same}
 
 
 def phases(run_id: str) -> list[dict]:
