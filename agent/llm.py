@@ -95,6 +95,11 @@ async def reply(messages: list, tools: list | None, silence: float, fallback: bo
     """One streamed model reply, assembled like a non-streamed one; every read must bring a byte within `silence`. The
     snapshot, not get_final_completion: that raises on a reply cut at its length limit, which counted before."""
     extra = {"extra_body": CACHE} if CACHE and not fallback else {}
+    if OPENROUTER and not fallback:  # streamed, Haiku repeated the same login 40 times in every tab
+        # (run_ac62aa59878278d0); unstreamed it worked (run_0bf3628e04112a0c). Its calls take 3-13 s, so a silent one
+        # still ends at `silence`.
+        return await client().chat.completions.create(model=MODEL, messages=messages, tools=tools, timeout=silence,
+                                                      **extra, **kwargs)
     stream = await client(fallback).chat.completions.create(model=FALLBACK if fallback else MODEL, messages=messages,
                                                             tools=tools, stream=True, timeout=silence,
                                                             stream_options={"include_usage": True}, **extra, **kwargs)
