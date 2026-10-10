@@ -1,708 +1,447 @@
-# Implementation plan: team AdminRights, "From RFQ to bid"
+# Implementation plan
 
-> Companion to [`RULES.md`](RULES.md) (what is required, rule IDs `T0.x`–`T4.x`) and
-> [`scouting-notes.md`](scouting-notes.md) (what the public sites look like). This file is **how** we build it, **who**
-> builds what, and **when**. Rule IDs in brackets show which requirement a design choice serves.
-
----
-
-## 0. TL;DR
-
-We build a **team of cooperating agents around a shared Evidence Ledger**:
-
-- **4 Site Operators**, one per browser, each a model-driven navigator paired with a **Reader** that extracts
-  quote-anchored facts. They are *site-agnostic*: they don't know which site holds what until they look.
-- A **Conductor** turns the bid rules into an **information-need graph**. It routes each need to the operator whose
-  site profile fits, and grows the graph as new keys are discovered (`K-…`, `VP-…`, `TZ-…`).
-- An **Auditor** red-teams every critical fact (two-key decisions: the model proposes, deterministic validators
-  confirm, a disagreement triggers a targeted re-read).
-- A **pure calculator** turns the ledger into the bid with exact `Decimal` maths.
-- A **Notary** fills the tender portal's wizard (pre-filled speculatively while research runs), fetches the TAN from
-  the mail operator through a handshake, verifies the read-back and signs once.
-- A **Time Keeper** enforces a deadline ladder so we *always* submit (T1.3).
-
-Everything runs on the free hosted **Qwen** (plus **Clef** for cheap yes/no checks). We aim for **100/100 on public,
-under 6 minutes, under $0.25**, with an architecture built to survive the **private dataset**: different software,
-different layout, information split differently.
+> **How the system works, how it must change, and who builds what.** Combined from both earlier plans (ours and
+> Luca's architecture notes) and the analysis of his agent on `main`. Every rule and its ID: [RULES.md](RULES.md)
+> (T0–T4 platform rules, 1–29 bid rules). Why the plan looks like this: [PLAN_COMPARISON.md](PLAN_COMPARISON.md)
+> (`F#` = its findings). No public-1 values in this file.
 
 ---
 
-## 1. Winning thesis: what actually decides this competition
+## 0. In short
 
-1. **Most teams will lose points in reading, not in maths.** The sites are adversarial: hidden decoys, canvases,
-   tooltips, look-alike references, superseded revisions, mixed number locales. A generic, trap-aware **perception
-   layer** (§6) that turns any page into a clean, honest digest is our biggest lever, and it transfers to the private
-   sites.
-2. **The bid rules are fixed; the websites are not.** So the *rules* belong in deterministic, tested code
-   (calculator, resolvers), and the *websites* belong to the model (navigation, reading, interpreting prose). Each
-   side does what it is reliable at. This is also exactly what the fair-play rules allow (T0.3, T0.4).
-3. **The puzzle is a chain of keys.** Position → requirement → governing revision → Kataloggruppe → ERP material →
-   condition, stock, masses, index key; Q&A assigns K-/VP-/TZ-/RP-/PB- keys; mails resolve them. A **Key Graph** that
-   detects unresolved keys and creates needs for them adapts automatically when the private dataset "splits the
-   information differently".
-4. **The no-bid decision is worth 75 points when it applies.** A single wrong "material missing" flips everything.
-   Hence **presence and absence proofs** (T2.3b).
-5. **At equal quality, cost × time wins.** Parallel browsers, small digests, a cheap model, speculative pre-fill of
-   the submission wizard and a hard time ladder give a **fast and cheap** run without trading quality.
-6. **Best of 3 in the final is free for us.** It multiplies only own-key costs; we use hosted models. **Opt in**
-   (`atira final --best-of 3`). Reliability still matters, because the best *complete* attempt counts.
-7. **The final run takes our *latest* passed submission.** Release discipline in the last hours is a scoring
-   factor (T4.5).
+The agent on `main` works the four websites with one generic model tool loop, applies the bid rules through two
+model "resolvers" and an exact code calculator, and enters the bid with a model-driven submit agent. In a full local
+dry run its resolvers got **every fact right**, and the run still failed. The answer came only after 17 minutes,
+and it was a false **no-bid**, because the ERP agents started after their own deadline and reported "no match" for
+searches they never ran (PLAN_COMPARISON §2.4).
+
+So the work goes in this order (backlog §12):
+
+1. **P0, a correct signed bid in time:** unfinished ≠ no match; per-stage budgets and dependency scheduling;
+   deadline-bounded model calls; slimmer missions; submission in two stages with a watchdog; dry-run scoring and
+   release tools; first test run and scored submission.
+2. **P1, correctness under pressure:** strict numbers, code checks of the material decision, mail topics from the
+   brief, retries and re-login in code, calculator tests.
+3. **P2, private-dataset readiness:** gap sweep, reader hardening, code-side selection as a cross-check, extraction
+   while browsing, mutation tests.
+4. **P3, polish.**
 
 ---
 
-## 2. Design principles (each one is a rule of thumb for code review)
+## 1. How we win
 
-| # | Principle | Why |
+1. **Reading decides, not maths.** The sites are adversarial (hidden decoys, images, tooltips, look-alikes,
+   superseded versions, mixed number formats). A generic, trap-aware page reader transfers to the private sites.
+2. **The bid rules are fixed; the websites are not.** Rules belong in tested code; websites belong to the model.
+3. **The puzzle is a chain of keys:** position → requirement → current revision → catalogue group → material →
+   condition, stock, masses, index key; Q&A answers assign keys and mails resolve them. Anything that finds an
+   unresolved key and goes looking for it survives "information split differently".
+4. **The material decision is the most valuable judgement:** a no-bid case gives 75 points for the decision alone,
+   and a false no-bid throws away every position (RULES 4.2).
+5. **At equal quality, cost × time wins:** parallel sites, small inputs, a cheap hosted model, an early start on the
+   submission.
+6. **Always submit:** a run without an answer scores 0; every field scores on its own.
+7. **The final takes the latest passed submission, not the best:** release discipline is a scoring factor. Best of 3
+   costs us nothing with hosted models: opt in.
+
+## 2. Principles
+
+| # | Principle | Rules |
 | --- | --- | --- |
-| P1 | **Model decides where, code decides how much.** Navigation, search queries, document choice and prose interpretation are model decisions; arithmetic, rounding, date comparison and record selection are code. | T0.3/T0.4 + reliability |
-| P2 | **Quote-anchored facts.** Every extracted value carries the verbatim quote it came from. Code checks that the quote exists in the page digest, then **parses numbers itself** (with the locale tag). The model never does arithmetic or number-format conversion. | kills hallucination and locale bugs |
-| P3 | **Collect candidates, select by rule.** Operators collect *all* candidate records (every approval, every revision, every Q&A change) with metadata. The resolver picks the governing one by the rule; the model's own pick is a second key. | traps are mostly "wrong record chosen" |
-| P4 | **Site-agnostic by construction.** No site names, paths or selectors in code (T0.2). Operators discover their site. Test it with mutated pages (§13.4). | private dataset |
-| P5 | **Always submit.** A degraded answer beats no answer (T1.3, T2.17). | 0 points otherwise |
-| P6 | **Small context, stable prefix.** Digests, not HTML; a notebook, not the full history; static system prompts first for caching. | cost × time |
-| P7 | **Everything is traced.** Every model decision, tool call, claim and validator verdict goes to a JSONL trace, printed in summary at the end of the run. | debugging test runs, elegance |
+| 1 | A model decides where to go, what to search and which documents matter; code reads, fetches, fills, checks and calculates | T0.3, T0.4 |
+| 2 | Facts come from kept evidence only, never from a model's memory; decisive values carry the quote they came from | T4.2 |
+| 3 | Selection rules and arithmetic are code; a model's pick is checked, never the only key | 1–29 |
+| 4 | Unfinished is not absent: a search that didn't complete never counts as a result | 3, 8, 9 |
+| 5 | Always submit: every stage has its own budget, model calls respect it, a watchdog signs what is entered | T1.3 |
+| 6 | Nothing assumes what public-1 looks like: no values, no site ids, no information locations | T0.1, T1.12, 19 |
+| 7 | Small model inputs, stable prompt prefix | T3.4 |
+| 8 | Add behaviour through existing hooks (`investigate`, `check`, `safe`, `calc`); no new framework | T4.1 |
+| 9 | Every change ships with a test or a scored dry run, and its docs in the same commit | T4.3, T4.7 |
 
 ---
 
-## 3. Architecture overview
+## 3. The system today (`main`)
+
+### 3.1 Run outline
+
+`agent/agent.py` `main`: budget = min(time left, 19 min), `end` = start + budget.
+
+```
+Phase 1, parallel, one browser each, deadline end − 9 min
+    tender.run · spec.run · mail.run · erp.login
+Phase 2, no browser
+    resolvers.requirements (resolvers.commercials starts too and runs alongside phase 3)
+Phase 3, ERP tabs in parallel, deadline end − 6 min
+    erp.run per distinct requirement; then await resolvers.commercials
+Phase 4, code
+    calc.facts → calc.compute
+Phase 5, deadline end − 20 s
+    submit.run (+ get_tan in the mail tab)
+```
+
+With fewer than 4 browsers, the remaining sites open as tabs in browser 1. Every agent runs inside `safe()`: a crash
+is logged and the run carries on with what the others found.
+
+### 3.2 Agents
+
+Each agent is a folder `agent/agents/<name>/` with `agent.py` (mission, result schema, `run`) and `README.md`.
+
+| Agent | Site | Mission | Limit |
+| --- | --- | --- | --- |
+| `tender` | tender portal | positions and every Q&A, kept as evidence | 45 steps |
+| `spec` | supplier portal | the revision marked current and all its requirements | 40 steps |
+| `mail` | mailbox | every message the rules need, inbox and archive | 60 steps |
+| `erp.login` | ERP | get past login, cookies, notices, gates | 20 steps |
+| `erp.run` | ERP (one tab each) | the material for one requirement; its pages kept; `check` → `extract` reads the facts | 40 steps |
+| `resolvers` | — | two `ask_json` calls: requirements and commercials | 3 attempts |
+| `submit` | tender portal | fill the wizard, sign | 70 steps |
+| `get_tan` | mailbox | the newest TAN for the request just made | 12 steps, 2 min |
+
+### 3.3 The tool loop (`agent/llm.py` `investigate`)
+
+Every browser agent is the same loop; agents differ only in mission, result schema, deadline and step limit.
+
+- **View:** `Tab.read` returns the page as text (`agent/reader.js`, §5.1), at most 14,000 characters per read; the rest
+  via `offset`.
+- **Tools:** `read`, `goto`, `click`, `fill`, `select`, `check`, `press`, `back`, `form` (a whole form by visible
+  labels; survives reloads), `fetch` (read a same-site URL without navigating; opens ZIPs and PDFs), `save_evidence`
+  (keep a page word for word), `note` (pin verified facts), `finish`.
+- **Small context:** tool results of the last 4 steps stay in full (`KEEP_STEPS`); older ones shrink to 300 characters.
+- **`check`:** optional validator on `finish`: a problem refuses `finish` and the agent keeps working.
+- **Time:** 60 s before the deadline the agent is told to finish; at the deadline `finish` is forced via `tool_choice`.
+- **Model:** `AGENT_MODEL`, default the hosted Qwen; `chat` retries up to 6 times (360 s timeout each, F4).
+- **Shared system prompt** `agents/common.py` `SYSTEM`: the sites' traps in general terms, no site and no value.
+
+### 3.4 Resolvers, calculator, submission
+
+- **Resolvers** (`agents/resolvers`): one `ask_json` call each (JSON mode, up to 3 attempts) over the brief and the
+  kept evidence. `requirements`: final quantities and governing requirements; `commercials`: discount, clauses,
+  tariffs, commitments, pool and bonus membership, setup fees, FX rates, metal indices, pool fee, bonus bands.
+- **Calculator** (`agent/calc.py`, details in [calc.md](calc.md)): `facts` merges the agents' results, `compute`
+  applies rules 3–9, 12, 15–18 and 22–27 in `Decimal` with HALF_UP; exact against the reference (PLAN_COMPARISON §2.3).
+- **Submission** (`agents/submit`): one model agent with the `form` tool and German number formatting; `get_tan`
+  runs in the mail tab; guardrails in the mission (no extra positions, omit only listed ones, never tick our own terms,
+  one TAN request).
+
+### 3.5 Logs
+
+Every line goes through `llm.log` as `[tag  123s] ...` (seconds since start). `main` logs one line per stage
+(`tender`, `spec`, `mail`, `requirements`, `commercials`, `erp`, `facts`, `calc`, `answer`, `submit`); every agent step
+appears as `[tag  123s] n: tool {args}`.
+
+### 3.6 Measured behaviour
+
+Full local dry run (PLAN_COMPARISON §2.4): every resolver fact correct; answer only at 1029 s, a false no-bid scored
+5 / 100; the tender agent took 12 minutes re-fetching the same pages, the ERP agents started after their deadline, and
+one resolver call took about 5 minutes.
+
+---
+
+## 4. The target system
+
+### 4.1 Flow
+
+A dependency graph of `asyncio` tasks replaces the fixed phases: each task starts as soon as its inputs exist.
 
 ```mermaid
 flowchart LR
-  subgraph Run["Run (20 min)"]
-    TK[Time Keeper\n(deadline ladder)]
-    BC[Brief Compiler\n(rules → RunSpec)]
-    C[Conductor\n(need graph + routing)]
-    subgraph Ops["Site Operators (1 per browser)"]
-      O1[Operator 1\nNavigator + Reader]
-      O2[Operator 2\nNavigator + Reader]
-      O3[Operator 3\nNavigator + Reader]
-      O4[Operator 4\nNavigator + Reader]
-    end
-    L[(Evidence Ledger\nclaims + provenance)]
-    KG[Key Graph\nunresolved keys → needs]
-    A[Auditor\nvalidators + cross-exam]
-    CALC[Calculator\npure Decimal]
-    N[Notary\nwizard + TAN + sign]
-  end
-  BC --> C
-  C <-->|needs / status| Ops
-  Ops -->|claims| L
-  L --> KG --> C
-  L --> A -->|re-read requests| C
-  A -->|verified ledger| CALC --> N
-  N <-->|TAN handshake| O4
-  TK -.->|phase signals| C & N
+  T0[load run · site roles · budgets] --> TEN[tender agent]
+  T0 --> SPEC[spec agent]
+  T0 --> MAIL[mail agent]
+  T0 --> ERPL[erp login]
+  T0 --> SUB1[submit stage 1:\nparticipation, bidder data, offer kind]
+  SPEC -->|catalogue groups| ERPC[ERP per group:\ncandidates, attributes, status]
+  ERPL --> ERPC
+  TEN --> REQ[requirements resolver]
+  SPEC --> REQ
+  MAIL --> REQ
+  TEN --> COM[commercials resolver]
+  MAIL --> COM
+  REQ --> PICK[material per requirement:\nmatch checked in code, details of the chosen one]
+  ERPC --> PICK
+  PICK --> CALC[calc.facts → calc.compute → validate]
+  COM --> CALC
+  CALC --> SUB2[submit stage 2:\npositions, totals, read-back, TAN, sign]
+  SUB1 --> SUB2
+  WD[watchdog] -.->|sign what is entered| SUB2
 ```
 
-**Communication** is a shared in-process blackboard (asyncio), not chat between models:
+### 4.2 Budgets and the watchdog
 
-- **Evidence Ledger**: append-only store of typed claims with provenance (§5.2).
-- **Need Board**: open information needs with status, owner, attempts, dependencies (§5.3).
-- **Event bus**: `NEED_POSTED`, `NEED_CLAIMED`, `CLAIM_ADDED`, `KEY_DISCOVERED`, `CONFLICT`, `REREAD_REQUEST`,
-  `VERIFIED`, `PHASE`, `TAN_REQUESTED`, `TAN_FOUND`, `SUBMITTED`.
+- `end` = start + min(time left from `expires_at`, 19 min).
+- Each stage gets `min(its normal budget, time left − the reserve later stages need)`, computed **when it starts**,
+  never negative. A stage that can't get its minimum is skipped and its outputs count as unfinished.
+- Reserve for submit stage 2: its measured duration plus a margin (start with 5 min; calibrate in the first test runs).
+- **Watchdog** at `end − 3 min`: omit what is unfinished (rule 9), request the TAN, sign.
+- Model calls take the caller's deadline: per-call timeout `min(90 s, time left − margin)`; no retries past it.
+- Targets: signed in **< 8 min**, then toward 5 (T3.2).
 
-Why a blackboard instead of agents messaging each other in natural language: it is cheaper (no tokens for
-chatter), deterministic, inspectable, and still lets every agent react to every other agent's findings in real time.
-Agents talk *through facts*.
+### 4.3 Module map
 
----
+`agent/` is the package; `eval/`, `tools/` and `docs/` stay local.
 
-## 4. The agent roster
-
-| Agent | Kind | Model | Browser | Lives |
+| Module | Responsibility | Interface (in → out) | Rules | Increments |
 | --- | --- | --- | --- | --- |
-| Brief Compiler | LLM + regex | Qwen | — | T+0 s, ~5 s |
-| Conductor | code + LLM routing | Qwen (routing only) | — | whole run |
-| Site Operator ×4 (Navigator + Reader) | LLM loops | Qwen (vision fallback) | B1–B4 | until its needs are done |
-| Auditor | validators + LLM cross-exam | Qwen + Clef | read-only tabs (borrowed) | from first claims to freeze |
-| Calculator | pure code | — | — | after audit, < 50 ms |
-| Notary | LLM form-filler + code read-back | Qwen | tab in the tender site's browser | from T+~60 s (pre-fill), main work after calc |
-| Time Keeper | code | — | — | whole run |
+| `agent.py` | dependency graph, site roles, data flow | run → signed bid | T1.3, T1.5, T1.12 | I3, I4 |
+| `budget.py` *(new)* | per-stage budgets, `left()`, watchdog mark | `expires_at` + reserves → budgets | T1.3 | I4 |
+| `llm.py` | `investigate`, `ask_json`, `chat` | unchanged signatures; `chat` honours the caller's deadline; reliable object `finish` | T1.3, T3.3 | I2, I5 |
+| `browser.py`, `reader.js` | page text, actions, `form`, `fetch`, files | unchanged | T0.4 | I13, I17 |
+| `agents/<name>/` | missions and result schemas | unchanged pattern | per agent README | I1, I5, I6, I12, I16 |
+| `agents/resolvers` | model interpretation of evidence | unchanged outputs in P0/P1; candidate records added in P2 | 1, 2, 5, 12–14, 16, 17, 20–26, 28 | I5, I18 |
+| `numbers.py` *(new, from `calc.number`)* | strict number and unit parsing | `(raw, hint)` → `Decimal` or error | 4, 22 | I10 |
+| `calc.py` | `facts`, `compute` | unchanged; `Decimal` throughout; loud failures | 3–9, 12, 15–18, 22–27 | I10, I14, I15 |
+| `validate.py` *(new)* | answer schema (from the run), arithmetic, ERP match check, no-bid gate | answer or ERP result → ok or problem text | T1.6, 3, 7, 8 | I1, I11 |
+| `select.py` *(new, P2)* | `LATEST` selection as a cross-check of the resolvers | candidate records → governing values + conflicts | 1, 2, 5, 12–14, 16, 17, 20–26, 28 | I18 |
 
-### 4.1 Brief Compiler
+### 4.4 Contracts
 
-- **In:** `brief` markdown, `answer_schema`, `access`.
-- **Out:** `RunSpec`: tender reference, buyer, scenario datetime (UTC), deadline, bidder company and VAT id,
-  bidder mailbox domain (from the mail site or the brief), the authorized `subject ↔ sender` pairs, the submission
-  instructions (e.g. "Teilnahme bekunden", "Hauptangebot / Verzichtserklärung"), the answer field list.
-- **How:** regex for the hard ones (reference pattern, ISO timestamps) **and** an LLM extraction into a JSON
-  schema; both must agree (two-key). Nothing in it is hardcoded: it is re-derived each run (T0.11).
+**Unfinished vs no match (I1).** An ERP result counts as `no_match` only if, checked in code: the agent finished
+before its deadline (not forced), its kept evidence contains the catalogue group's result list, and every listed
+candidate was compared. Anything else is **unfinished**: retried if time allows, otherwise the position is omitted
+(rule 9). A `no_bid` also needs the no-bid gate.
 
-### 4.2 Conductor
+**ERP match check and no-bid gate (I11).** The existing `check` → `extract` hook also verifies in code: bore,
+nominal stroke, pressure, mounting and certification equal the requirement; the status is active; the stock is the
+available (unrestricted) one. A mismatch refuses `finish` with the exact difference. Before a `no_bid`, a second ERP
+agent confirms independently.
 
-- Holds the **Need Graph**, seeded from **need templates** that encode *what the rules require*, not where to find it:
+**Candidate records (I18, P2).** Resolvers additionally list every candidate record they saw, raw as written, with
+the model's own pick; another component selects:
 
-| Template | Need | Unlocks |
+```json
+{
+  "records": [
+    {"kind": "discount_approval", "key": null, "reference": "<as written>", "sender": "<address>",
+     "sent_at": "<as written>", "timezone_hint": "<site's stated zone or null>", "status_hint": "<sent/draft/...>",
+     "values": {"percent": "<as written>", "min_order_value": "<as written or null>"},
+     "quote": "<verbatim sentence from the evidence>"}
+  ],
+  "model_pick": {"discount_approval": "<index into records>"}
+}
+```
+
+`select.py` checks each `quote` against the evidence, applies `LATEST` (RULES 4.1) and compares with `model_pick`;
+on disagreement it logs both, re-asks once, then the rule wins.
+
+---
+
+## 5. Reading pages and handling obstacles
+
+### 5.1 Page reader (`agent/reader.js`)
+
+| # | Rule | Status |
 | --- | --- | --- |
-| N1 | tender identity: confirm exact reference, deadline, participation step | eligibility |
-| N2 | bill of quantities: positions, unit, quantity, requirement ref | per-position needs |
-| N3 | all clarifications / Q&A (every page), each classified | quantities, amendments, keys, setup fees |
-| N4 | specification: revision list + statuses, governing revision's requirements (attributes, Kataloggruppe, usable-stroke notes, pieces per set) | material search |
-| N5(g) | per Kataloggruppe `g`: candidate materials with attributes | N6 |
-| N6(m) | per plausible candidate `m`: status, lead times, available stock, carton size, masses, index key, all price conditions with scales | pricing, delivery |
-| N7(s) | per authorized subject `s` from the brief: **all** records (inbox **and** archive), with dates, senders, references | discount, clauses, keys |
-| N8(k) | per discovered key `k` not yet resolved | whatever references `k` |
-| N9 | TAN for the exact reference after our request (at the end) | signing |
+| 1 | Visibility truth: drop `display:none`, `visibility:hidden`, zero opacity or font size, `hidden`, `aria-hidden` | ✅ |
+| 1b | Also drop off-screen, zero-size and clipped content; count what was dropped | ⏳ I17 |
+| 2 | Reveal real values: image and canvas labels, tooltips, collapsed `<details>`, select options, input values | ✅ |
+| 3 | Normalize text: remove invisible characters; keep number-format hints verbatim | ✅ |
+| 4 | Controls as `[n:kind "label"]` refs the tools act on; links show their href | ✅ |
+| 5 | Same-origin iframes inlined, nested ones too | ✅ |
+| 6 | Tables with cell separators; page indicators stay in the text | ✅ |
+| 7 | Open dialogs marked; in-page dialogs closed on every settle; browser dialogs accepted and reported | ✅ |
+| 8 | Repeated page chrome (headers, banners) suppressed to save tokens | ⏳ optional, I17 |
+| 9 | 14,000 characters per read, `offset` for the rest | ✅ |
+| 10 | Screenshot fallback when text is missing | only if a test shows the need (E2) |
 
-- **Routing** (a model decision, P1): each operator publishes a **Site Profile** after recon (what the site seems to
-  hold: "tenders, documents, clarifications", "material master, stock, conditions", "mailbox with search and
-  archive"). For each need the Conductor asks Qwen once: *"Which site most likely holds X? Rank them."* Ties and
-  misses fall back to the next site, then to a broadcast. This is what makes "information split differently" work.
-- **Dependencies:** N5 waits for Kataloggruppen (from wherever they appear); N6 waits for N5; the calculator waits
-  for the audit. **Everything else starts at T+0 in parallel.**
-- **Key Graph:** every claim's quote is scanned for key-shaped tokens (`[A-Z]{1,4}-\d{3,6}`, reference-shaped
-  tokens). A key that is *mentioned* but not *resolved* becomes an N8 need with its context ("Verpackungstarif
-  VP-…"). The Reader also types keys explicitly. Unresolved keys at freeze time are reported to the Auditor.
+### 5.2 Obstacles
 
-### 4.3 Site Operator (×4): Navigator + Reader
-
-Each operator owns one browser (B1–B4), its site's credentials from `access`, and a queue of needs.
-
-**Navigator loop** (ReAct, one action per step):
-
-```
-observe: Page Digest (§6) + reflex report + notebook (≤ 1.5k tokens) + current needs
-decide : {"thought": "...", "action": {"tool": "...", "args": {...}}, "need_status": [...]}
-act    : tool executes, reflexes run, new digest
-```
-
-- **Tools** (small set, P6): `goto(link_id | url_in_site)`, `click(el)`, `type(el, text)`, `select(el, option)`,
-  `submit(el)`, `search(field_el, query)`, `open_frame(frame_id)`, `collect(list_el, max_pages)` (paginate a result
-  set the model chose, T0.4), `open_document(el)` (download + parse a document the model chose), `unlock_gate()`,
-  `read(need_ids)` (hand the current page to the Reader), `ask(question)` (to Conductor), `done(need_id, outcome)`.
-- **Notebook:** a rolling summary the navigator writes for itself ("search lives at Transaktion F4; ERP times out
-  fast; candidate list for GR-… on page …"). Bounded size; replaces the raw history.
-- **Tabs for fan-out:** an operator MAY spawn **worker tabs** in its browser for independent sub-needs (e.g. one tab
-  per ERP candidate). Same cookies, parallel, each driven by its own short navigator loop. Max 3 workers per site
-  (Qwen concurrency budget, §9).
-
-**Reader** (separate, focused call):
-
-- **In:** the digest of a page the navigator selected + the need(s) + the claim JSON schema for that need kind.
-- **Out:** claims, each with `quote`, raw value strings, `locale` tag if present, `record_date` raw, `reference`
-  raw, `sender` raw.
-- **Code then:** checks each quote ⊂ digest (whitespace- and zero-width-normalized), parses numbers and dates
-  itself, and rejects claims whose quote is missing (→ automatic retry with the error). (P2)
-
-### 4.4 Auditor (the red team)
-
-Runs continuously as claims arrive; owns the **two-key** decisions.
-
-1. **Validators (code):** exact reference match; exactly one current revision; every position has quantity, unit,
-   requirement; every requirement has a Kataloggruppe; every key referenced is resolved; record dates ≤ S; senders
-   authorized; a condition valid at S exists; price unit known; FX present when currency ≠ EUR; stock read from
-   *available* stock, not physical; no number parsed without a locale decision.
-2. **Cross-examination (LLM, targeted):** for the facts that decide the most points, re-open the source and ask a
-   *different* question than the extractor did:
-   - material match (20 % of every position and the no-bid decision),
-   - governing revision,
-   - discount approval (5 points + every price),
-   - clause classification (prose → enum; **3-sample majority vote**),
-   - quantity after withdrawals.
-   Cheap binary confirmations ("Is this record a *sent* approval for exactly `T`?") go to **Clef `noul`**.
-3. **Presence/absence proofs (T2.3b):** before a `no_bid`, require: the group search result list (all pages)
-   captured, every candidate's attributes and status claimed, plus one independent search (e.g. by the dimension
-   string) that finds no further active match. Before a `bid`, require one active exact match per position with its
-   status claim.
-4. **Conflict protocol:** model pick ≠ resolver pick → `REREAD_REQUEST` to the owning operator with the exact
-   question; max 2 rounds; then the resolver wins and the conflict goes into `notes` and the trace.
-
-### 4.5 Calculator (pure function)
-
-`calculate(ledger: VerifiedLedger, spec: RunSpec) -> Answer` implements **RULES §4.3** exactly, in `Decimal`, with
-`r2` HALF_UP, cent allocation by largest remainder and marginal bonus bands. Pure, deterministic, no I/O, < 50 ms.
-Fully specified in §10.
-
-### 4.6 Notary (submission)
-
-A state machine with a model inside each step, because the private site's wizard will look different:
-
-```
-LOCATE → PARTICIPATE → BIDDER_DATA → KIND → POSITIONS(×n) → TOTALS → ACKS → REVIEW → TAN → SIGN → RECEIPT
-```
-
-- **Speculative pre-fill** (T3.2): right after recon of the tender site, the Notary opens a tab, registers
-  participation if needed, and fills **bidder data and offer kind** (`bid` by default) while research runs. If the
-  final decision is `no_bid`, it changes the kind before the positions step (the kind step comes before positions;
-  verify with a read-back).
-- **Form mapping (LLM):** the model gets the form digest + the answer fields it has to place and returns
-  `field_el → value` mappings, including which option to pick in cascading selects (press "configure" equivalents
-  between levels).
-- **Read-back verification (code):** after each step, re-read every field's value from the DOM and compare with
-  intent (German number format, T1.7). A mismatch triggers a re-fill; never move on with a mismatch.
-- **TAN handshake (T1.8):** Notary emits `TAN_REQUESTED(t_req)` → the mail operator searches for the newest TAN mail
-  for exactly `T` with a timestamp > `t_req` (paginates if needed) → `TAN_FOUND(tan)` → Notary enters it within the
-  5-minute window. Only one request; a second only if the first expires.
-- **Final confirmation:** register `page.on("dialog")` to accept the "Angebot verbindlich abgeben" confirm; capture
-  the receipt; emit `SUBMITTED`. A single terminal transition (T1.5).
-- **No-bid path:** choose the waiver kind (*Verzichtserklärung*), no positions, total 0.
-
-### 4.7 Time Keeper (deadline ladder)
-
-| Mark (scored run = 1200 s) | Phase | Behaviour |
+| Obstacle | Today | Change |
 | --- | --- | --- |
-| T+0 | boot | load run, compile brief, attach browsers, start operators |
-| T+0:15 | gather | all needs live; operators parallel |
-| **T+8:00** | soft freeze | no new optional needs; only material, quantity, discount, conditions may still be researched |
-| **T+10:00** | calc | calculator runs on the best verified ledger; unresolved optional fields → blank (T2.17) |
-| **T+14:00** | must sign | Notary must be at TAN step; if not, fast path: fill remaining positions minimally (material, qty, price, lead) |
-| **T+17:00** | emergency | submit whatever is configured; omit positions that cannot be configured; sign |
-| T+18:30 | last call | any answer at all |
+| Cookie walls, login | the model | auto re-login when a login form appears mid-run (I13) |
+| Modal dialogs | closed in code on every read | — |
+| Transient error pages | the model retries | code-side retry before the model sees the page (I13) |
+| Unlock gates | the model (`fill` on a slider, `check`) | — |
+| Look-alike controls | the model, guided by hrefs | — |
+| Fixed 1.4 s settle on every read | — | adaptive settle (I13) |
 
-Expected normal run: everything done by **T+4–6 min**. The ladder is the parachute, not the plan. Time comes from
-`expires_at`, not a hardcoded 20 min.
+### 5.3 Documents, numbers and dates
 
----
-
-## 5. Data model (the contracts between agents)
-
-### 5.1 Common provenance
-
-```python
-class Source(BaseModel):
-    site: str          # siteId from access
-    url: str
-    frame: str | None
-    quote: str         # verbatim, must be found in the digest
-    captured_at: datetime
-```
-
-### 5.2 Claims (ledger rows)
-
-| Claim kind | Fields (raw strings + parsed) |
-| --- | --- |
-| `TenderIdentity` | reference, buyer, deadline (+tz), participation_state |
-| `Position` | pos_id, short_text, quantity, unit, requirement_ref |
-| `Clarification` | number, datetime (+tz), question, answer; `effects: [QuantityChange(pos, qty, unit) \| Withdrawal(numbers) \| Amendment(revision, requirement, attribute, value) \| KeyAssignment(pos, key_type, key) \| SetupFee(pos, amount)]` |
-| `SpecRevision` | revision_id, date (+format tag), status, is_current |
-| `Requirement` | revision_id, ref, bore, stroke, stroke_is_usable, pressure, mounting, certification, catalog_group, end_reserve_key, pieces_per_set |
-| `MaterialCandidate` | material_no, catalog_group, bore, stroke, pressure, mounting, certification |
-| `MaterialDetail` | material_no, status (raw + `active: bool`), lead_stock_w, lead_prod_w, stock_available, stock_physical, pieces_per_carton, alloc_mass_g, surcharge_mass_g, index_key |
-| `PriceCondition` | material_no, valid_from, valid_to, currency, fx_key, price_unit, number_locale, scales `[(min_qty, price)]` |
-| `MailRecord` | message_id, folder, subject, sender, datetime (+tz), reference_exact, is_draft_or_preview, topic, body_quote, `parsed` (one of below) |
-| ↳ `Approval` | percent, min_order_value |
-| ↳ `ClauseRules` | `{group: BASE_ONLY \| BASE_AND_SURCHARGE \| NONE}` (+ prose per group) |
-| ↳ `EndReserves` | `{key: (revision, mm_per_end)}` |
-| ↳ `Tariffs` | `{key: eur_per_carton}` |
-| ↳ `Commitments` | `{key: (material, weeks, ceiling)}` |
-| ↳ `FxRates` | `{key: eur_per_unit}` |
-| ↳ `SetupPools` | `{key: fee}` + allocation rule text |
-| ↳ `BonusPlans` | `{key: [(lower, upper, rate)]}` |
-| ↳ `MetalIndices` | `{key: [(from, to, eur_per_kg)]}` |
-| `Tan` | tan, reference, request_no, datetime |
-
-Every claim: `id`, `need_id`, `source`, `extractor` (agent + model), `confidence`, `verified_by: list`.
-
-### 5.3 Needs
-
-```python
-class Need(BaseModel):
-    id: str; template: str; params: dict
-    depends_on: list[str]
-    route: list[str]          # ranked siteIds (from the Conductor's routing call)
-    owner: str | None; status: Literal["open","claimed","done","failed","blocked"]
-    attempts: int; critical: bool; created_at: datetime
-```
+- `fetch` and downloads: ZIP (recursive), CSV, TXT, HTML ✅; PDF needs the `pypdf` dependency (I17).
+- Numbers are parsed by code with the stated format; ambiguous forms are refused, never guessed (I10, RULES 4.1).
+- Dates are compared in UTC; models report them as written, with their timezone and format hints (I18).
 
 ---
 
-## 6. Perception layer: the Page Digest (our biggest lever)
+## 6. Models
 
-A JS distiller (`agent/browser/distill.js`) injected into every frame turns a page into a compact, honest text:
-
-```
-[PAGE] "Antworten der Vergabestelle" path=/…/questions-content  frames=0  dialogs=1(open)
-[DIALOG d1 "Kurze Umfrage"] [e7 link "Akzeptieren und fortfahren" → /portal-survey] [e8 button "×" aria="Schließen"]
-[MAIN]
-# Antworten der Vergabestelle
-[TABLE t1 cols="Nr. | Datum (Athen) | Frage und Antwort" rows=3 page="1 von 6" next=e21 loadmore=e22]
- r1: 8153 | Eingang ⟨tip: 25.01.2027, 10:00 · 2027-01-25T08:00:00Z⟩ | ▸ "Berichtigung zu Rückfrage 8152?" ⟨details: Die Antwort auf …⟩
- …
-[HIDDEN dropped: 2 nodes]  [ZW-chars removed: 41]
-```
-
-Rules the distiller follows (each one a unit test on a saved HTML cassette):
-
-1. **Visibility truth:** drop `display:none`, `visibility:hidden`, `[hidden]`, `aria-hidden=true`, zero-size,
-   off-screen and `inert` content; **count** what was dropped. (Decoys like "ISO 9001; Hub: 999 mm" disappear.)
-2. **Reveal the real values:** `role=img`/`canvas` → `aria-label` or fallback text; tooltips (`role=tooltip`,
-   `aria-describedby`, `title`) inline as `⟨tip: …⟩`; `<details>` content inline as `⟨details: …⟩`; `<select>` options
-   listed; input values shown.
-3. **Normalize text:** remove zero-width characters (U+200B–U+200D, U+2060, U+FEFF); collapse whitespace; keep
-   locale tags like `(en-US)` next to numbers **verbatim** (the parser needs them).
-4. **Element ids:** stamp `data-ag="eN"` on interactive elements so the model can act by id; stable within a page.
-5. **Frames:** list same-origin iframes as `[FRAME fN src=…]`; `open_frame` digests them (nested frames
-   recursively). The Reader can request a "flattened" digest that inlines frames.
-6. **Tables:** serialize with header + rows, page indicator, next / load-more ids.
-7. **Dialogs:** open modal dialogs are listed first, with their controls and link targets, so the model (and the
-   reflex) can see that the big button leads away.
-8. **Chrome suppression:** blocks seen identically on ≥ 2 pages of the same site (headers, footers, banners) are
-   collapsed to `[chrome: N lines, seen]`. Saves 20–40 % tokens per page.
-9. **Budget:** hard cap (~6k tokens); long tables are truncated with `[… +N rows, use collect(t1)]`.
-10. **Vision fallback:** if a region is an image/canvas with no text alternative, or the digest is near-empty while
-    the screenshot is not, attach a cropped screenshot to the call (Qwen is multimodal).
-
-**Document parsers** (`agent/docs/`): ZIP (recursive), CSV (delimiter sniffing, `;` German), TXT, HTML (distill),
-PDF (`pypdf`), XLSX (`openpyxl`) in case the private sites use them. Downloads go through the page's own session
-(`page.request` / in-page `fetch`), so cookies apply.
-
-**Number and date parsing** (`agent/docs/numbers.py`, `dates.py`), all deterministic:
-
-- `parse_number(raw, locale_hint)`: `de-DE` ("2.743,58", "181.429" → 181429), `en-US` ("64,853" → 64853, "1,170.42");
-  without a hint: refuse ambiguous forms ("64,853") and ask the Reader for the locale instead of guessing.
-- `parse_date(raw, format_hint, tz)`: `TT/MM` vs `MM/TT` tags, German "25.01.2027, 10:00", ISO; convert to UTC with
-  the site's stated timezone (the digest records "Zeitzone: …" footers).
-
----
-
-## 7. Reflexes and tools: obstacles handled generically
-
-Reflexes run **after every action**, before the digest goes to the model, and report what they did ("reflex:
-dismissed dialog 'Kurze Umfrage' via close control"). They are helpers that retry and clear obstacles (T0.4); they
-never navigate to new content.
-
-| Reflex | Trigger (generic) | Action | Never |
-| --- | --- | --- | --- |
-| Consent | page text mentions cookies/consent and a button "accept necessary…" exists, **no modal dialog open** | click the necessary-only accept button | click buttons inside modal dialogs |
-| Dialog | an open modal `dialog`/`[aria-modal]` | click its close control (aria-label close/schließen, "×"); else `dialog.close()` | follow links inside it |
-| Error page | 5xx, or text like "vorübergehend nicht verfügbar / try again" | back-off 0.5–3 s, reload the intended URL, ≤ 4 tries | loop forever |
-| Session | a login form appears while we were logged in | re-login with `access` credentials, return to the intended URL | — |
-| Download bar / banners | fixed overlays covering content | hide if they intercept clicks | — |
-
-Tools the **model** chooses (not reflexes, because they are judgement calls):
-
-- `unlock_gate()`: drag range inputs to max, tick the robot checkbox, read the displayed code (canvas
-  aria-label / fallback / vision), type it, tick acknowledgements, submit. The model decides when a page *is* a gate
-  and which radio/purpose option is the binding one ("Verbindliche Unterlagen" vs archive/preview).
-- `collect(list, max_pages)`: follows "next page" / "load more" of a list the model selected and returns all rows.
-- `open_document(el)`: fetch + parse.
-
-Look-alike controls: the digest shows each control's real target (`→ /portal-survey`, `data-unavailable`), so the
-model picks the one that leads to the document. The system prompt teaches the pattern generically.
-
----
-
-## 8. A run, second by second (happy path)
-
-```mermaid
-sequenceDiagram
-  participant TK as Time Keeper
-  participant C as Conductor
-  participant T as Op1 (tender?)
-  participant S as Op2 (spec?)
-  participant E as Op3 (ERP?)
-  participant M as Op4 (mail?)
-  participant A as Auditor
-  participant N as Notary
-  TK->>C: T+0 boot (RunSpec)
-  par recon + login
-    C->>T: N1, N2, N3
-    C->>S: N4
-    C->>E: recon, learn search
-    C->>M: N7(all subjects from brief)
-  end
-  T-->>N: site profile → speculative pre-fill (bidder data, kind)
-  S-->>C: Kataloggruppen (KEY_DISCOVERED)
-  C->>E: N5(g) for each group
-  E->>E: worker tabs per candidate (N6)
-  T-->>C: Q&A keys K-/VP-/TZ-/RP-/PB- (KEY_DISCOVERED)
-  C->>M: N8(k) for keys not yet resolved
-  A->>A: validators + cross-exam + proofs
-  A-->>C: VERIFIED
-  C->>N: answer (from Calculator)
-  N->>N: positions, totals, acks, review
-  N->>M: TAN_REQUESTED
-  M-->>N: TAN_FOUND
-  N->>N: sign + confirm dialog → receipt
-```
-
-Estimated timings (public): boot 10 s · login + consent + gates 15–30 s · tender BoQ + Q&A (6 pages) 60–90 s ·
-spec 45–60 s · mail 9 subjects ×2 folders 60–120 s (parallel tabs) · ERP 7 candidates in 3 tabs 60–90 s · audit
-10–20 s · Notary positions + TAN + sign 60–90 s → **~4–6 min**.
-
----
-
-## 9. LLM strategy
-
-| Use | Model | Settings |
+| Use | Model | How |
 | --- | --- | --- |
-| Navigator steps | Qwen3.8-Flash-Next | temperature 0, JSON output (tool-call or JSON mode, whichever Qwen does more reliably: experiment E1), max 400 output tokens |
-| Reader extraction | Qwen | temperature 0, JSON schema per claim kind, retry with validator errors (≤ 2) |
-| Prose → enum (clauses), approval conditions | Qwen, **3 samples majority** | temperature 0.3 for diversity |
-| Binary confirmations | Clef `noul` (fallback Qwen yes/no) | threshold 0.8, else escalate |
-| Routing | Qwen, one call per need batch | — |
-| Vision fallback | Qwen with cropped screenshot | only when the digest is insufficient |
-| Optional escalation | a frontier model via team secret, **off by default** | only if experiments show a quality gain on a specific call site |
+| Navigation and reading (tool loop) | hosted Qwen | native tool calls; parallel tool calls allowed |
+| Resolvers and ERP fact extraction | hosted Qwen | JSON mode, up to 3 attempts |
+| Prose → class (condition rules) | hosted Qwen | majority of 3 only if tests show errors (E4) |
+| Cheap yes/no checks | Clef | not used; only if measurably faster (E5) |
+| Anything else | a frontier model via team secret | off; only behind a flag where it buys quality (E6) |
 
-Engineering rules:
-
-- **Prompt layout:** `[static system prompt + glossary + tool schema] [run constants] [dynamic: notebook, digest,
-  needs]`. Static part first for cached-input pricing ($0.016/M vs $0.15/M).
-- **Domain glossary** (generic, allowed): Satz, Stück, Staffel, Preiseinheit, gesperrt/freigegeben, Prüfbestand vs
-  frei verwendbar, nutzbarer Weg, Endreserve, Zuschlagsmasse vs Umlagegewicht, Konditionsgruppe, Verzichtserklärung,
-  Hauptangebot/Nebenangebot, Entwurf/nicht versandt, ersetzt/gültig. It teaches **meaning**, never **values**.
-- **Concurrency:** Qwen allows 32 concurrent calls per team (shared across local dev and test runs!). Cap 12 per run
-  with a semaphore; Clef cap 6.
-- **Robustness:** timeouts 120 s on the first call (cold model), 45 s after; retries with jitter; JSON repair;
-  circuit breaker → if Qwen is failing, keep operators idle-retrying rather than spinning.
-- **Token budget:** expected ~120–200 calls × ~4k input → ~0.6–0.8 M input tokens → **≈ $0.10–0.15 per run**.
+- Calls are bounded by the caller's deadline (I2); at most 12 concurrent calls per run (the team shares 32).
+- Prompt layout: static system prompt and tool schemas first (cached input is cheaper), then brief, then dynamic parts.
+- The system prompt teaches meanings (traps, German business terms), never values.
+- Resolver inputs only carry the evidence they need (I5); later, extraction while browsing (I19).
+- Cost: measure per test run; target ≤ $0.25 (T3.3).
 
 ---
 
-## 10. Calculator specification (`agent/calc/`)
+## 7. The private dataset
 
-```python
-def calculate(v: VerifiedLedger, spec: RunSpec) -> Answer:
-    S = spec.scenario_dt
-    positions = v.positions()                               # from BoQ
-    for p in positions:
-        p.q_unit  = latest_quantity(p, v.clarifications, S)  # T2.1 (withdrawals honoured)
-        req       = governing_requirement(p, v, S)          # T2.2, T2.3 (+ amendments)
-        req.stroke = derive_nominal_stroke(req, v, S)       # T2.3a
-        p.q       = to_pieces(p.q_unit, p.unit, req)        # T2.1 Satz conversion
-        p.mat     = select_material(req, v)                 # T2.3b → None means no_bid
-    if any(p.mat is None for p in positions):
-        return no_bid_answer(spec, v)                       # T2.15, discount rule T2.5
-    for p in positions:
-        p.base = base_unit_price(p, v, S)                   # T2.4 price unit, scale, FX, r2
-        p.sur  = metal_surcharge(p, v, S)                   # T2.7 (unrounded)
-        p.setup = ordinary_setup(p, v)                      # T2.8
-        p.cartons = ceil(p.q / p.mat.pieces_per_carton)     # T2.9
-    pool  = allocate_cents(pool_fee(v, S), {p: p.q * p.mat.alloc_mass for p in pool_members})   # T2.8
-    bonus = allocate_cents(bonus_credit(members, v, S), {p: cents(p.q * p.base) for p in members})  # T2.10
-    d     = discount(v, S, positions)                       # T2.5 (threshold on r2(Σ q·base))
-    for p in positions:
-        clause = clause_for(p, v, S)                        # T2.6
-        p.unit_price = r2(p.base * f(d, clause.base) + p.sur * f(d, clause.sur)
-                          + (p.setup + pool[p] + p.cartons * tariff(p) - bonus[p]) / p.q)  # T2.11
-        p.lead = lead_time(p, positions, v, S)              # T2.12 (pooled demand)
-    total = r2(sum(p.q * p.unit_price for p in positions))  # T2.13
-    return Answer(..., report fields per T2.14)
-```
-
-- Helpers: `latest(records, key, S, sender, ref)` is **the** resolver (RULES §4.2), used for every mail-backed key.
-- `allocate_cents(total, weights)`: floor, then largest remainders, ties by ascending position id; property tests:
-  sum is exact, monotone in weight, tie order.
-- Marginal bands: `Σ rate_i × max(0, min(B, hi_i) − lo_i)`, `r2` once.
-- **N-version safety net:** `docs/scout-public-expected.py` is an independent implementation (version B). A
-  **randomized scenario generator** (`tests/gen_scenarios.py`, Hypothesis) produces thousands of synthetic ledgers
-  (random quantities, units, withdrawals, currencies, price units, windows, pools, bands, clauses, stock edges,
-  ceilings at exactly the limit). Both versions must agree to the cent. Disagreement = a bug in one of them or an
-  ambiguity to add to RULES §4.4.
-
----
-
-## 11. Generalization strategy (the private dataset)
-
-The private run has "different software, look, navigation and site names, other content and data, and the
-information split differently". Concretely we defend against:
+Same jobs and rules, different software, look, navigation, site names and data, information split differently.
 
 | Change | Defence |
 | --- | --- |
-| Different site names / ids / URLs | everything comes from `access`; operators are bound to `siteId`s, not names |
-| Different navigation and labels | model navigation over digests; glossary teaches concepts with synonyms (Ausschreibung/Vergabe/Tender; Bieterfragen/Rückfragen/Q&A/Klarstellungen) |
-| Information moved between sites (e.g. clarifications in the supplier portal, clause rules in the ERP) | Conductor routing by site profile + fallback broadcast; Key Graph pulls in whatever site mentions a key |
-| New document formats (PDF, XLSX, ZIP-in-ZIP) | parsers for all common formats |
-| New trap variants | trap categories (RULES §7) implemented generically; chaos tests (§13.5) |
-| Different number/date conventions | parser refuses to guess; the Reader must supply the locale; the Auditor checks plausibility (e.g. price per piece within 10× of the other scales) |
-| A no-bid scenario | presence/absence proofs; a mutation test that blocks a material |
-| More/fewer positions, other units | nothing assumes 5 positions or *Satz* only; unit conversion is driven by the spec text |
+| Other site ids or names | roles and submission target from the run (I3) |
+| Other navigation and labels | model navigation over page text; generic prompts ✅ |
+| Information on other sites | gap sweep for missing facts and unresolved keys (I16) |
+| Other mail subjects | topics and senders from the brief (I12) |
+| Other document formats | ZIP, CSV, TXT, HTML ✅; PDF (I17) |
+| Other number and date conventions | strict parsing with hints (I10); UTC comparison |
+| A no-bid scenario | unfinished ≠ no match (I1); no-bid gate (I11); mutation test with a blocked match |
+| More positions, other units | nothing assumes a count or a unit ✅ |
+| Known traps in a new skin | trap catalogue (RULES §8); mutation tests (I20) |
 
-The **Mirror World** (§13.6) is our dress rehearsal for exactly this.
+## 8. Staying compliant
 
----
-
-## 12. Compliance strategy (staying on the right side of review)
-
-- Package = `agent/` only. `docs/`, `tools/`, cassettes and the oracle are outside it (T0.5).
-- `tools/audit_hardcode.py` (CI + pre-submit): builds a denylist from every scouted value (references, material
-  numbers, keys, prices with both number formats, quantities in context, dates, logins, receipt numbers, site
-  hostnames and paths) and fails on any hit in `agent/` (T0.1, T0.2).
-- Prompts contain **no examples with real values**; few-shot examples use obviously synthetic values
-  (`XX-0000`, "Musterstadt"), generated, and reviewed.
-- The trace proves model direction: every `goto/click/search` has the navigator decision id that caused it (T0.3).
-- README states the architecture plainly; no "dear reviewer" text (T0.10).
-- Own keys (if we ever add a frontier model) live only as team secrets (T0.6).
+- The package is `agent/` only; references and public-1 data live in `eval/`, outside it (T0.5).
+- `tools/audit_package.py` (I8) checks `agent/` against every scouted value, site paths, key-shaped tokens and API keys
+  before each submission; READMEs in the package count too (T0.1, T0.2, T0.6).
+- Prompts and examples use synthetic values only.
+- The log shows every navigation step as a model tool call (T0.3).
+- Docs say plainly what the system does (T0.10); Luca approves every submission (RULES §9).
 
 ---
 
-## 13. Testing and evaluation
+## 9. Testing and evaluation
 
-### 13.1 Unit tests (fast, < 60 s)
-
-Number parser (both locales, ambiguity refusal) · date parser (tags, tz) · `latest()` resolver (exact ref, sender,
-future-dated, newest wins, failed condition doesn't revive) · cent allocation · bonus bands · calculator golden test
-vs the oracle · Notary German number formatter · schema validation.
-
-### 13.2 Cassettes (record and replay)
-
-`tools/record.py` saves every page the agent visits locally (HTML of every frame + screenshot + URL) into
-`cassettes/<date>/`. Distiller and Reader tests replay them offline: deterministic, free and quick. Each trap gets a
-cassette-based test ("digest must not contain 'ISO 9001'", "digest must contain the tooltip date").
-
-### 13.3 Local scorer
-
-`tools/score_local.py answer.json` compares with the oracle using the **official weights** (RULES §4.1) and prints
-a breakdown like the platform's. Every local end-to-end run ends with a score.
-
-### 13.4 Mutation lab (generalization on cassettes)
-
-Transform cassettes and require identical extracted facts:
-
-1. relabel (German synonyms, English labels), 2. rename ids and classes, 3. swap number locale tags (with
-consistent values), 4. move tables into nested iframes, 5. inject decoys (hidden text, look-alike reference rows,
-draft blocks), 6. shuffle row order and pagination size, 7. change date formats and timezones.
-
-### 13.5 Chaos runs (live, local)
-
-Playwright route interception during local runs: random 503s (10–20 %), latency spikes, a forced session expiry
-mid-run (clear cookies), a dialog injected on every page. The run must still finish and score.
-
-### 13.6 Mirror World (stretch, high value)
-
-A small FastAPI app (`tools/mirror/`) serving **re-skinned versions of the 4 jobs** with different navigation,
-English/German mixed labels, information **split differently** (Q&A in the supplier portal, clause rules in the
-ERP), and a **synthetic scenario** from the scenario generator (so we know the right answer). Variants: a no-bid
-scenario, EUR-only, no pools. Running the full agent against it is our closest proxy for the private run.
-
-### 13.7 Sandbox test runs
-
-The only place with the official breakdown. Cadence: after each milestone, and before every submission. We log
-each run's breakdown in `docs/runs.md` (date, commit, score per part, time, cost, failures).
-
-### 13.8 Experiments to run (decide by data)
-
-| ID | Question | Metric |
+| Level | What | Increments |
 | --- | --- | --- |
-| E1 | Qwen native tool calls vs JSON mode for the navigator | action validity %, steps per need |
-| E2 | Digest only vs digest + screenshot | extraction accuracy on cassettes, tokens |
-| E3 | 4 browsers + worker tabs vs 2 browsers | wall time |
-| E4 | Clause interpretation k=1 vs k=3 | accuracy on synthetic prose variants |
-| E5 | Clef vs Qwen for binary confirmations | agreement, cost, latency |
-| E6 | Frontier model for the Reader only (team secret) | quality gain vs cost × time |
+| Unit tests | calc golden test with facts as the pages show them, allocation ties, band edges, inclusive ceilings and thresholds; number parser; validators; selection | I10, I11, I14, I18 |
+| Recorded pages | pages saved from dry runs; reader tests for every trap category | I17 |
+| Dry run + score | `DRY_RUN=1` stops before the binding confirmation and writes `answer.json`; `eval/compare.py` scores it with the official weights | I7 |
+| Mutation tests | recorded pages relabelled, locale-swapped, nested in iframes, with injected decoys and shuffled rows: extraction must not change | I20 |
+| Chaos runs *(stretch)* | local runs with random 503s, a forced session expiry, slow responses: the run must still sign | — |
+| Mirror world *(stretch)* | a small local re-skin of the four jobs with information split differently and a synthetic scenario with a known answer | — |
+| Sandbox test runs | the official per-field breakdown; paste each result in its PR | I9 |
 
----
+Two independent references agree on every field: `eval/expected.json` (with `eval/derivation.md`) and `eval/oracle.py`.
 
-## 14. Observability
+**Experiments** (decide by data): E2 screenshot fallback · E3 browser and tab layout for the ERP fan-out ·
+E4 voting for the clause classification · E5 Clef for yes/no checks · E6 a frontier model for the resolvers ·
+E7 budget calibration in the sandbox.
 
-- `trace.jsonl` per run: every event, decision, tool call, claim, validator verdict, with timings and token counts.
-- End-of-run summary to stdout (visible in test-run logs): ledger table, resolver choices, conflicts, timings per
-  phase, tokens/cost estimate, the final answer.
-- `tools/trace_view.py`: renders a trace as a timeline (per agent lanes) for debugging.
+## 10. Observability
 
----
+Today: stage results, agent steps and the calculation trace in the log (§3.5). Add an end-of-run summary: time per
+stage, model turns and tool calls per agent, resolver reasoning for decisive values (I21).
 
-## 15. Repository layout
+## 11. Repository layout
 
 ```
 AdminRights/
-├── agent/                      # THE PACKAGE (only this is uploaded)
-│   ├── agent.json              # {"setup":["uv","sync"],"run":["uv","run","--no-sync","python","-m","rfq"],"models":["qwen","clef"],"browsers":4}
-│   ├── pyproject.toml, uv.lock, README.md
-│   └── rfq/
-│       ├── __main__.py         # entry: load run → start agents → submit
-│       ├── core/               # run contract, RunSpec, brief compiler, clock (Time Keeper), trace, config
-│       ├── bus/                # ledger, need board, event bus, key graph
-│       ├── browser/            # pool (CDP / local), distill.js, actions, reflexes, gate, downloads
-│       ├── docs/               # parsers: zip, csv, txt, html, pdf, xlsx; numbers, dates
-│       ├── llm/                # clients (qwen, clef), json/tool calling, retries, semaphores, prompts/
-│       ├── agents/             # conductor, operator (navigator+reader), auditor, notary
-│       ├── calc/               # money, allocate, resolver, calculator, answer assembly + schema validation
-│       └── tests/              # (or top-level tests/, excluded from the package via .gitignore rules)
-├── tools/                      # dev only: audit_hardcode, check_package, record, score_local, trace_view, mirror/
-├── cassettes/                  # recorded pages (dev only)
-├── docs/                       # RULES, IMPLEMENTATION_PLAN, scouting notes, oracle, runs log
-└── starter-kit/                # reference only
+├── AGENTS.md, CLAUDE.md, README.md
+├── agent/                 # THE PACKAGE (only this is uploaded)
+│   ├── agent.json, pyproject.toml, uv.lock, README.md
+│   ├── agent.py, llm.py, browser.py, reader.js, calc.py, run.py, browsers.py
+│   └── agents/<name>/     # agent.py + README.md per agent, common.py
+├── docs/                  # what the system is and how we build it; no public-1 values
+│   ├── README.md, RULES.md, IMPLEMENTATION_PLAN.md, PLAN_COMPARISON.md, calc.md, challenge.md
+│   └── platform/          # dated copies of the platform docs
+├── eval/                  # local: references, scorer, public-1 data
+│   ├── expected.json, derivation.md, compare.py, oracle.py
+│   └── public-1/          # scouting notes, brief, Q&A extract, scouting JSON, challenge and start pages (logins)
+└── tools/                 # local: dev-env.sh; later the audit, release check and score script
 ```
 
 ---
 
-## 16. Work breakdown and 24-hour timeline
+## 12. Backlog
 
-Team: **A = Conductor lead** (integration, orchestration, release manager) · **B = Perception & Operators** ·
-**C = Numbers & Notary**. Suggested mapping: yazanratrout = A, FinnPixel = B, lucakammerer = C (swap freely). Claude
-Code pairs with whoever is on the critical path.
+Owner letters: **L** = Luca, **Y** = Yazan, **F** = Finn (proposal, §14).
 
-`H0` = plan approved. Sync every 3 h (15 min): demo, blockers, re-plan.
+### P0: a correct signed bid in time
 
-| Window | A: Conductor | B: Perception & Operators | C: Numbers & Notary | Exit criterion |
-| --- | --- | --- | --- | --- |
-| **H0–H1** M0 | repo, git, CI (pytest + audit + package check), `agent/` skeleton from starter kit | record cassettes of all 4 sites (local) | data model (§5) in pydantic, agreed by all | skeleton runs locally, CI green |
-| **H1–H5** M1 | brief compiler, event bus, ledger, need board, Time Keeper | `distill.js` (rules 1–9), reflexes, browser pool (local + CDP), actions | numbers/dates parsers, resolver, calculator, allocation, golden test vs oracle, scenario generator | calculator matches oracle; digest passes trap tests on cassettes |
-| **H5–H9** M2 | Conductor routing + Key Graph; wire agents | operator navigator + reader loop; first site end-to-end (tender BoQ + Q&A) | Notary state machine on the public wizard (dry run, no sign) | facts from 2 sites in the ledger by model navigation |
-| **H9–H11** M3 | integration, end-to-end local run, trace summary | remaining sites (spec gate, ERP fan-out, mail search + archive) | TAN handshake, sign locally (scouting login), local scorer | **first full local run with a signed bid** |
-| **H11–H12** | **first sandbox test run** → fix → **first scored submission** (safety net on the leaderboard) | | | eligible, any quality |
-| **H12–H17** M4 | Auditor (validators, cross-exam, proofs), deadline ladder tests | mutation lab, chaos runs, vision fallback | N-version differential tests; Notary read-back hardening; no-bid path | ≥ 95 local score, chaos survival |
-| **H17–H20** M5 | performance: concurrency, caching, prompt trimming | Mirror World (stretch) or more mutation coverage | Mirror World scenario generator + answers | test run 100 (or best known), < 6 min |
-| **H20–H22** M6 | **release candidate**, submission `sub-RC`, opt in **best of 3** | README + architecture diagram (elegance) | final audits; `docs/runs.md` complete | RC passes review |
-| **H22–H23** | **freeze**: only fixes for a failing RC; final submission must be ≥ RC on the test run | | | final submission passed review |
-| **H23–H24** | buffer; no submissions in the last 30 min unless the current one failed review | | | — |
+| ID | Change | Where | Acceptance | Rules | Owner |
+| --- | --- | --- | --- | --- | --- |
+| I1 | Unfinished ≠ no match (§4.4) | `agents/erp`, `validate.py`, `calc.compute` | a run with a starved ERP stage never answers no_bid | 3, 8, 9 | Y |
+| I2 | Model calls bounded by the caller's deadline; concurrency cap | `llm.py` | test with a fake slow client | T1.3 | F |
+| I3 | Site roles and submission target from the run; unknown ids classified once (URL + landing page) | `agent.py`, `agents/common.py` | a run with renamed site ids doesn't crash | T1.12 | L |
+| I4 | Dependency graph + per-stage budgets (§4.1, §4.2) | `agent.py`, `budget.py`, `agents/erp` | dry run: ERP starts during the first stage; answer < 8 min | T1.3, T3.2 | L |
+| I5 | Slimmer missions and inputs: no word-for-word copies in `finish` schemas when the evidence holds them; "every needed page kept → finish"; resolvers get only the evidence they need; reliable object `finish` | `agents/tender`, `agents/spec`, `agents/resolvers`, `llm.py` | no page fetched twice without reason; commercials resolver much faster | T3.2, T4.2 | F |
+| I6 | Submit in two stages + watchdog: stage 1 at start, stage 2 with the answer, read-back of the review page before the TAN, watchdog at end − 3 min | `agents/submit` | a short-budget run still signs | T1.3, T1.9, 9 | L |
+| I7 | Dry-run mode + `tools/score.sh` (run + `eval/compare.py`) | `agents/submit`, `tools/` | one command → a score | T4.3 | Y |
+| I8 | Release tools: `tools/audit_package.py` + `tools/check_release.sh` (audit, tests, `agent.json`) | `tools/` | green on `main` | T0.1, T0.2, T0.6, T1.1 | Y |
+| I9 | First sandbox test run, then the first scored submission as a safety net | — | eligible and signed | D2, D3 | L |
 
-Critical path: distiller → operator loop → ERP/spec dependency → Notary. If M2 slips, cut scope in this order:
-Mirror World → vision fallback → chaos runs → Clef. **Never cut:** audit script, calculator tests, the deadline
-ladder, presence/absence proofs.
+### P1: correctness under pressure
+
+| ID | Change | Where | Acceptance | Rules | Owner |
+| --- | --- | --- | --- | --- | --- |
+| I10 | Strict numbers: inline format hints used; ambiguous forms refused (the agent re-reads); thousands separators in grams; `Decimal` end to end | `numbers.py`, `calc.py` | parser tests incl. the probes in PLAN_COMPARISON §2.3 | 4, 22 | Y |
+| I11 | ERP match check in code + no-bid gate (§4.4); answer schema and arithmetic validated before signing | `agents/erp`, `validate.py`, `agents/submit` | tests with look-alike and blocked candidates | T1.6, 3, 7, 8 | Y + L |
+| I12 | Mail topics and senders parsed from the brief; generic wording for the approval search | `agents/mail` | no public mail subject in prompts | T0.11, 5, 10, 21 | F |
+| I13 | Code-side retry of transient error pages; auto re-login; adaptive settle | `browser.py` | fewer model turns on the ERP in the dry-run log | T3.2 | F |
+| I14 | Calculator tests: golden test, allocation ties, band edges, inclusive ceilings and thresholds | `tests/` | green | 4–9, 12, 15–18, 22–27 | Y |
+| I15 | Loud failures instead of silent fallbacks (FX, metal index); omitted positions per rule 9 | `calc.py` | tests | 9, 22, 28 | Y |
+
+### P2: private-dataset readiness
+
+| ID | Change | Where | Acceptance | Rules | Owner |
+| --- | --- | --- | --- | --- | --- |
+| I16 | Gap sweep: after the first pass, code lists missing facts and unresolved keys; short model missions to the other sites | `agent.py`, `agents/common.py` | a fake run with Q&A on another site still finds them | 10, 19 | F |
+| I17 | Reader hardening (§5.1 rows 1b, 8); `pypdf` dependency | `reader.js`, `pyproject.toml` | recorded-page tests; a PDF is read | traps 8, 9 | F |
+| I18 | Code-side selection cross-check (§4.4) | `agents/resolvers`, `select.py` | synthetic-record tests per trap category | 1, 2, 5, 12–14, 16, 17, 20–26, 28 | Y |
+| I19 | Extraction while browsing: each kept page read into records right away (small parallel calls), so resolvers only select | `llm.py`, `agents/*` | resolvers finish in seconds after the last agent | T3.2, T4.2 | Y + F |
+| I20 | Mutation tests on recorded pages | `tests/` | extraction stable | 19 | F + Y |
+
+### P3: polish
+
+| ID | Change | Owner |
+| --- | --- | --- |
+| I21 | End-of-run summary (§10) | L |
+| I22 | Cosmetics (PLAN_COMPARISON F15); agent READMEs and this file describe the final system | all |
 
 ---
 
-## 17. Risk register
+## 13. Process
 
-| Risk | Likelihood | Impact | Mitigation |
+- **Before every `atira submit`:** the Definition of Done in [RULES.md](RULES.md) §9.
+- **Releases:** submissions only from `main`, tagged `sub-NN` with their test-run score (T4.4).
+- **Freeze:** no experimental submissions in the last 3 hours; the last one must be at least as good as the release
+  candidate (T4.5).
+- **Final:** opt in to best of 3 (`atira final --best-of 3`) before the final run starts.
+- **Shared capacity:** no local runs while a test run is going; one test run at a time.
+- **PRs:** small, one increment each; name the increment and rule IDs; paste the dry-run score.
+
+## 14. Work split and timeline
+
+| Person | Owns | P0 | then |
 | --- | --- | --- | --- |
-| Review rejects the package as "scripted" | M | fatal | model-directed navigation everywhere; trace proves it; no site-specific code; audit |
-| Hardcoded value slips in (prompt example, test fixture inside `agent/`) | M | fatal | denylist audit in CI and pre-submit; synthetic examples only |
-| Qwen unreliable at tool calling / JSON | M | high | E1; JSON repair; validator-driven retries; small action space |
-| Qwen outage / cold start mid-run | L | high | retries + breaker; the platform voids runs where hosted models were down |
-| Run exceeds 20 min | M | fatal | Time Keeper ladder; parallelism; chaos tests with latency |
-| Session expiry mid-wizard loses entries | M | high | Notary saves step by step ("Weiter"), read-back, re-login reflex, resume |
-| TAN race (stale TAN, multiple requests) | M | high | single request, timestamp filter, 5-min timer, retry once |
-| Wrong governing record (look-alikes) | H | high | collect-all + resolver + Auditor two-key |
-| Number-locale misparse | M | high | parser refuses ambiguity; locale required; plausibility checks |
-| Private site splits info differently | H | high | routing by site profile, Key Graph, Mirror World |
-| No-bid misjudged | L | very high | presence/absence proofs + Auditor sign-off |
-| Latest submission worse than best | M | high | freeze rule; DoD (RULES §8); RC tagging |
-| Shared Qwen concurrency (32/team) starves the run while we develop | M | M | pause local runs during test runs; per-run cap 12 |
+| **Luca** (repo owner, knows the code) | orchestration, submission, releases | I3, I4, I6, I9 | I11 with Yazan, I21 |
+| **Yazan** | correctness and tooling | I1, I7, I8 | I10, I11, I14, I15, I18 |
+| **Finn** | model loop, missions, browser, generalization | I2, I5 | I12, I13, I16, I17, I19, I20 |
 
----
+`H+0` = this plan on `main`. Sync every 3 hours (demo a scored dry run, re-plan).
 
-## 18. Open questions (to settle with test runs or experiments)
+| Window | Goal | Exit criterion |
+| --- | --- | --- |
+| H+0 – H+3 | P0 | a dry run signs in < 8 min with the right decision |
+| ~H+3 | first sandbox test run, then the first scored submission (I9) | eligible, on the leaderboard |
+| H+3 – H+9 | P1 | dry-run score ≥ 95 |
+| H+9 – H+15 | P2 | mutation tests green; gap sweep proven |
+| until 3 h before the end | tuning: time, cost, test-run breakdowns | release candidate tagged |
+| last 3 h | freeze; final submission ≥ release candidate; best of 3 | final submission passed review |
 
-1. Does "no later than the scenario date" mean datetime or calendar date? (A1)
-2. Which Qwen calling style is more reliable: native tools or JSON mode? (E1)
-3. How fast is the sandbox browser vs local? (calibrate the time ladder)
-4. Do test runs share the "one in flight" limit with submissions? (affects cadence)
-5. Is Clef worth it at all? (E5)
-6. Does the wizard on the public site require the participation step per run, and what do the last steps look like
-   (totals, acks, review, TAN, confirm)? **Scout before M2 ends.**
+## 15. Risks and open questions
 
----
-
-## Appendix A: Navigator system prompt (skeleton)
-
-```
-You operate ONE website in a real browser for a sales engineer preparing a tender bid.
-You see a Page Digest: [eN] are element ids you can act on; ⟨tip:…⟩ are tooltip values; ⟨details:…⟩ is collapsed
-content; [HIDDEN dropped] means invisible decoy text was removed: never rely on hidden text.
-Websites are adversarial: modal dialogs whose big button leads away, look-alike buttons (check their target),
-superseded documents shown first, look-alike references (exact match only), drafts / previews / unsent messages
-(not authoritative), error pages that need a retry, gates that need a code shown on the page.
-Your job: satisfy the open NEEDS. Choose ONE action per turn. Prefer search over browsing when a search exists;
-search narrowly (reference + topic). When a page holds what a need asks for, call read(need_ids).
-Update your NOTEBOOK with what you learned about this site's layout.
-Reply with JSON: {"thought": str, "action": {"tool": str, "args": {...}}, "notebook": str, "need_status": [...]}
-```
-
-## Appendix B: Reader prompt (skeleton)
-
-```
-Extract facts for the NEEDS from this page. Copy every value as it is written (raw string), include the exact QUOTE
-(verbatim from the digest) that contains it, and the number-format tag if one is shown, e.g. "(de-DE)".
-Do not convert, compute or round anything. Report every candidate record, including old, superseded,
-other-reference or draft ones, and mark which they are; another component selects the governing one.
-Reply with JSON matching the schema.
-```
-
-## Appendix C: Definition of a good PR
-
-- Cites the rule IDs it serves; adds or updates a test; passes the audit; keeps the package small; updates
-  `RULES.md` if it changes an interpretation.
+| Item | Plan |
+| --- | --- |
+| Review rejects the package as scripted | model-directed navigation everywhere; the log shows it; no site-specific code |
+| A public value slips into the package (prompt example, README) | audit before every submission (I8) |
+| A run ends without an answer | budgets, deadline-bounded calls, watchdog (I2, I4, I6) |
+| A false no-bid | I1 + I11 |
+| Session expiry mid-wizard | step-by-step saving, re-login (I13), read-back (I6) |
+| TAN race | one request, newest TAN after the request, 5-minute window |
+| Site ids differ on the private dataset | I3 handles both |
+| Information on unexpected sites | gap sweep (I16) |
+| The scorer's "dated metal-index check" fields are unknown | RULES A6; confirm with the first test-run breakdown |
+| Sandbox speed differs from local | calibrate budgets after the first test run (E7) |
+| Resolver calls stay slow | slimmer inputs (I5), then extraction while browsing (I19) |
+| The gap sweep could look like crawling | each sweep mission is a model decision about one named missing fact |
+| Code-side selection disagrees with the model | log both; the rule wins after one re-ask (I18) |
+| Our latest submission is worse than our best | freeze and Definition of Done (T4.5) |

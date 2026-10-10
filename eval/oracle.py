@@ -2,7 +2,7 @@
 
 A test oracle for local development only. It must never be copied into the agent package: the agent has to derive
 everything from the websites at run time (fair-play rules), and the private dataset differs anyway.
-Facts and their sources are in docs/scouting-notes.md.
+Facts and their sources are in eval/public-1/scouting-notes.md.
 """
 from decimal import ROUND_DOWN, ROUND_HALF_UP, Decimal as D
 from math import ceil

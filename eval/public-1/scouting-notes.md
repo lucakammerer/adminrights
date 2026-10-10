@@ -1,8 +1,8 @@
 # Scouting notes: public scenario (public-1)
 
 Scouted 2026-10-10 with the scouting logins. Tender **VG-2027-7093** (Stadt Buchenstadt, Verkehrsbetriebe), bidder
-Linden Hydraulik und Komponenten GmbH, scenario date **2027-01-25T09:00:00Z**. Raw extracts: `scout-public-qa.txt`,
-`run-brief.md`, `scouting.json`. Expected answer (test oracle, never ship it): `scout-public-expected.py`.
+Linden Hydraulik und Komponenten GmbH, scenario date **2027-01-25T09:00:00Z**. Raw extracts next to this file: `scout-public-qa.txt`,
+`run-brief.md`, `scouting.json`. Expected answer (test oracle, never ship it): `../oracle.py`.
 
 The private dataset uses *different sites, layouts and navigation*, so treat the traps below as categories of
 problems the agent must handle generically, not as selectors to hardcode.
@@ -104,7 +104,7 @@ problems the agent must handle generically, not as selectors to hardcode.
   - finanzen@ Projektbonus PB-1474: marginal bands 0–5000 0 %, 5000–15000 2 %, >15000 5 %
   - kalkulation@ Preisindizes: MET-4607 windows; **3.15 EUR/kg** for 25.01–28.02.2027
 
-## Derived public answer (from `scout-public-expected.py`)
+## Derived public answer (from `../oracle.py`)
 
 | Pos | Qty (pcs) | Material | Base EUR | Surcharge | Packaging | Rebate | Unit price | Lead |
 | --- | ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: |

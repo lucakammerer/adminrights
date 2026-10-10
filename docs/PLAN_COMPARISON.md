@@ -1,6 +1,7 @@
 # Plan comparison: Luca's `main` vs our planning branch
 
-> Decision record for the merge, written 2026-10-10 by following [`PLAN_MERGE_PROCEDURE.md`](PLAN_MERGE_PROCEDURE.md).
+> Decision record for the merge, written 2026-10-10 from a full read of Luca's code and docs plus evidence: a rules
+> audit, a calculator test and a full local dry run.
 > Compared: Luca's `main` at `3accb38` (PRs #2–#4: agent docs, reference answer + scorer, the agent) and our branch
 > `yazan/planning` (rules reference, implementation plan, scouting notes). Rule IDs refer to [`RULES.md`](RULES.md):
 > T0–T4 for platform rules, 1–29 for the brief's bid rules. The merged result is [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md).
