@@ -160,7 +160,11 @@ Every browser agent is the same loop; agents differ only in mission, result sche
   `chat` tries up to 6 times, each attempt at most `CALL_TIMEOUT` (180 s; no SDK-internal retries) and all of them
   bounded by the stage's `llm.UNTIL`, which `agent.safe`/`agent.start` set per stage; step calls end at the agent's
   deadline so the forced `finish` keeps its grace. Both limits hold on the wall clock (`asyncio.wait`, the call is
-  dropped at its limit): the SDK's timeout only bounds the silence between bytes.
+  dropped at its limit): the SDK's timeout only bounds the silence between bytes. Replies are streamed (`llm.reply`
+  assembles them like a non-streamed one), so that silence tells a stuck call from a slow one: an attempt that brings
+  no byte for `SILENCE` (30 s; 60 s on a retry) is dropped and asked again. A healthy stream starts within seconds;
+  stuck calls never reach the model and used to hold their stage to the cap (run_76abdc35df9c092b: six, among them
+  three of the four ERP searches' first calls).
 - **Cut agents keep their evidence:** every `investigate` registers its evidence list in `llm.KEPT`, one per stage
   (`agent.start`); a stage that is cut or fails hands those pages on, marked `forced`.
 - **Shared system prompt** `agents/common.py` `SYSTEM`: the sites' traps in general terms, no site and no value.

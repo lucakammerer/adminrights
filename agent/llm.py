@@ -9,6 +9,7 @@ from urllib.parse import urljoin
 from contextvars import ContextVar
 
 from openai import AsyncOpenAI
+from openai.lib.streaming.chat import ChatCompletionStreamState
 
 import paging
 
@@ -29,6 +30,11 @@ CALL_TIMEOUT = 180  # one model call; a slower one is retried while its deadline
 # a tender finish 132 s: a cut call starts over, so the cap sits above the slowest calls seen)
 CHECK_TIMEOUT = 60  # one model call inside a finish check (ERP extract: 13-21 s); one hung call cost a position
 TOOL_TIMEOUT = 60  # one browser tool; a fetch that hung 109 s held the tender agent to its cut, its kept pages lost
+# A call that brings no byte for this long is stuck and asked again (a retry waits twice as long, in case the service is
+# only slow). Replies are streamed, so a healthy one sends its first chunk within seconds and then one every <1 s; a
+# stuck call never reaches the model (none of the 6 in run_76abdc35df9c092b shows in the platform's calls) and held
+# its stage to the cap: three of the four ERP searches lost their whole two minutes to their first call.
+SILENCE = 30
 
 # The time by which every model call in this task must be over (set by agent.safe for each stage) and the longest
 # one call may take. chat enforces both on the wall clock: the HTTP timeout only bounds the silence between bytes, and
@@ -67,15 +73,31 @@ def client() -> AsyncOpenAI:
     return _client
 
 
+async def reply(messages: list, tools: list | None, silence: float, **kwargs):
+    """One streamed model reply, assembled like a non-streamed one; every read must bring a byte within `silence`. The
+    snapshot, not get_final_completion: that raises on a reply cut at its length limit, which counted before."""
+    stream = await client().chat.completions.create(model=MODEL, messages=messages, tools=tools, stream=True,
+                                                    stream_options={"include_usage": True}, timeout=silence, **kwargs)
+    state, chunks = ChatCompletionStreamState(), 0
+    async with stream:
+        async for chunk in stream:
+            state.handle_chunk(chunk)
+            chunks += 1
+    if not chunks or not state.current_completion_snapshot.choices:
+        raise ValueError("the reply stream brought no message")
+    return state.current_completion_snapshot
+
+
 async def chat(messages: list, tools: list | None = None, **kwargs):
-    """One model reply, each attempt bounded by CAP and all of them by UNTIL; raises TimeoutError when time is up."""
+    """One model reply, each attempt bounded by CAP and all of them by UNTIL; raises TimeoutError when time is up. An
+    attempt silent for SILENCE seconds (twice that on a retry) is dropped and asked again."""
     for attempt in range(6):
         left = UNTIL.get() - time.time() - 1
         if left < 3:
             raise TimeoutError("no time left for a model call")
         limit = min(CAP.get(), left)
-        call = asyncio.ensure_future(client().chat.completions.create(model=MODEL, messages=messages, tools=tools,
-                                                                      timeout=limit, **kwargs))
+        began = time.time()
+        call = asyncio.ensure_future(reply(messages, tools, min(SILENCE * (2 if attempt else 1), limit), **kwargs))
         call.add_done_callback(lambda c: c.cancelled() or c.exception())  # a dropped call's failure stays quiet
         try:
             # asyncio.wait, not wait_for: wait_for waits until the cancelled call has stopped, a cut never does
@@ -86,7 +108,8 @@ async def chat(messages: list, tools: list | None = None, **kwargs):
         except Exception as error:  # noqa: BLE001  the hosted model may hiccup: retry like any provider
             if attempt == 5:
                 raise
-            print(f"[llm] retry after {type(error).__name__}: {str(error)[:200]}", flush=True)
+            print(f"[llm] retry after {type(error).__name__} at {time.time() - began:.0f} s: {str(error)[:200]}",
+                  flush=True)
             await asyncio.sleep(min(2 + 3 * attempt, max(0.0, UNTIL.get() - time.time() - 5)))
         finally:
             call.cancel()  # no-op once done; frees the connection of a call over its time or of a cut stage
