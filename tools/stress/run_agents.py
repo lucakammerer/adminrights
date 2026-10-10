@@ -54,6 +54,22 @@ def log(tag: str, text: str):
 
 
 llm.log = log  # every module logs through llm.log, so the summary sees every step
+TIMES: dict[str, list[float]] = {"model": [], "browser": []}
+_chat = llm.chat
+
+
+async def timed_chat(*args, **kwargs):
+    """Every model call's duration, so a slow run shows whether the model or the browser took the time."""
+    started = time.time()
+    try:
+        return await _chat(*args, **kwargs)
+    finally:
+        TIMES["model"].append(time.time() - started)
+        if time.time() - started > 60:
+            log("timing", f"model call took {time.time() - started:.0f}s")
+
+
+llm.chat = timed_chat
 
 
 class Recorder:
@@ -134,6 +150,26 @@ class RecordingTab(Tab):
         text = await super().read(offset)
         await self.recorder.snapshot(self.page)
         return text
+
+    async def act(self, action: str, args: dict) -> str:
+        started = time.time()
+        try:
+            return await super().act(action, args)
+        finally:
+            took = time.time() - started
+            TIMES["browser"].append(took)
+            if took > 20:
+                log("timing", f"browser {action} took {took:.0f}s")
+
+    async def fetch(self, url: str) -> str:
+        started = time.time()
+        try:
+            return await super().fetch(url)
+        finally:
+            took = time.time() - started
+            TIMES["browser"].append(took)
+            if took > 20:
+                log("timing", f"browser fetch took {took:.0f}s")
 
 
 async def open_tab(playwright, browsers: list, entry: dict, recorder: Recorder, mutate=None) -> RecordingTab:
@@ -362,6 +398,8 @@ async def main() -> int:
         rows += commercials_score(commercials, facts)
     if MUTATED:
         summaries["mutations"] = dict(MUTATED)
+    summaries["timing"] = {kind: {"calls": len(v), "total_s": round(sum(v)), "max_s": round(max(v), 1) if v else 0,
+                                  "mean_s": round(sum(v) / len(v), 1) if v else 0} for kind, v in TIMES.items()}
     (out / "summary.json").write_text(json.dumps(summaries, indent=1))
     print("\n=== step summary")
     for name, info in summaries.items():

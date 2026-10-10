@@ -28,11 +28,13 @@ async def run(task, tab, deadline):
 Your part: in this sales mailbox, find every message the brief's rules need for this exact tender reference, in every
 folder the mailbox has (a search may cover only the open folder).
 {wanted(task["brief"])}
-First search the exact reference by itself in each folder and read every result page. Then, for each record above
-that you have not found yet, search the reference plus one word of its subject in each folder and read every result
-page. A record without a subject is recognised by its sender and its meaning (e.g. an approval for this reference).
-Be quick: once your first search shows how a search URL looks, fetch the remaining searches and keep their relevant
-messages in one turn. Keep each relevant message with save_evidence (its own message URL, so sender, date and full
+First search the exact reference by itself in each folder and read every result page; keep each message of a record
+above with save_evidence as soon as a result list shows it, several in one turn. Then, only for the records above
+still missing, search the reference plus one word of its subject in each folder. Never search without the reference:
+a word or a sender alone lists other tenders' mail. A record without a subject is recognised by its sender and its
+meaning (e.g. an approval for this reference). Once a search URL's shape is known, fetch independent searches and
+result pages in one turn. Stop searching once every record above is kept or its searches came back empty.
+Keep each relevant message with save_evidence (its own message URL, so sender, date and full
 body are kept). Keep superseded and conditional records too (they are judged later); skip messages for other, merely
 similar references and the signing-TAN mails. Finish with a one-line list of what you kept and the
 mailbox's own e-mail address (own_address) as shown on the site."""
