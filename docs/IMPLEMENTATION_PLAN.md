@@ -294,11 +294,11 @@ on disagreement it logs both, re-asks once, then the rule wins.
 | --- | --- | --- |
 | 1 | Visibility truth: drop `display:none`, `visibility:hidden`, zero opacity or font size, `hidden`, `aria-hidden`; a checkbox or radio made transparent under a styled label stays a control (only display and visibility hide it) | ✅ |
 | 1b | Off-screen and screen-reader-only (clipped) text kept but marked `(off-screen text: …)` and counted: recorded pages showed no such hiding, and real values can live there (decided on the recordings) | ✅ I17 |
-| 2 | Reveal real values: image and canvas labels, tooltips (also `title` of plain elements), CSS-generated text (`::before`/`::after`), collapsed `<details>`, select options, input values; a canvas without text is marked; names, labels and tooltips skip hidden descendants (decoys inside them) | ✅ I17 |
+| 2 | Reveal real values: image and canvas labels, tooltips (also `title` of plain elements), CSS-generated text (`::before`/`::after`), collapsed `<details>`, select options, input values; a canvas without text is marked; names, labels and tooltips skip hidden descendants (decoys inside them); a tooltip a control already names as its `(info: …)` is not repeated | ✅ I17 |
 | 3 | Normalize text: remove invisible characters; keep number-format hints verbatim | ✅ |
 | 4 | Controls as `[n:kind "label"]` refs the tools act on; links show their href | ✅ |
 | 5 | Same-origin iframes inlined, nested ones too | ✅ |
-| 6 | Tables with cell separators; page indicators stay in the text | ✅ |
+| 6 | Tables with cell separators, one line per row (line breaks inside cells folded in, so cells line up with their header); page indicators stay in the text | ✅ |
 | 7 | Open dialogs marked; in-page dialogs closed on every settle; browser dialogs accepted and reported | ✅ |
 | 8 | Repeated page chrome (headers, banners) suppressed to save tokens: on the page shown after an action, lines without controls that earlier reads of the tab showed twice are left out at its top and bottom, with a note; controls, evidence and explicit reads stay complete (about 10 % less page text on the recordings) | ✅ I17 |
 | 9 | 14,000 characters per read, `offset` for the rest | ✅ |
