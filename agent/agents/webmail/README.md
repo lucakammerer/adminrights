@@ -19,15 +19,17 @@ senders), not from public-1.
 ## Implementation
 
 `agent.py` `run` → `llm.investigate`, tag `webmail`, at most 60 steps, phase 1 deadline.
-Always searches "reference + one topic word", because search combines words with AND. Keeps each message via its own
-URL so sender, date and body are complete. Skips TAN mails; `get_tan` fetches those ([submit](../submit/README.md)).
+First searches the reference alone in each folder, then the reference plus one word of the subject the brief
+authorizes for each record kind still missing (mail search combines words with AND, as the brief says). The discount
+approval is identified by the sender the brief names and its meaning, never by a subject typed into the mission. Keeps each message via its own URL so sender,
+date and body are complete. Skips TAN mails; `get_tan` fetches those ([submit](../submit/README.md)).
 
 ## Pitfalls
 
-- Look-alike approvals for other tenders, e.g. the reference with a suffix.
+- Look-alike approvals for other tenders with similar references.
 - Superseded approvals, archive folder, paging.
 
 ## Open
 
-- The topic list is fixed in the mission. If the private brief changes subjects or senders, the list must be derived
-  from the brief.
+- I12 will turn the brief-driven selection into a structured parser, so the resolver can receive the same record
+  identifiers without relying on wording in kept pages.

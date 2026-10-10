@@ -39,9 +39,9 @@ match exactly, and keep every page holding its facts. If there is none, report t
 
 ## Pitfalls
 
-- SAP-style transaction codes, F4 search help, status codes, short session timeout.
+- Transaction codes, search helps, status codes instead of words, short session timeout.
 - Empty or over-broad searches list nothing; narrow to at most 20 hits.
-- Scale prices are often only in a separate view of the condition; several conditions with validity periods.
+- Scale prices may sit on another view than the condition header; several conditions with validity periods.
 - Stock by storage location and stock type; blocked stock doesn't count.
 
 ## Open
