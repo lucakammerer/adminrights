@@ -16,7 +16,8 @@ on another site than the brief suggests. Each open fact gets one short mission; 
   attribute, a setup-pool or bonus member without fee or bands, a position without packaging tariff, no discount
   record, an FX or metal-index key without a rate (once the ERP results are in).
 - `sweep(task, tabs, gaps, deadline)`: one `investigate` per open fact and website (tag `sweep:<role>`, at most
-  `STEPS` steps) → the kept pages per resolver (`requirements` or `commercials`), to decide again with them.
+  `STEPS` steps); the websites work in parallel, each through the open facts in turn, since two loops on one tab
+  would fight over its page → the kept pages per resolver (`requirements` or `commercials`), to decide again.
 
 ## Implementation
 

@@ -15,7 +15,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "agent"))
 
 from playwright.async_api import async_playwright  # noqa: E402
 
-import browser  # noqa: E402
 from browser import Tab  # noqa: E402
 
 LOGIN = ('<form method="post" action="/login"><label>User <input name="user"></label>'
@@ -79,6 +78,7 @@ class TabAgainstLocalSite(unittest.TestCase):
     @classmethod
     def tearDownClass(cls):
         cls.server.shutdown()
+        cls.server.server_close()
 
     def setUp(self):
         COUNTS.clear()
@@ -147,7 +147,7 @@ class TabAgainstLocalSite(unittest.TestCase):
             started = loop.time()
             await tab.settle()
             return loop.time() - started
-        self.assertLess(self.run_tab(steps), browser.SETTLE_MAX)
+        self.assertLess(self.run_tab(steps), 1.0)  # the fixed wait this replaced took 1.4 s on every read
 
     def test_form_ref_click_falls_back_and_null_value_is_not_typed(self):
         async def steps(tab):
@@ -161,7 +161,7 @@ class TabAgainstLocalSite(unittest.TestCase):
             value = await tab.page.input_value("#n")
             return clicked, title, null, value
         clicked, title, null, value = self.run_tab(steps)
-        self.assertIn(f"clicked ref", clicked)
+        self.assertIn("clicked ref", clicked)
         self.assertEqual(title, "clicked")
         self.assertEqual(value, "kept")
         self.assertNotIn("None", value)

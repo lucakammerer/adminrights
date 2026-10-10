@@ -73,6 +73,23 @@ class Sweep(unittest.TestCase):
         self.assertTrue(all("FX rate" in m for _, m in calls))
         self.assertEqual(pages, {"commercials": ["### rate page\nFX-1 = 1.1"]})
 
+    def test_never_two_missions_on_one_tab_at_once(self):
+        busy, overlaps = set(), []
+
+        async def fake(tab, system, mission, schema, deadline, tag, **kwargs):
+            if tag in busy:
+                overlaps.append(tag)
+            busy.add(tag)
+            await asyncio.sleep(0.01)
+            busy.discard(tag)
+            return {"found": False, "evidence": []}
+        llm.investigate = fake
+        site = {"url": "https://site.test", "credentials": {"username": "u", "password": "p"}}
+        tabs = {role: type("T", (), {"site": site})() for role in ("tender_portal", "webmail")}
+        gap_list = [{"fact": "fact one", "resolver": "commercials"}, {"fact": "fact two", "resolver": "commercials"}]
+        asyncio.run(sweep.sweep({"brief": "# Task\n\n## Rules\n"}, tabs, gap_list, time.time() + 60))
+        self.assertEqual(overlaps, [])
+
 
 if __name__ == "__main__":
     unittest.main()

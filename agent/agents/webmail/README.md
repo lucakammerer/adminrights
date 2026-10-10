@@ -22,9 +22,11 @@ senders), read at run time by `common.mail_records`, not from public-1.
 `wanted` lists the records this run's brief names, from `common.mail_records`: subject/sender pairs, senders named
 as `localpart@` with the subject the same sentence gives, and records with only a sender and a meaning (the discount
 approval). Nothing is typed into the mission; when the parser finds nothing, the mission tells the model to derive
-the records from the brief's rules. The model first searches the reference alone in each folder, then the reference
-plus one word of each subject still missing (mail search combines words with AND, as the brief says). Keeps each message via its own URL so sender,
-date and body are complete. Skips TAN mails; `get_tan` fetches those ([submit](../submit/README.md)).
+the records from the brief's rules. The model first searches the reference alone in each folder and keeps each
+record's message as soon as a result list shows it, via its own URL so sender, date and body are complete; then it
+searches the reference plus one word of each subject still missing (mail search combines words with AND, as the
+brief says). It never searches a word or sender without the reference, and stops once every record is kept or its
+searches came back empty. Skips TAN mails; `get_tan` fetches those ([submit](../submit/README.md)).
 
 ## Pitfalls
 

@@ -66,21 +66,21 @@ found false. Finish with found, the fact as written and where it is."""
 
 
 async def sweep(task: dict, tabs: dict, gap_list: list[dict], deadline: float) -> dict[str, list[str]]:
-    """One mission per open fact, on every website's tab at once; returns the kept pages per resolver. A tab that
-    fails or runs out of time just contributes nothing."""
+    """One mission per open fact on every website's tab: the tabs work in parallel, each through the facts in turn;
+    returns the kept pages per resolver. A tab that fails or runs out of time just contributes nothing more."""
     pages: dict[str, list[str]] = {}
 
-    async def look(gap, role, tab):
-        result = await llm.investigate(tab, SYSTEM, mission(task, tab, gap), RESULT, deadline, f"sweep:{role}",
-                                       max_steps=STEPS)
-        return gap, result
+    async def on_tab(role, tab):
+        """The open facts one after another on this tab: two loops on one tab would fight over its page."""
+        for gap in gap_list:
+            try:
+                result = await llm.investigate(tab, SYSTEM, mission(task, tab, gap), RESULT, deadline,
+                                               f"sweep:{role}", max_steps=STEPS)
+            except Exception as error:  # noqa: BLE001  this tab contributes nothing more
+                llm.log(f"sweep:{role}", f"failed: {type(error).__name__}: {str(error)[:200]}")
+                return
+            if result.get("found") and result.get("evidence"):
+                pages.setdefault(gap["resolver"], []).extend(result["evidence"])
 
-    jobs = [look(gap, role, tab) for gap in gap_list for role, tab in tabs.items()]
-    for outcome in await asyncio.gather(*jobs, return_exceptions=True):
-        if isinstance(outcome, BaseException):
-            llm.log("sweep", f"failed: {type(outcome).__name__}: {str(outcome)[:200]}")
-            continue
-        gap, result = outcome
-        if result.get("found") and result.get("evidence"):
-            pages.setdefault(gap["resolver"], []).extend(result["evidence"])
+    await asyncio.gather(*(on_tab(role, tab) for role, tab in tabs.items()))
     return pages

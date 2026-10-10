@@ -1,8 +1,8 @@
 // Stress level S2 mutations (I24, I20, rule 19): rewrite a page the way another site would show the same facts.
-// Applied live by s2_mutate.py (init script, read-only pages) and offline by tests/test_mutations.py (recorded
-// pages). Called as (opts) => {relabelled, decoys, shuffled, reformatted}. opts.seed makes every choice repeatable.
-// It never changes a fact: labels get synonyms, hidden decoys are added, unordered lists are shuffled, and numbers
-// that carry an explicit locale hint are rewritten in the other locale with the hint changed to match.
+// Applied live by run_agents.py --mutate (each read-only page rewritten before the agent sees it) and offline by
+// tests/test_mutations.py (recorded pages). Called as (opts) => {relabelled, decoys, shuffled, reformatted}; opts.seed
+// makes every choice repeatable. It never changes a fact: labels get synonyms, numbers that carry an explicit locale
+// hint are rewritten in the other locale with the hint changed to match, menus are shuffled, hidden decoys are added.
 (opts) => {
   let seed = (opts && opts.seed) || 1
   const rand = () => ((seed = (seed * 16807) % 2147483647) / 2147483647)

@@ -327,13 +327,13 @@ Same jobs and rules, different software, look, navigation, site names and data, 
 | --- | --- |
 | Other site ids or names | roles and submission target from the run (I3) |
 | Other navigation and labels | model navigation over page text; generic prompts ✅ |
-| Information on other sites | gap sweep for missing facts and unresolved keys (I16) |
+| Information on other sites | gap sweep for missing facts and unresolved keys: agent ✅ (`agents/sweep`), stage in `main` open (I16) |
 | Other mail subjects | topics and senders from the brief ✅ (I12) |
-| Other document formats | ZIP, CSV, TXT, HTML ✅; PDF (I17) |
+| Other document formats | ZIP, CSV, TXT, HTML, PDF ✅ (I17) |
 | Other number and date conventions | strict parsing with hints (I10); UTC comparison |
 | A no-bid scenario | unfinished ≠ no match (I1); no-bid gate (I11); mutation test with a blocked match |
 | More positions, other units | nothing assumes a count or a unit ✅ |
-| Known traps in a new skin | trap catalogue (RULES §8); mutation tests (I20) |
+| Known traps in a new skin | trap catalogue (RULES §8); mutation tests ✅ (I20); live S2 (I24) |
 
 ## 8. Staying compliant
 
@@ -351,9 +351,9 @@ Same jobs and rules, different software, look, navigation, site names and data, 
 | Level | What | Increments |
 | --- | --- | --- |
 | Unit tests | calc golden test with facts as the pages show them, allocation ties, band edges, inclusive ceilings and thresholds; number parser; validators; selection | I10, I11, I14, I18 |
-| Recorded pages | pages saved from dry runs; reader tests for every trap category | I17 |
+| Recorded pages | pages recorded by `tools/stress/run_agents.py`, a few kept in `eval/fixtures/pages/`; reader tests for every trap category on synthetic pages (`tests/test_reader.py`) ✅ | I17 |
 | Dry run + score | `tools/score.sh`: a local run with `DRY_RUN=1` stops after the answer, `eval/compare.py` scores the logged answer with the official weights | I7 |
-| Mutation tests | recorded pages relabelled, locale-swapped, nested in iframes, with injected decoys and shuffled rows: extraction must not change | I20 |
+| Mutation tests | recorded pages relabelled, locale-swapped, with hidden decoys and shuffled menus: extraction must not change ✅ (`tests/test_mutations.py`); extra iframes and shuffled rows not yet | I20 |
 | Chaos runs *(stretch)* | local runs with random 503s, a forced session expiry, slow responses: the run must still sign | — |
 | Mirror world *(stretch)* | a small local re-skin of the four jobs with information split differently and a synthetic scenario with a known answer | — |
 | Sandbox test runs | the official per-field breakdown; paste each result in its PR | I9 |
@@ -423,7 +423,7 @@ Every item has exactly one owner. When it touches a file someone else owns (§14
 | I14 | ✅ Calculator tests (`tests/test_calc.py`): golden test, values written as text, allocation ties, band edges, inclusive ceilings and thresholds, shared stock | `tests/` | green | 4–9, 12, 15–18, 22–27 | L |
 | I15 | Loud failures instead of silent fallbacks (FX, metal index): tolerant key match and `MISSING` in the trace ✅; omitted positions per rule 9 ✅ (also when all are omitted); a material without prices is submitted with its other fields ✅ | `calc.py` | tests | 9, 22, 28 | L |
 | I23 | Cost: cache-friendly loop (append-only history; when it grows too long, restart from the notes and kept evidence); measure Clef against Qwen for yes/no and pick decisions, then use it or drop it | `llm.py` | cached share of input up; cost per run ≤ $0.10 | T3.4 | F |
-| I24 | Stress harness for levels S1–S3 (§14.1): S1 ✅ (`s1_sites.py`); single-agent runner and recorder ✅ (`run_agents.py`: results, kept evidence, raw HTML, step summary, gather score against `eval/public-1/gather-facts.json`); S2 mode `--mutate` (`mutations.js`); S3 `s3_nobid.py` | `tools/stress/` | S1 and S3 pass; S2 time-boxed to 2 h | T1.12, 3, 19 | Y |
+| I24 | Stress harness for levels S1–S4 (§14.1): S1 ✅ (`s1_sites.py`); single-agent runner and recorder ✅ (`run_agents.py`: results, kept evidence, raw HTML, step summary, timing, gather score against `eval/public-1/gather-facts.json`); S3 `s3_nobid.py` (live: blocked → no_bid 2/2, unchanged → bid, starved → no false no-bid); S2 `--mutate` (`mutations.js`) and S4 `--s4` built, not yet passed live | `tools/stress/` | S1 and S3 pass; S2 time-boxed to 2 h | T1.12, 3, 19 | Y |
 
 ### P2: private-dataset readiness
 
@@ -470,7 +470,7 @@ Every item has exactly one owner. When it touches a file someone else owns (§14
 | | **Efficiency** · Finn | **Generalization** · Yazan | **Quality & Release** · Luca |
 | --- | --- | --- | --- |
 | KPI | cost × time per run | stress levels S1–S3 pass (S4 stretch) | dry runs and test runs score 100; every run signs; audit clean |
-| Today → target | ~15 min × $0.23 ≈ 207 $·s → < 8 min × ~$0.10 ≈ 48 $·s | none built yet → S1–S3 green | no complete test run yet → 100 on every run |
+| Today → target | ~15 min × $0.23 ≈ 207 $·s → < 8 min × ~$0.10 ≈ 48 $·s | S1 green, S3 2/2 + controls, S2/S4 built → S1–S3 green | no complete test run yet → 100 on every run |
 | Measured by | `atira run_profile`, `get_run`, I21 summary | `tools/stress/` (I24) | `tools/score.sh` (I7), test-run breakdown, `bench/RUNS.md` |
 | Must not break | the score | the time budget | — (owns the PR gate) |
 | Run-killer owned | always sign: watchdog (I6) | — | never a false no-bid (I1, I11) |
@@ -480,7 +480,7 @@ Every item has exactly one owner. When it touches a file someone else owns (§14
 Stress levels:
 
 - **S1:** renamed and reordered site ids. Pass: no crash, same answer.
-- **S2:** live scouting pages rewritten during local runs (relabelled UI text, swapped number formats, extra iframes,
+- **S2:** live scouting pages rewritten during local runs (relabelled UI text, swapped number formats, extra iframes (not yet),
   injected decoys, shuffled lists). Pass: signs and scores ≥ 95. Time-boxed to 2 h.
 - **S3:** a no-bid variant where the matching material shows as blocked. Pass: answers no_bid.
 - **S4 (stretch):** information moved between sites. Pass: the gap sweep (I16) finds it.
@@ -494,7 +494,7 @@ One owner per file, written into [`.github/CODEOWNERS`](../.github/CODEOWNERS):
 | Owner | Files |
 | --- | --- |
 | Finn | `agent/agent.py`, `agent/budget.py`, `agent/llm.py`, `agent/agents/submit/`, `agent/agent.json` |
-| Yazan | `agent/browser.py`, `agent/reader.js`, `agent/agents/common.py`, `agent/agents/tender_portal/`, `agent/agents/supplier_portal/`, `agent/agents/webmail/`, `agent/agents/erp/`, `tools/stress/` |
+| Yazan | `agent/browser.py`, `agent/reader.js`, `agent/agents/common.py`, `agent/agents/tender_portal/`, `agent/agents/supplier_portal/`, `agent/agents/webmail/`, `agent/agents/erp/`, `agent/agents/sweep/` (CODEOWNERS entry pending), `tools/stress/` |
 | Luca | `agent/calc.py`, `agent/numbers.py`, `agent/validate.py`, `agent/select.py`, `agent/agents/resolvers/`, `tests/`, `eval/`, `tools/`, `bench/`, `docs/` |
 
 An item may change a file it doesn't own (I1 marks forced finishes in `llm.py`, I5 trims missions, I6b reads back
@@ -514,8 +514,9 @@ in `agents/submit`); the file's owner reviews that PR.
   `agents/common.py` split by owner, and `investigate` marks forced finishes. After that, everyone works in their own
   files.
 - **Saved fixtures:** one full run's stage outputs and kept evidence, so resolvers, calculator and validators are
-  tested offline in seconds.
-- **Single-agent runner:** run one gathering agent alone against the scouting site.
+  tested offline in seconds. ✅ `tools/stress/run_agents.py` writes them (results, kept evidence, raw HTML); a few
+  recorded pages are kept in `eval/fixtures/pages/`.
+- **Single-agent runner:** run one gathering agent alone against the scouting site. ✅ `tools/stress/run_agents.py`.
 - **Fake agents:** test the scheduling and the watchdog without sites or models.
 - Small PRs, merged into `main` at least every 2 hours.
 

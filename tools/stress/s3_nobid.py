@@ -2,12 +2,14 @@
 no_bid. Controls: the unchanged ERP bids with the expected material, and a search starved of time never reports a
 no-match (it is omitted instead).
 
-The ERP's responses are rewritten in this tool's own browser (context.route), never in agent/: in every response that
-names the target material, its status is turned from released to blocked in the row or page that belongs to it
-(list row, detail page, tooltip, status code). The target is read from eval/public-1/gather-facts.json at run time.
-Requirements and the other positions' ERP results come from a run_agents.py fixture (requirements.json, erp.json):
-each stage logs in and searches only the requirement whose material is shown blocked, then calc decides the bid over
-all positions. Stages run two at a time, so S3 stays within the team's shared model capacity.
+The ERP's responses are rewritten in this tool's own browser (context.route), never in agent/: on the pages about the
+target material (its URL names it) the status field, its code and its aria-label, is turned from released to blocked;
+the status-key legend and stock notes stay as they are (on the scouting ERP the result list shows no status). The
+target is read from eval/public-1/gather-facts.json at run time. The fixture (from run_agents.py) gives
+requirements.json, erp.json (the other positions' results), tender_portal.json and commercials.json: each stage logs in
+and searches only the requirement whose material is shown blocked, then calc decides the bid over all positions.
+Stages run two at a time, so S3 stays within the team's shared model capacity. It checks the first ERP agent;
+agent.main's second agent, which confirms a no_match, is not run here.
 
 Run from the repo root, proxy running, `source tools/dev-env.sh`, `atira status` checked:
     HEADLESS=1 uv run --project agent --no-sync python tools/stress/s3_nobid.py FIXTURE_DIR [--position P] \

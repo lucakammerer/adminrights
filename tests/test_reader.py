@@ -29,6 +29,7 @@ PAGE = """<!doctype html><html><head><style>
 <span class="sr">screen reader value 17</span><div class="away">off page value 23</div>
 <p class="dot">listed</p>
 <span role="tooltip">Status released <span class="gone">decoy-in-tooltip</span></span>
+<span role="tooltip" style="visibility:hidden">Valid until 2030-12-31 <b>hover value 31</b></span>
 <a href="/x">Open <span aria-hidden="true">decoy-in-link</span></a>
 <button aria-describedby="d1">Check</button><span id="d1">Approved <b hidden>decoy-in-description</b></span>
 </body></html>"""
@@ -84,6 +85,7 @@ class Reader(unittest.TestCase):
     @classmethod
     def tearDownClass(cls):
         cls.server.shutdown()
+        cls.server.server_close()
 
     def test_decoys_stay_out(self):
         for text in (self.live, self.fetched):
@@ -99,6 +101,7 @@ class Reader(unittest.TestCase):
 
     def test_tooltips_and_canvas(self):
         self.assertIn("(tooltip: Status released)", self.live)
+        self.assertIn("(tooltip: Valid until 2030-12-31 hover value 31)", self.live)  # hidden until hover, still read
         self.assertIn('link "Open"', self.live)
         for text in (self.live, self.fetched):
             self.assertIn("(tooltip: Received 2030-01-02 10:00)", text)

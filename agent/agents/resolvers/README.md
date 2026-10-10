@@ -52,8 +52,8 @@ means. The output is typed facts for `calc`, which does all the arithmetic.
 
 ## Pitfalls
 
-- Look-alike references (e.g. the reference with a suffix), superseded and future-dated records sit next to the valid ones in the
-  mailbox and the Q&A. The prompts name each of these rules; the `*_reasoning` and `source` fields in the log show
+- Look-alike references (e.g. the reference with a suffix), superseded and future-dated records sit next to the
+  valid ones in the mailbox and the Q&A. The prompts name each of these rules; the `*_reasoning` and `source` fields in the log show
   which record was taken.
 - Number formats differ per record. `commercials` returns plain numbers; ERP prices stay "as shown" for `calc.number`.
 

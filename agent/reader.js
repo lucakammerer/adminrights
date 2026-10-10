@@ -29,7 +29,7 @@
     const st = el.ownerDocument.defaultView.getComputedStyle(el)
     if (st.position !== "absolute" && st.position !== "fixed") return false
     const r = el.getBoundingClientRect()
-    const away = r.right <= 0 || r.bottom <= -el.ownerDocument.defaultView.scrollY || r.left >= 20000
+    const away = r.right < 0 || r.bottom + el.ownerDocument.defaultView.scrollY < 0 || r.left >= 20000
     const clipped = (/rect\(\s*0(px)?[\s,]+0(px)?[\s,]+0(px)?[\s,]+0(px)?\s*\)/.test(st.clip) ||
       /inset\(\s*50%/.test(st.clipPath)) && r.width <= 2 && r.height <= 2
     return away || clipped
@@ -43,11 +43,22 @@
     const text = attr ? el.getAttribute(attr[1]) || "" : /^["']/.test(c) ? c.slice(1, -1).replace(/\\(.)/g, "$1") : ""
     return /[\p{L}\p{N}]/u.test(text) ? clean(text).trim() : ""
   }
+  // Hidden inside a container that may itself be hidden (a tooltip until hover): `visibility` is inherited, so a
+  // child only counts as hidden when it hides itself, not because its container does.
+  const hiddenWithin = (el) => {
+    if (el.hidden || el.getAttribute("aria-hidden") === "true") return true
+    if (!styled) return /display\s*:\s*none|visibility\s*:\s*hidden/i.test(el.getAttribute("style") || "")
+    const view = el.ownerDocument.defaultView, st = view.getComputedStyle(el)
+    const inherited = el.parentElement && view.getComputedStyle(el.parentElement).visibility === "hidden"
+    return st.display === "none" || st.opacity === "0" || parseFloat(st.fontSize) === 0 ||
+      (st.visibility === "hidden" && !inherited)
+  }
+  // An element's text without its hidden descendants (decoys planted inside names, labels and tooltips).
   const textOf = (el) => {
     let t = ""
     for (const n of el.childNodes) {
       if (n.nodeType === 3) t += n.textContent
-      else if (n.nodeType === 1 && !SKIP.has(n.tagName) && !hidden(n)) t += " " + textOf(n) + " "
+      else if (n.nodeType === 1 && !SKIP.has(n.tagName) && !hiddenWithin(n)) t += " " + textOf(n) + " "
     }
     return t
   }

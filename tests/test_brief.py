@@ -77,6 +77,8 @@ class SyntheticBrief(unittest.TestCase):
 
     def test_reference(self):
         self.assertEqual(reference(SYNTHETIC), "TX-0001-0042")
+        self.assertEqual(reference("Framework (2030) for pumps (TX-0001-0042)."), "TX-0001-0042")  # a year is no reference
+        self.assertEqual(reference("Order (4711)."), "4711")  # a bare number when there is nothing else
 
 
 class NeverRaises(unittest.TestCase):

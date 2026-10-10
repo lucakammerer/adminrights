@@ -364,6 +364,8 @@ async def main() -> int:
     unknown = set(chosen) - set(AGENTS)
     if unknown:
         raise SystemExit(f"unknown agents {unknown}; choose from {AGENTS}")
+    if args.mutate is not None and args.s4:  # each installs a route for every request; only one of them would run
+        raise SystemExit("--mutate (S2) and --s4 (S4) are separate stress levels: run them one at a time")
     out = args.out or ROOT / "tools/stress/runs" / time.strftime("%Y%m%d-%H%M%S")
     out.mkdir(parents=True, exist_ok=True)
     task, _ = contract.load_run()
@@ -380,6 +382,8 @@ async def main() -> int:
     summaries: dict[str, dict] = {}
     browsers: list = []
     recorders: dict[str, Recorder] = {}
+    requirements = None
+    erp_found: dict[str, dict] = {}
     async with async_playwright() as playwright:
         try:
             mutate = None
@@ -404,7 +408,6 @@ async def main() -> int:
             for name, (result, info) in zip(chosen, done):
                 results[name], summaries[name] = result, info
 
-            requirements = None
             if args.requirements:
                 requirements = json.loads(args.requirements.read_text())
             elif args.resolve and all(n in results for n in ("tender_portal", "supplier_portal", "webmail")):
@@ -415,7 +418,6 @@ async def main() -> int:
             if requirements is not None:
                 (out / "requirements.json").write_text(json.dumps(requirements, indent=1, ensure_ascii=False))
 
-            erp_found: dict[str, dict] = {}
             if "erp" in chosen and requirements:
                 distinct: dict[tuple, dict] = {}
                 for r in requirements.get("positions") or []:

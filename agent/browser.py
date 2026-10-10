@@ -92,12 +92,18 @@ class Tab:
             pass
 
     def _on_request(self, request):
-        if request.is_navigation_request() and request.frame == self.page.main_frame:
-            self.method = request.method
+        try:
+            if request.is_navigation_request() and request.frame == self.page.main_frame:
+                self.method = request.method
+        except Exception:  # noqa: BLE001  a request without a frame (service worker)
+            pass
 
     def _on_response(self, response):
-        if response.request.is_navigation_request() and response.frame == self.page.main_frame:
-            self.status = response.status
+        try:
+            if response.request.is_navigation_request() and response.frame == self.page.main_frame:
+                self.status = response.status
+        except Exception:  # noqa: BLE001
+            pass
 
     async def _on_dialog(self, dialog):
         self.dialogs.append(f"{dialog.type}: {dialog.message}")

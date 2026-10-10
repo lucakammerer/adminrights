@@ -170,7 +170,8 @@ Check: calc tests, short-budget dry run
 candidates' attributes. Empty or over-broad searches list nothing: narrow to ≤ 20 hits. Mail search ANDs its words:
 use the reference plus one subject or topic; read inbox **and** archive, every result page. Helpers may extract opened
 pages and page through chosen result sets; sites and positions may be investigated in parallel.
-Gather erp, webmail · Decide missions · ⚠️ each agent looks only on "its" site (F11 → I16); mail records parsed from the
+Gather erp, webmail · Decide missions · ⚠️ each agent looks only on "its" site (F11 → I16: the sweep agent exists, its
+stage in `main` is open); mail records parsed from the
 brief ✅ (I12) · Check: gap-sweep test (I16), `tests/test_brief.py`
 
 **11 · Agent requirement.** See T0.3 and T0.4.

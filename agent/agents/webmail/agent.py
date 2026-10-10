@@ -21,6 +21,7 @@ def wanted(brief: str) -> str:
     return (f"The records the brief's rules name, as the brief states them. Every sender is the local part at {domain}; "
             "a sender with another domain, even a similar one, is someone else:\n" + "\n".join(lines))
 
+
 async def run(task, tab, deadline):
     mission = f"""{context(task)}
 
@@ -29,13 +30,12 @@ Your part: in this sales mailbox, find every message the brief's rules need for 
 folder the mailbox has (a search may cover only the open folder).
 {wanted(task["brief"])}
 First search the exact reference by itself in each folder and read every result page; keep each message of a record
-above with save_evidence as soon as a result list shows it, several in one turn. Then, only for the records above
-still missing, search the reference plus one word of its subject in each folder. Never search without the reference:
-a word or a sender alone lists other tenders' mail. A record without a subject is recognised by its sender and its
-meaning (e.g. an approval for this reference). Once a search URL's shape is known, fetch independent searches and
-result pages in one turn. Stop searching once every record above is kept or its searches came back empty.
-Keep each relevant message with save_evidence (its own message URL, so sender, date and full
-body are kept). Keep superseded and conditional records too (they are judged later); skip messages for other, merely
-similar references and the signing-TAN mails. Finish with a one-line list of what you kept and the
-mailbox's own e-mail address (own_address) as shown on the site."""
+above as soon as a result list shows it, several in one turn, with save_evidence on its own message URL (so sender,
+date and full body are kept). Then, only for the records above still missing, search the reference plus one word of
+its subject in each folder. Never search without the reference: a word or a sender alone lists other tenders' mail. A
+record without a subject is recognised by its sender and its meaning (e.g. an approval for this reference). Once a
+search URL's shape is known, fetch independent searches and result pages in one turn. Stop searching once every record
+above is kept or its searches came back empty. Keep superseded and conditional records too (they are judged later);
+skip messages for other, merely similar references and the signing-TAN mails. Finish with a one-line list of what you
+kept and the mailbox's own e-mail address (own_address) as shown on the site."""
     return await llm.investigate(tab, SYSTEM, mission, RESULT, deadline, "webmail", max_steps=60)
