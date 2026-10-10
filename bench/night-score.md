@@ -17,6 +17,15 @@ runs of HEAD.
 
 Baseline (HEAD 1fa269f, Qwen): run_c7805bca216fa2e0, run_39d8950d739e2e2a.
 
+Merge db77ee5: `llm.py` and `submit/agent.py` from radical-speed, with Qwen as the default again and the submit
+read-back of the breakdown values (939e2d0) restored; `tests/test_chat.py` dropped (the streamed silence check
+replaces the twin on Qwen, covered in `test_run_guards`). Gate: green, audit clean. The adversarial reviewer found one
+credible reject risk: `paging.py` took a list's row links (`?id=17`) for its pager, so code would open records no
+model chose. Fixed in f5e86da: pager links need a short label and numbers that step evenly from the current page;
+two tests.
+
+Seen on the way: run_0b1441de63cf8acb (package fc98097b, not mine, all Haiku): 100 in 5:09, $0.091, 28.1 $·s.
+
 ## Backlog
 
 - Qwen reasoning tokens: the requirements and commercials resolvers spend 2–3.5k output tokens (60–80 s each) at
