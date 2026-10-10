@@ -50,11 +50,15 @@ total net {german(answer['total_net'])} EUR (net; a displayed gross amount with 
 {rows or '(no positions: no bid)'}
 {f"Unfinished positions to omit with the form's omit option (partial submission): {', '.join(omitted)}" if omitted else ''}
 Enter every value exactly (German number format, two decimals), one entry per position; positions may come in any
-order, so check which position each page is for. Each model step costs time: fill a whole page with one form call
-and end it with the page's next-step button. Choices that depend on each other (a configurator) go into the same call,
-each choice followed by its apply button. Pick options by the text the page shows (it may word a value differently
-than the specification above). Fields in collapsed sections are opened by the form tool. If a step fails, send the
-rest of that page again in one form call, with the failed step corrected. Never add extra positions, never skip a
+order, so check which position each page is for. Each model step costs time: enter a whole position, or any other
+page, with one form call and end it with the page's next-step button. A configurator's dependent choices go into that
+same call, each followed by its apply button, without reading a choice's options first: the form tool waits for the
+page after every step and picks an option by its exact text, its beginning or any part of it, so a material number
+alone is enough where an option shows more after it. Once you know the labels of the configurator's choices (at the
+latest after the first position), enter every position in one call. A step that finds no matching option stops the
+call and lists the options the page offers (the page may word a value differently than the specification above):
+send the rest of that page again in one form call, with that step in the page's wording. Fields in collapsed sections
+are opened by the form tool. Never add extra positions, never skip a
 position unless it is listed to omit, never tick an option to add our own general terms and conditions. Before you request the signing
 TAN, call verify_summary on the summary page and correct what it reports. When the form asks for the signing TAN,
 request it once, then call get_tan with the portal's message (the newest request wins; a new request invalidates the

@@ -20,6 +20,11 @@ bindingly. Without a submission the run scores 0.
 - `agent.py` `run` → `llm.investigate`, tag `submit`, at most 70 steps, deadline end − 20 s, cut hard at `end`.
   Values in German format with two decimals (`german`). Whole form pages in one `form` call, a configurator's
   dependent choices each followed by its apply button; `form` opens collapsed sections around a field itself.
+- One `form` call per position: the mission sends the configurator's choices without reading their options first,
+  because `form` picks an option by its exact text, its beginning or any part of it, and a step without a matching
+  option stops the call and lists the page's options. Test runs filled the configurator one choice per model call,
+  which was most of the submit agent's time. Where a configurator narrows its materials by the earlier choices, a
+  wrong choice shows up as a material step without a match; `verify_summary` still checks prices and total.
 - Watchdog (first slice): `SIGN_BY` = 180 s before the deadline the agent gets its own warning: omit every position
   not completely entered, request the TAN, sign. The generic "call finish now" would end the run unsigned.
 - Extra tool `get_tan`: starts its own `investigate` in the mail tab, tag `tan`, at most 12 steps, at most 2 min.
