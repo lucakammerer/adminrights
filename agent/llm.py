@@ -9,7 +9,7 @@ from contextvars import ContextVar
 
 from openai import AsyncOpenAI
 
-MODEL = os.environ.get("AGENT_MODEL", "anthropic/claude-haiku-5.5")
+MODEL = os.environ.get("AGENT_MODEL", "qwen3.8-flash-next")
 OPENROUTER = "/" in MODEL  # "<provider>/<model>" runs on OpenRouter with the team secret OPENROUTER_API_KEY
 # Anthropic caches only behind a breakpoint; the top-level one moves with the conversation
 CACHE = {"extra_body": {"cache_control": {"type": "ephemeral"}}} if MODEL.startswith("anthropic/") else {}
