@@ -28,6 +28,9 @@ match exactly, and keep every page holding its facts. If there is none, report t
   `main` dedupes requirements and runs each in its own tab of the same browser.
 - `agent.py` `extract`: runs as `check` on `finish`. One `ask_json` (effort low: 13 s instead of 56 s; thinking off rewrote number formats) reads the facts **only from the kept
   pages**. If required fields or scale prices are missing, `finish` is refused with a list of what is missing.
+- `agent.py` `run` `check`: after `extract`, `validate.material_mismatch` compares bore, stroke, pressure, mounting and
+  certification with the requirement (rule 3). A difference refuses `finish` once per material with the exact
+  difference; finishing again with the same material is accepted, so a misread page never loops to the deadline.
 
 ## Pitfalls
 
