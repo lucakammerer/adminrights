@@ -18,7 +18,7 @@ CI = ROOT / "bench/.ci"
 STATE = CI / "state.json"
 SCRATCH = Path(tempfile.gettempdir()) / "adminrights-ci"
 BRANCHES = ("p1/", "p2/")
-MAX_ACTIVE = 2  # more parallel test runs distort the time measurement
+MAX_ACTIVE = 4  # the platform runs 4 of the team's test runs at once
 RUN_ENDED = {"submitted", "failed", "timed_out", "cancelled"}
 SUBMISSION_ENDED = {"complete", "failed", "rejected", "disqualified"}
 

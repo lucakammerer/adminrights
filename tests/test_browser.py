@@ -54,10 +54,17 @@ class Site(BaseHTTPRequestHandler):
         if path == "/late":
             return self.page('<div id="x">first</div><script>setTimeout(() => {'
                              'document.getElementById("x").textContent = "late value"}, 900)</script>')
+        if path.startswith("/page"):  # pages of one site: the same banner and footer around their own content
+            return self.page('<p>Portal banner for every visitor</p><p>Service hotline weekdays</p>'
+                             '<a href="/page1">Overview</a>'
+                             f'<h1>Record {path[-1]}</h1><p>Amount {path[-1]}00 pieces</p>'
+                             '<p>Imprint and privacy</p><p>All rights reserved</p>')
         if path == "/form":
             return self.page('<div style="position:relative"><button id="b" onclick="document.title=\'clicked\'">Go'
                              '</button><div style="position:absolute;inset:0;background:#fff"></div></div>'
-                             '<label>Note <input id="n" value="kept"></label>')
+                             '<label>Note <input id="n" value="kept"></label>'
+                             '<label class="fancy"><input type="checkbox" id="c" style="opacity:0;position:absolute">'
+                             '<span style="position:relative;z-index:2;background:#eee">Accept</span></label>')
         return self.page("start")
 
     def do_POST(self):
@@ -138,6 +145,36 @@ class TabAgainstLocalSite(unittest.TestCase):
         self.assertIn("secret data", login)
         self.assertIn("code entered it exactly", login)
         self.assertEqual(tan, "804711")
+
+    def test_repeated_page_chrome_is_left_out_after_an_action_only(self):
+        async def steps(tab):
+            for n in (1, 2):
+                await tab.act("goto", {"url": f"/page{n}"})
+            shown = await tab.act("goto", {"url": "/page3"})
+            return shown, await tab.read()  # the explicit read, also what save_evidence keeps of the current page
+        shown, full = self.run_tab(steps)
+        self.assertIn("Record 3", shown)
+        self.assertIn("Amount 300 pieces", shown)
+        self.assertIn('link "Overview"', shown)  # controls always stay
+        self.assertNotIn("Portal banner", shown)
+        self.assertNotIn("All rights reserved", shown)
+        self.assertIn("lines repeated from earlier pages", shown)
+        for line in ("Portal banner", "Service hotline", "Imprint and privacy", "All rights reserved", "Record 3"):
+            self.assertIn(line, full)
+        self.assertNotIn("left out", full)
+
+    def test_a_custom_styled_checkbox_by_ref_is_ticked_at_once(self):
+        async def steps(tab):
+            await tab.act("goto", {"url": "/form"})
+            text = await tab.read()
+            ref = int(text.split('checkbox "Accept"')[0].rsplit("[", 1)[1].rstrip(":"))
+            loop = asyncio.get_running_loop()
+            started = loop.time()
+            await tab.form([{"ref": ref}])
+            return loop.time() - started, await tab.page.is_checked("#c")
+        took, checked = self.run_tab(steps)
+        self.assertTrue(checked)
+        self.assertLess(took, 4)  # a covered checkbox waited 8 s for Playwright before the DOM click
 
     def test_late_content_is_waited_for(self):
         self.assertIn("late value", self.run_tab(lambda tab: tab.act("goto", {"url": "/late"})))

@@ -1,0 +1,156 @@
+{
+ "result": {
+  "tender_reference": "VG-2027-7093",
+  "title": "Lieferung von Hydraulikzylinder für Werkstatt-Hebeanlagen",
+  "positions": [
+   {
+    "position": "01.01",
+    "description": "Hydraulikzylinder Abstützung – doppeltwirkender Hydraulikzylinder für Abstützung, gemäß Lastenheft Anforderung A-1. Lieferung mit Prüfunterlagen.",
+    "quantity": 24,
+    "unit": "Stk"
+   },
+   {
+    "position": "01.02",
+    "description": "Hydraulikzylinder Hubwerk – doppeltwirkender Hydraulikzylinder für Hubwerk, gemäß Lastenheft Anforderung A-2. Lieferung mit Prüfunterlagen.",
+    "quantity": 29,
+    "unit": "Stk"
+   },
+   {
+    "position": "01.03",
+    "description": "Hydraulikzylinder Verstellung – doppeltwirkender Hydraulikzylinder für Hubwerk, gemäß Lastenheft Anforderung A-2. Lieferung mit Prüfunterlagen.",
+    "quantity": 16,
+    "unit": "Stk"
+   },
+   {
+    "position": "01.04",
+    "description": "Hydraulikzylinder Verriegelung – doppeltwirkender Hydraulikzylinder für Verriegelung, gemäß Lastenheft Anforderung A-4. Lieferung mit Prüfunterlagen.",
+    "quantity": 21,
+    "unit": "Stk"
+   },
+   {
+    "position": "01.05",
+    "description": "Hydraulikzylinder Schwenkantrieb – doppeltwirkender Hydraulikzylinder für Schwenkantrieb, gemäß Lastenheft Anforderung A-5. Lieferung mit Prüfunterlagen.",
+    "quantity": 22,
+    "unit": "Satz"
+   }
+  ],
+  "clarifications": [
+   {
+    "number": "8153",
+    "date": "2027-01-25T08:00:00Z",
+    "evidence": 1
+   },
+   {
+    "number": "8163",
+    "date": "2027-01-24T18:00:00Z",
+    "evidence": 1
+   },
+   {
+    "number": "8162",
+    "date": "2027-01-24T18:00:00Z",
+    "evidence": 1
+   },
+   {
+    "number": "8161",
+    "date": "2027-01-24T18:00:00Z",
+    "evidence": 2
+   },
+   {
+    "number": "8160",
+    "date": "2027-01-24T18:00:00Z",
+    "evidence": 2
+   },
+   {
+    "number": "8159",
+    "date": "2027-01-24T18:00:00Z",
+    "evidence": 2
+   },
+   {
+    "number": "8152",
+    "date": "2027-01-24T13:00:00Z",
+    "evidence": 3
+   },
+   {
+    "number": "8151",
+    "date": "2027-01-24T11:00:00Z",
+    "evidence": 3
+   },
+   {
+    "number": "8158",
+    "date": "2027-01-24T09:00:00Z",
+    "evidence": 3
+   },
+   {
+    "number": "8157",
+    "date": "2027-01-24T09:00:00Z",
+    "evidence": 4
+   },
+   {
+    "number": "8156",
+    "date": "2027-01-24T09:00:00Z",
+    "evidence": 4
+   },
+   {
+    "number": "8155",
+    "date": "2027-01-24T08:00:00Z",
+    "evidence": 4
+   },
+   {
+    "number": "8154",
+    "date": "2027-01-24T08:00:00Z",
+    "evidence": 5
+   },
+   {
+    "number": "8150",
+    "date": "2027-01-23T08:00:00Z",
+    "evidence": 5
+   },
+   {
+    "number": "8149",
+    "date": "2027-01-22T08:00:00Z",
+    "evidence": 5
+   },
+   {
+    "number": "3916",
+    "date": "2027-01-16T10:00:00Z",
+    "evidence": 6
+   },
+   {
+    "number": "8148",
+    "date": "2027-01-12T10:00:00Z",
+    "evidence": 6
+   }
+  ],
+  "other_relevant_facts": "Participation (Teilnahme) for Linden Hydraulik und Komponenten GmbH (USt-IdNr. DE811234567) was already registered at the tender (portal confirms 'Ihre Teilnahme wurde registriert'); deadline 12.02.2027, 11:00 Europe/Athens; submission channel Angebotsassistent. Tender documents kept: evidence #7 = Leistungsverzeichnis (ursprüngliche Mengen) CSV, evidence #8 = Leistungsbeschreibung (states technical requirements are in Lastenheft LH-VG-2027-7093, its current revision governs — spec must be fetched from customer-portal), evidence #9 = Positionsübersicht. Requirements referenced: 01.01→A-1, 01.02→A-2, 01.03→A-2, 01.04→A-4, 01.05→A-5. All 17 Q&A answers across 6 pages kept verbatim (evidence #1–#6). Key effects for the analyst: 8153 withdraws 8152 (32 Satz for 01.05 must be ignored; latest remaining change 8151 → 26 Satz); 3916 sets 01.01 to 25 Stück; 8150 (latest amendment to revision R-6156, requirement A-2) sets Hub/Stellweg = 482 mm; Konditionsgruppen: 01.02=K-3650, 01.03=K-2264, 01.05=K-9018 (01.01/01.04 none → default base-only rule); Verpackungstarif VP-1134 for all positions; Terminschlüssel 01.01=TZ-3363, 01.02=TZ-2832, 01.03=TZ-4279, 01.04=TZ-5901, 01.05=TZ-7899; Rüstpool RP-5730 for 01.03/01.04/01.05 (none for 01.01/01.02); Bonusplan PB-1474 for 01.03/01.04/01.05; ordinary setup fees 85,00 EUR (01.03) and 57,50 EUR (01.05), not discounted. Tariff/pool/bonus/term/discount values must be resolved from the respective Fachmails (exact reference, not later than 2027-01-25 scenario date). Bid submission intentionally NOT started.",
+  "evidence": [
+   "### Tender Q&A page 1 for VG-2027-7093 (answers 8153, 8163, 8162)\nFetched https://atira-rfq-tender-portal.kyora.run/tenders/VG-2027-7093/questions-content?page=1 (HTTP 200)\nVergabeportal\n# Antworten der Vergabestelle\n| Nr. | Datum (Athen) | Frage und Antwort\n| 8153 |\n[button \"Eingang\" (info: 25.01.2027, 10:00 · 2027-01-25T08:00:00Z)] (tooltip: 25.01.2027, 10:00 · 2027-01-25T08:00:00Z) |\n[summary (collapsed, content below)]\nDie Antwort auf Rückfrage 8152 wird ersatzlos zurückgezogen (Übertragungsfehler). Weitere Antworten zu Position 01.05 bleiben unverändert gültig.\n| 8163 |\n[button \"Eingang\" (info: 24.01.2027, 20:00 · 2027-01-24T18:00:00Z)] (tooltip: 24.01.2027, 20:00 · 2027-01-24T18:00:00Z) |\n[summary (collapsed, content below)]\nPosition 01.02: Verpackungstarif VP-1134; Terminschlüssel TZ-2832. Kein Rüstpool; kein Projektbonus. Die Schlüssel gelten nur für diese Position. Tarife, Poolbetrag und Bonusstaffel stehen in den freigegebenen Fachmails zur exakten Vergabe. Die Terminfreigabe ersetzt die Bestandslieferzeit nur bei erfüllter Mengengrenze; sonst gilt die Bestandsregel. Verpackung verändert nicht die angebotene Stückmenge.\n| 8162 |\n[button \"Eingang\" (info: 24.01.2027, 20:00 · 2027-01-24T18:00:00Z)] (tooltip: 24.01.2027, 20:00 · 2027-01-24T18:00:00Z) |\n[summary (collapsed, content below)]\nPosition 01.01: Verpackungstarif VP-1134; Terminschlüssel TZ-3363. Kein Rüstpool; kein Projektbonus. Die Schlüssel gelten nur für diese Position. Tarife, Poolbetrag und Bonusstaffel stehen in den freigegebenen Fachmails zur exakten Vergabe. Die Terminfreigabe ersetzt die Bestandslieferzeit nur bei erfüllter Mengengrenze; sonst gilt die Bestandsregel. Verpackung verändert nicht die angebotene Stückmenge.\nSeite 1 von 6\n[link \"Nächste Seite\" -> /tenders/VG-2027-7093/questions-content?page=2]\n[button \"Weitere laden\"]\nDemonstrationssystem · Alle Angaben sind fiktiv · Zeitzone: Europe/Athens",
+   "### Tender Q&A page 2 for VG-2027-7093\nFetched https://atira-rfq-tender-portal.kyora.run/tenders/VG-2027-7093/questions-content?page=2 (HTTP 200)\nVergabeportal\n# Antworten der Vergabestelle\n| Nr. | Datum (Athen) | Frage und Antwort\n| 8161 |\n[button \"Eingang\" (info: 24.01.2027, 20:00 · 2027-01-24T18:00:00Z)] (tooltip: 24.01.2027, 20:00 · 2027-01-24T18:00:00Z) |\n[summary (collapsed, content below)]\nPosition 01.05: Verpackungstarif VP-1134; Terminschlüssel TZ-7899. Rüstpool RP-5730; Bonusplan PB-1474. Die Schlüssel gelten nur für diese Position. Tarife, Poolbetrag und Bonusstaffel stehen in den freigegebenen Fachmails zur exakten Vergabe. Die Terminfreigabe ersetzt die Bestandslieferzeit nur bei erfüllter Mengengrenze; sonst gilt die Bestandsregel. Verpackung verändert nicht die angebotene Stückmenge.\n| 8160 |\n[button \"Eingang\" (info: 24.01.2027, 20:00 · 2027-01-24T18:00:00Z)] (tooltip: 24.01.2027, 20:00 · 2027-01-24T18:00:00Z) |\n[summary (collapsed, content below)]\nPosition 01.03: Verpackungstarif VP-1134; Terminschlüssel TZ-4279. Rüstpool RP-5730; Bonusplan PB-1474. Die Schlüssel gelten nur für diese Position. Tarife, Poolbetrag und Bonusstaffel stehen in den freigegebenen Fachmails zur exakten Vergabe. Die Terminfreigabe ersetzt die Bestandslieferzeit nur bei erfüllter Mengengrenze; sonst gilt die Bestandsregel. Verpackung verändert nicht die angebotene Stückmenge.\n| 8159 |\n[button \"Eingang\" (info: 24.01.2027, 20:00 · 2027-01-24T18:00:00Z)] (tooltip: 24.01.2027, 20:00 · 2027-01-24T18:00:00Z) |\n[summary (collapsed, content below)]\nPosition 01.04: Verpackungstarif VP-1134; Terminschlüssel TZ-5901. Rüstpool RP-5730; Bonusplan PB-1474. Die Schlüssel gelten nur für diese Position. Tarife, Poolbetrag und Bonusstaffel stehen in den freigegebenen Fachmails zur exakten Vergabe. Die Terminfreigabe ersetzt die Bestandslieferzeit nur bei erfüllter Mengengrenze; sonst gilt die Bestandsregel. Verpackung verändert nicht die angebotene Stückmenge.\nSeite 2 von 6\n[link \"Vorherige Seite\" -> /tenders/VG-2027-7093/questions-content?page=1]\n[link \"Nächste Seite\" -> /tenders/VG-2027-7093/questions-content?page=3]\n[button \"Weitere laden\"]\nDemonstrationssystem · Alle Angaben sind fiktiv · Zeitzone: Europe/Athens",
+   "### Tender Q&A page 3 for VG-2027-7093\nFetched https://atira-rfq-tender-portal.kyora.run/tenders/VG-2027-7093/questions-content?page=3 (HTTP 200)\nVergabeportal\n# Antworten der Vergabestelle\n| Nr. | Datum (Athen) | Frage und Antwort\n| 8152 |\n[button \"Eingang\" (info: 24.01.2027, 15:00 · 2027-01-24T13:00:00Z)] (tooltip: 24.01.2027, 15:00 · 2027-01-24T13:00:00Z) |\n[summary (collapsed, content below)]\nFür Position 01.05 beträgt die verbindliche Gesamtmenge 32 Satz.\nMengenänderung\nVerbindliche Gesamtmenge: Position 01.05: 32 (neue Gesamtmenge).\n| 8151 |\n[button \"Eingang\" (info: 24.01.2027, 13:00 · 2027-01-24T11:00:00Z)] (tooltip: 24.01.2027, 13:00 · 2027-01-24T11:00:00Z) |\n[summary (collapsed, content below)]\nFür Position 01.05 beträgt die verbindliche Gesamtmenge 26 Satz.\nMengenänderung\nVerbindliche Gesamtmenge: Position 01.05: 26 (neue Gesamtmenge).\n| 8158 |\n[button \"Eingang\" (info: 24.01.2027, 11:00 · 2027-01-24T09:00:00Z)] (tooltip: 24.01.2027, 11:00 · 2027-01-24T09:00:00Z) |\n[summary (collapsed, content below)]\nFür Position 01.05 gilt Konditionsgruppe K-9018. Die zugehörige Regel steht in der Kalkulationsfreigabe für diese Vergabe; sie geht der allgemeinen Rabattregel vor.\nSeite 3 von 6\n[link \"Vorherige Seite\" -> /tenders/VG-2027-7093/questions-content?page=2]\n[link \"Nächste Seite\" -> /tenders/VG-2027-7093/questions-content?page=4]\n[button \"Weitere laden\"]\nDemonstrationssystem · Alle Angaben sind fiktiv · Zeitzone: Europe/Athens",
+   "### Tender Q&A page 4 for VG-2027-7093\nFetched https://atira-rfq-tender-portal.kyora.run/tenders/VG-2027-7093/questions-content?page=4 (HTTP 200)\nVergabeportal\n# Antworten der Vergabestelle\n| Nr. | Datum (Athen) | Frage und Antwort\n| 8157 |\n[button \"Eingang\" (info: 24.01.2027, 11:00 · 2027-01-24T09:00:00Z)] (tooltip: 24.01.2027, 11:00 · 2027-01-24T09:00:00Z) |\n[summary (collapsed, content below)]\nFür Position 01.03 gilt Konditionsgruppe K-2264. Die zugehörige Regel steht in der Kalkulationsfreigabe für diese Vergabe; sie geht der allgemeinen Rabattregel vor.\n| 8156 |\n[button \"Eingang\" (info: 24.01.2027, 11:00 · 2027-01-24T09:00:00Z)] (tooltip: 24.01.2027, 11:00 · 2027-01-24T09:00:00Z) |\n[summary (collapsed, content below)]\nFür Position 01.02 gilt Konditionsgruppe K-3650. Die zugehörige Regel steht in der Kalkulationsfreigabe für diese Vergabe; sie geht der allgemeinen Rabattregel vor.\n| 8155 |\n[button \"Eingang\" (info: 24.01.2027, 10:00 · 2027-01-24T08:00:00Z)] (tooltip: 24.01.2027, 10:00 · 2027-01-24T08:00:00Z) |\n[summary (collapsed, content below)]\nFür Position 01.03 sind einmalig 85,00 EUR netto Rüstkosten anzusetzen. Gleichmäßig auf die endgültige Stückzahl dieser Position verteilen und in den Stückpreis einrechnen; nicht rabattieren. Kein separater Gesamtzuschlag.\nSeite 4 von 6\n[link \"Vorherige Seite\" -> /tenders/VG-2027-7093/questions-content?page=3]\n[link \"Nächste Seite\" -> /tenders/VG-2027-7093/questions-content?page=5]\n[button \"Weitere laden\"]\nDemonstrationssystem · Alle Angaben sind fiktiv · Zeitzone: Europe/Athens",
+   "### Tender Q&A page 5 for VG-2027-7093\nFetched https://atira-rfq-tender-portal.kyora.run/tenders/VG-2027-7093/questions-content?page=5 (HTTP 200)\nVergabeportal\n# Antworten der Vergabestelle\n| Nr. | Datum (Athen) | Frage und Antwort\n| 8154 |\n[button \"Eingang\" (info: 24.01.2027, 10:00 · 2027-01-24T08:00:00Z)] (tooltip: 24.01.2027, 10:00 · 2027-01-24T08:00:00Z) |\n[summary (collapsed, content below)]\nFür Position 01.05 sind einmalig 57,50 EUR netto Rüstkosten anzusetzen. Gleichmäßig auf die endgültige Stückzahl dieser Position verteilen und in den Stückpreis einrechnen; nicht rabattieren. Kein separater Gesamtzuschlag.\n| 8150 |\n[button \"Eingang\" (info: 23.01.2027, 10:00 · 2027-01-23T08:00:00Z)] (tooltip: 23.01.2027, 10:00 · 2027-01-23T08:00:00Z) |\n[summary (collapsed, content below)]\nFür VG-2027-7093, Revision R-6156, Anforderung A-2: Hub/Stellweg = 482 mm. Nur dieses Merkmal wird ersetzt; alle übrigen Merkmale und Anforderungen bleiben unverändert. Bei mehreren Nachträgen gilt je Merkmal der jüngste datierte Nachtrag zur maßgeblichen Revision.\n| 8149 |\n[button \"Eingang\" (info: 22.01.2027, 10:00 · 2027-01-22T08:00:00Z)] (tooltip: 22.01.2027, 10:00 · 2027-01-22T08:00:00Z) |\n[summary (collapsed, content below)]\nFür VG-2027-7093, Revision R-6156, Anforderung A-2: Hub/Stellweg = 485 mm. Nur dieses Merkmal wird ersetzt; alle übrigen Merkmale und Anforderungen bleiben unverändert. Bei mehreren Nachträgen gilt je Merkmal der jüngste datierte Nachtrag zur maßgeblichen Revision.\nSeite 5 von 6\n[link \"Vorherige Seite\" -> /tenders/VG-2027-7093/questions-content?page=4]\n[link \"Nächste Seite\" -> /tenders/VG-2027-7093/questions-content?page=6]\n[button \"Weitere laden\"]\nDemonstrationssystem · Alle Angaben sind fiktiv · Zeitzone: Europe/Athens",
+   "### Tender Q&A page 6 for VG-2027-7093\nFetched https://atira-rfq-tender-portal.kyora.run/tenders/VG-2027-7093/questions-content?page=6 (HTTP 200)\nVergabeportal\n# Antworten der Vergabestelle\n| Nr. | Datum (Athen) | Frage und Antwort\n| 3916 |\n[button \"Eingang\" (info: 16.01.2027, 12:00 · 2027-01-16T10:00:00Z)] (tooltip: 16.01.2027, 12:00 · 2027-01-16T10:00:00Z) |\n[summary (collapsed, content below)]\nDie verbindliche Menge für Position 01.01 beträgt nun 25 Stück. Frühere Mengenangaben werden ersetzt.\nMengenänderung\nVerbindliche Gesamtmenge: Position 01.01: 25 (neue Gesamtmenge).\n| 8148 |\n[button \"Eingang\" (info: 12.01.2027, 12:00 · 2027-01-12T10:00:00Z)] (tooltip: 12.01.2027, 12:00 · 2027-01-12T10:00:00Z) |\n[summary (collapsed, content below)]\nDie verbindliche Menge für Position 01.01 beträgt nun 26 Stück. Frühere Mengenangaben werden ersetzt.\nMengenänderung\nVerbindliche Gesamtmenge: Position 01.01: 26 (neue Gesamtmenge).\nSeite 6 von 6\n[link \"Vorherige Seite\" -> /tenders/VG-2027-7093/questions-content?page=5]\nDemonstrationssystem · Alle Angaben sind fiktiv · Zeitzone: Europe/Athens",
+   "### Leistungsverzeichnis CSV (original quantities) VG-2027-7093\nFetched https://atira-rfq-tender-portal.kyora.run/tenders/VG-2027-7093/documents/0 (HTTP 200)\nVergabeportal\n# Leistungsverzeichnis (ursprüngliche Mengen)\n[summary (collapsed, content below)]\nPosition;Kurztext;Menge;Einheit;Anforderung\n01.01;Hydraulikzylinder Abstützung;24;Stk;A-1\n01.02;Hydraulikzylinder Hubwerk;29;Stk;A-2\n01.03;Hydraulikzylinder Verstellung;16;Stk;A-2\n01.04;Hydraulikzylinder Verriegelung;21;Stk;A-4\n01.05;Hydraulikzylinder Schwenkantrieb;22;Satz;A-5\nDemonstrationssystem · Alle Angaben sind fiktiv · Zeitzone: Europe/Athens",
+   "### Leistungsbeschreibung VG-2027-7093\nFetched https://atira-rfq-tender-portal.kyora.run/tenders/VG-2027-7093/documents/1 (HTTP 200)\nVergabeportal\n# Leistungsbeschreibung\n[summary (collapsed, content below)]\nVG-2027-7093\nStadt Buchenstadt, Verkehrsbetriebe\nLieferung von Hydraulikzylinder für Werkstatt-Hebeanlagen.\nDie technischen Anforderungen stehen im Lastenheft LH-VG-2027-7093. Maßgeblich ist dessen aktuelle Revision. Mengenänderungen werden in den Bieterfragen veröffentlicht. Alle Preise sind netto in EUR anzugeben. Lieferung vollständig an Rathausplatz 4, 74210 Buchenstadt.\nDemonstrationssystem · Alle Angaben sind fiktiv · Zeitzone: Europe/Athens",
+   "### Positionsübersicht zum Leistungsverzeichnis VG-2027-7093\nFetched https://atira-rfq-tender-portal.kyora.run/tenders/VG-2027-7093/documents/2 (HTTP 200)\nVergabeportal\n# Positionsübersicht zum Leistungsverzeichnis\n| Position | Kurztext | Beschreibung | Menge | Einheit | Anforderungsreferenz\n| 01.01 | Hydraulikzylinder Abstützung | Doppeltwirkender Hydraulikzylinder für Abstützung, gemäß Lastenheft Anforderung A-1. Lieferung mit Prüfunterlagen. | 24 | Stk | A-1\n| 01.02 | Hydraulikzylinder Hubwerk | Doppeltwirkender Hydraulikzylinder für Hubwerk, gemäß Lastenheft Anforderung A-2. Lieferung mit Prüfunterlagen. | 29 | Stk | A-2\n| 01.03 | Hydraulikzylinder Verstellung | Doppeltwirkender Hydraulikzylinder für Hubwerk, gemäß Lastenheft Anforderung A-2. Lieferung mit Prüfunterlagen. | 16 | Stk | A-2\n| 01.04 | Hydraulikzylinder Verriegelung | Doppeltwirkender Hydraulikzylinder für Verriegelung, gemäß Lastenheft Anforderung A-4. Lieferung mit Prüfunterlagen. | 21 | Stk | A-4\n| 01.05 | Hydraulikzylinder Schwenkantrieb | Doppeltwirkender Hydraulikzylinder für Schwenkantrieb, gemäß Lastenheft Anforderung A-5. Lieferung mit Prüfunterlagen. | 22 | Satz | A-5\n[summary (collapsed, content below)]\nLeistungsverzeichnis · VG-2027-7093\nOriginalmengen bei Veröffentlichung.\nPosition: 01.01\nKurztext: Hydraulikzylinder Abstützung\nBeschreibung: Doppeltwirkender Hydraulikzylinder für Abstützung, gemäß Lastenheft Anforderung A-1. Lieferung mit Prüfunterlagen.\nMenge: 24 Stk\nAnforderungsreferenz: A-1\nPosition: 01.02\nKurztext: Hydraulikzylinder Hubwerk\nBeschreibung: Doppeltwirkender Hydraulikzylinder für Hubwerk, gemäß Lastenheft Anforderung A-2. Lieferung mit Prüfunterlagen.\nMenge: 29 Stk\nAnforderungsreferenz: A-2\nPosition: 01.03\nKurztext: Hydraulikzylinder Verstellung\nBeschreibung: Doppeltwirkender Hydraulikzylinder für Hubwerk, gemäß Lastenheft Anforderung A-2. Lieferung mit Prüfunterlagen.\nMenge: 16 Stk\nAnforderungsreferenz: A-2\nPosition: 01.04\nKurztext: Hydraulikzylinder Verriegelung\nBeschreibung: Doppeltwirkender Hydraulikzylinder für Verriegelung, gemäß Lastenheft Anforderung A-4. Lieferung mit Prüfunterlagen.\nMenge: 21 Stk\nAnforderungsreferenz: A-4\nPosition: 01.05\nKurztext: Hydraulikzylinder Schwenkantrieb\nBeschreibung: Doppeltwirkender Hydraulikzylinder für Schwenkantrieb, gemäß Lastenheft Anforderung A-5. Lieferung mit Prüfunterlagen.\nMenge: 22 Satz\nAnforderungsreferenz: A-5\nDemonstrationssystem · Alle Angaben sind fiktiv · Zeitzone: Europe/Athens"
+  ]
+ },
+ "summary": {
+  "seconds": 183,
+  "turns": 10,
+  "tool_calls": 17,
+  "calls_by_tool": {
+   "form": 1,
+   "click": 2,
+   "goto": 1,
+   "fetch": 2,
+   "save_evidence": 9,
+   "note": 1,
+   "finish": 1
+  },
+  "repeated_urls": {},
+  "refused_finishes": 0,
+  "forced": false,
+  "evidence": 9,
+  "cut": false
+ }
+}

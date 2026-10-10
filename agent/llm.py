@@ -15,16 +15,21 @@ OPENROUTER = "/" in MODEL  # "<provider>/<model>" runs on OpenRouter with the te
 CACHE = {"extra_body": {"cache_control": {"type": "ephemeral"}}} if MODEL.startswith("anthropic/") else {}
 STEP_EFFORT = os.environ.get("STEP_EFFORT", "low")  # reasoning per browser step; latency is mostly thinking tokens
 KEEP_STEPS = 4  # tool results of the latest steps stay in full; older page reads shrink so the context stays small
-# one model call; a slower one is retried while its deadline allows. Qwen steps took 20-90 s under load; Haiku's
-# slowest took 17 s, while about one in six OpenRouter calls through the run proxy never came back
-CALL_TIMEOUT = 45 if OPENROUTER else 120
+# one model call; a slower one is retried while its deadline allows. Qwen steps took 20-90 s under load and a
+# tender finish 132 s (a cut call starts over, so the cap sits above the slowest calls seen); Haiku's slowest took
+# 17 s, while about one in six OpenRouter calls through the run proxy never came back
+CALL_TIMEOUT = 45 if OPENROUTER else 180
 CHECK_TIMEOUT = 60  # one model call inside a finish check (ERP extract: 13-21 s); one hung call cost a position
 TOOL_TIMEOUT = 60  # one browser tool; a fetch that hung 109 s held the tender agent to its cut, its kept pages lost
 
 # The time by which every model call in this task must be over (set by agent.safe for each stage) and the longest
-# one call may take. Calls end on their own HTTP timeout: a phase cut must never wait for a cancelled call.
+# one call may take. chat enforces both on the wall clock: the HTTP timeout only bounds the silence between bytes, and
+# a call that received a byte now and then ran 184 s under a 120 s timeout.
 UNTIL: ContextVar[float] = ContextVar("until", default=float("inf"))
 CAP: ContextVar[float] = ContextVar("cap", default=CALL_TIMEOUT)
+# The evidence lists of the investigations in this task (agent.start gives each stage one), so a stage that is cut
+# at its deadline or crashes still hands on the pages its agents kept.
+KEPT: ContextVar[list | None] = ContextVar("kept", default=None)
 
 
 @contextmanager
@@ -64,14 +69,23 @@ async def chat(messages: list, tools: list | None = None, **kwargs):
         left = UNTIL.get() - time.time() - 1
         if left < 3:
             raise TimeoutError("no time left for a model call")
+        limit = min(CAP.get(), left)
+        call = asyncio.ensure_future(client().chat.completions.create(model=MODEL, messages=messages, tools=tools,
+                                                                      timeout=limit, **CACHE, **kwargs))
+        call.add_done_callback(lambda c: c.cancelled() or c.exception())  # a dropped call's failure stays quiet
         try:
-            return await client().chat.completions.create(model=MODEL, messages=messages, tools=tools,
-                                                          timeout=min(CAP.get(), left), **CACHE, **kwargs)
+            # asyncio.wait, not wait_for: wait_for waits until the cancelled call has stopped, a cut never does
+            await asyncio.wait({call}, timeout=limit)
+            if not call.done():
+                raise TimeoutError(f"model call over {limit:.0f} s")
+            return call.result()
         except Exception as error:  # noqa: BLE001  the hosted model may hiccup: retry like any provider
             if attempt == 5:
                 raise
             print(f"[llm] retry after {type(error).__name__}: {str(error)[:200]}", flush=True)
             await asyncio.sleep(min(2 + 3 * attempt, max(0.0, UNTIL.get() - time.time() - 5)))
+        finally:
+            call.cancel()  # no-op once done; frees the connection of a call over its time or of a cut stage
 
 
 def parse_object(text: str) -> dict | None:
@@ -173,14 +187,18 @@ async def investigate(tab, system: str, mission: str, finish_schema: dict, deadl
     tools = BROWSER_TOOLS + (extra_tools or []) + [_fn(
         "finish", "Return your findings when the mission is done (or when told time is up: your best findings).",
         {"result": finish_schema}, ["result"])]
-    try:
-        page_now = await asyncio.wait_for(tab.read(), TOOL_TIMEOUT)
-    except Exception as error:  # noqa: BLE001  a page that never loads must not hold the agent until its cut
-        page_now = f"Error: {type(error).__name__}: the page did not load; open the site's URL again."
+    try:  # like every tool, the first read never outlasts TOOL_TIMEOUT: a page that never returns can't eat the stage
+        page = await asyncio.wait_for(tab.read(), max(1.0, min(TOOL_TIMEOUT, deadline - time.time())))
+    except Exception as error:  # noqa: BLE001
+        url = (getattr(tab, "site", None) or {}).get("url")
+        page = f"Error: the page did not load ({type(error).__name__}). " + \
+            (f"Open {url} to start." if url else "Read it again.")
     messages = [{"role": "system", "content": system},
-                {"role": "user", "content": mission + "\n\nThe page now:\n" + page_now}]
+                {"role": "user", "content": mission + "\n\nThe page now:\n" + page}]
     steps: list[list[dict]] = []
     evidence: list[str] = []
+    if (stage := KEPT.get()) is not None:
+        stage.append(evidence)
 
     kept: dict[str, int] = {}  # page text -> evidence number, so a page kept twice reaches the analyst once
 

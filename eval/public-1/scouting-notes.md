@@ -2,7 +2,7 @@
 
 Scouted 2026-10-10 with the scouting logins. Tender **VG-2027-7093** (Stadt Buchenstadt, Verkehrsbetriebe), bidder
 Linden Hydraulik und Komponenten GmbH, scenario date **2027-01-25T09:00:00Z**. Raw extracts next to this file: `scout-public-qa.txt`,
-`run-brief.md`, `scouting.json`. Expected answer (test oracle, never ship it): `../oracle.py`.
+`run-brief.md`. Expected answer (never ship it): `../expected.json`.
 
 The private dataset uses *different sites, layouts and navigation*, so treat the traps below as categories of
 problems the agent must handle generically, not as selectors to hardcode.
@@ -104,7 +104,7 @@ problems the agent must handle generically, not as selectors to hardcode.
   - finanzen@ Projektbonus PB-1474: marginal bands 0–5000 0 %, 5000–15000 2 %, >15000 5 %
   - kalkulation@ Preisindizes: MET-4607 windows; **3.15 EUR/kg** for 25.01–28.02.2027
 
-## Derived public answer (from `../oracle.py`)
+## Derived public answer (`../expected.json`)
 
 | Pos | Qty (pcs) | Material | Base EUR | Surcharge | Packaging | Rebate | Unit price | Lead |
 | --- | ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: |
@@ -114,8 +114,7 @@ problems the agent must handle generically, not as selectors to hardcode.
 | 01.04 | 21 | HZ-3916 | 2107.18 | 5.25 | 1.26 | 2131.11 | 1906.85 | 3 |
 | 01.05 | 130 | HZ-6932 | 1866.15 | 8.06 | 1.94 | 11683.58 | 1692.74 | 3 |
 
-Discount 5 %, total_net **356 949.62 EUR**. Unverified by the platform (it doesn't publish answers). A test run
-will tell us how close this is.
+Discount 5 %, total_net **356 949.62 EUR**. Test runs signed with this answer score 100.
 
 ## Implications for the agent
 

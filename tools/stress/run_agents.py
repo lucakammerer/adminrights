@@ -10,7 +10,8 @@ Run from the repo root, with `atira models proxy` running and `source tools/dev-
 
 --mutate SEED runs stress level S2: every read-only page (GET, no password field, no POST form) is rewritten by
 tools/stress/mutations.js before the agent sees it (synonym labels, hidden decoys, shuffled menus, swapped number
-formats with their hints), in this tool's browser only. Pass: the gather score stays what it is unmutated.
+formats with their hints, shuffled table rows, main content in an extra frame), in this tool's browser only. Pass:
+the gather score stays what it is unmutated.
 --s4 PAGE runs stress level S4 (needs --resolve): the mail message recorded in PAGE (raw HTML from a fixture, its
 URL in that fixture's index.json) disappears from the mailbox (its list rows go, its pages answer 404) and appears
 as an attachment page linked from every tender-portal page. After the resolvers, agents.sweep looks for the open
@@ -143,7 +144,7 @@ async def mutator(playwright, seed: int):
             return await route.fulfill(response=response)
         async with lock:
             await scratch.set_content(body, wait_until="domcontentloaded")
-            stats = await scratch.evaluate(f"({MUTATIONS})({{seed: {seed}}})")
+            stats = await scratch.evaluate(f"({MUTATIONS})(opts)", {"seed": seed, "base": request.url})
             body = await scratch.content()
         MUTATED.update({k: v for k, v in stats.items()} | {"pages": 1})
         await route.fulfill(response=response, body=body)
@@ -196,8 +197,8 @@ class RecordingTab(Tab):
         super().__init__(page, site)
         self.recorder = recorder
 
-    async def read(self, offset: int = 0) -> str:
-        text = await super().read(offset)
+    async def read(self, offset: int = 0, compact: bool = False) -> str:
+        text = await super().read(offset, compact)
         await self.recorder.snapshot(self.page)
         return text
 
@@ -436,12 +437,14 @@ async def main() -> int:
                     summaries[f"erp:{key[-1]}"] = info
                 (out / "erp.json").write_text(json.dumps(erp_found, indent=1, ensure_ascii=False))
 
+            others = [results["supplier_portal"]] if "supplier_portal" in results else []  # as agent.main passes
             if args.s4 and args.resolve and requirements:
                 first = await orchestration.safe("commercials", resolvers.commercials(
-                    task, results["tender_portal"], results["webmail"]), time.time() + 300)
+                    task, results["tender_portal"], results["webmail"], others), time.time() + 300)
                 (out / "commercials-first-pass.json").write_text(json.dumps(first, indent=1, ensure_ascii=False))
                 SWEEP["first"] = commercials_score(first, facts)
-                open_facts = sweep_agent.gaps(results["tender_portal"], requirements, first, erp_found or None)
+                open_facts = [g for g in sweep_agent.gaps(results["tender_portal"], {}, first)
+                              if g["resolver"] == "commercials"]  # as agent.main: commercial facts, during the ERP stage
                 log("s4", f"open facts after the first pass: {[g['fact'] for g in open_facts]}")
                 started = time.time()
                 swept = await sweep_agent.sweep(task, tabs, open_facts, time.time() + 240) if open_facts else {}
@@ -471,8 +474,9 @@ async def main() -> int:
             rows += erp_score(erp_found, requirements, facts)
     if args.resolve and "tender_portal" in results and "webmail" in results:
         started = time.time()
+        others = [results["supplier_portal"]] if "supplier_portal" in results else []  # as agent.main passes
         commercials = await orchestration.safe("commercials", resolvers.commercials(
-            task, results["tender_portal"], results["webmail"]), time.time() + 300)
+            task, results["tender_portal"], results["webmail"], others), time.time() + 300)
         summaries["commercials"] = {"seconds": round(time.time() - started)}
         (out / "commercials.json").write_text(json.dumps(commercials, indent=1, ensure_ascii=False))
         rows += commercials_score(commercials, facts)
