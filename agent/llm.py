@@ -7,6 +7,7 @@ import time
 from openai import AsyncOpenAI
 
 MODEL = os.environ.get("AGENT_MODEL", "qwen3.8-flash-next")
+STEP_EFFORT = os.environ.get("STEP_EFFORT", "low")  # reasoning per browser step; latency is mostly thinking tokens
 KEEP_STEPS = 4  # tool results of the latest steps stay in full; older page reads shrink so the context stays small
 
 _client = None
@@ -35,24 +36,28 @@ async def chat(messages: list, tools: list | None = None, **kwargs):
             await asyncio.sleep(2 + 3 * attempt)
 
 
-def parse_object(text: str) -> dict:
+def parse_object(text: str) -> dict | None:
+    """An object the model sent as a string; raw line breaks inside its strings are tolerated."""
     try:
-        return json.loads(text[text.find("{"):text.rfind("}") + 1])
+        value = json.loads(text[text.find("{"):text.rfind("}") + 1], strict=False)
     except ValueError:
-        return {"text": text}
+        return None
+    return value if isinstance(value, dict) else None
 
 
-async def ask_json(system: str, user: str) -> dict:
-    """One reasoning call that must answer with a JSON object."""
+async def ask_json(system: str, user: str, effort: str | None = None) -> dict:
+    """One reasoning call that must answer with a JSON object. effort="low" suits copying values out of pages: several
+    times faster, while switching thinking off entirely made the model rewrite number formats."""
     messages = [{"role": "system", "content": system}, {"role": "user", "content": user}]
+    extra = {"reasoning_effort": effort} if effort else {}
     for _ in range(3):
-        reply = await chat(messages, response_format={"type": "json_object"})
+        reply = await chat(messages, response_format={"type": "json_object"}, **extra)
         text = reply.choices[0].message.content or ""
-        try:
-            return json.loads(text[text.find("{"):text.rfind("}") + 1])
-        except ValueError:
-            messages += [{"role": "assistant", "content": text},
-                         {"role": "user", "content": "That was not valid JSON. Answer with the JSON object only."}]
+        value = parse_object(text)
+        if value is not None:
+            return value
+        messages += [{"role": "assistant", "content": text},
+                     {"role": "user", "content": "That was not valid JSON. Answer with the JSON object only."}]
     raise ValueError("no JSON from the model")
 
 
@@ -123,7 +128,7 @@ async def investigate(tab, system: str, mission: str, finish_schema: dict, deadl
             warned = True
         if left < 0:
             break
-        reply = await chat(messages, tools)
+        reply = await chat(messages, tools, **({"reasoning_effort": STEP_EFFORT} if STEP_EFFORT else {}))
         message = reply.choices[0].message
         messages.append(message.model_dump(exclude_none=True))
         if message.content:
@@ -144,6 +149,12 @@ async def investigate(tab, system: str, mission: str, finish_schema: dict, deadl
                 result = args.get("result")
                 if isinstance(result, str):
                     result = parse_object(result)
+                    if result is None and deadline - time.time() > 30:
+                        log(tag, "finish refused: result is not a JSON object")
+                        messages.append({"role": "tool", "tool_call_id": call.id, "content":
+                                         "Not done: result must be a JSON object with the asked fields, not a string. "
+                                         "Call finish again with an object."})
+                        continue
                 result = result or {}
                 if check and deadline - time.time() > 45:
                     result, problem = await check(result, evidence)
@@ -179,7 +190,7 @@ async def investigate(tab, system: str, mission: str, finish_schema: dict, deadl
     messages.append({"role": "user", "content": "Stop now and call finish with your best findings."})
     reply = await chat(messages, tools, tool_choice={"type": "function", "function": {"name": "finish"}})
     for call in reply.choices[0].message.tool_calls or []:
-        result = json.loads(call.function.arguments or "{}").get("result")
-        result = json.loads(result) if isinstance(result, str) else (result or {})
-        return {**result, "evidence": evidence}
+        result = (parse_object(call.function.arguments or "{}") or {}).get("result")
+        result = parse_object(result) if isinstance(result, str) else result
+        return {**(result or {}), "evidence": evidence}
     return {"evidence": evidence}

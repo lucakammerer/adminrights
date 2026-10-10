@@ -1,4 +1,4 @@
-# Tender agent
+# Tender portal agent
 
 ## Mission
 
@@ -18,7 +18,7 @@ packaging tariff, delivery commitment, setup pool). Decisions happen in [resolve
 
 ## Implementation
 
-`agent.py` `run` → `llm.investigate`, tag `tender`, at most 45 steps, phase 1 deadline.
+`agent.py` `run` → `llm.investigate`, tag `tender-portal`, at most 45 steps, phase 1 deadline.
 Registers interest ("Teilnahme bekunden") if documents are behind it. Keeps the bill of quantities and every Q&A page
 with `save_evidence`.
 
@@ -30,6 +30,4 @@ with `save_evidence`.
 
 ## Open
 
-- `finish` sometimes comes back as a string; `llm.parse_object` recovers the object, else `{"text": ...}`. The answer's
-  reference then still comes from `resolvers.commercials`, but the agent's structured fields are lost.
 - Only searches the tender portal. If the private dataset puts Q&A elsewhere, they are missed.
