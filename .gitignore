@@ -5,3 +5,5 @@ __pycache__/
 .env
 .env.*
 *.tar.gz
+
+CLAUDE.local.md
