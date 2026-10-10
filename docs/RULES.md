@@ -124,8 +124,8 @@ position has none, the decision is **no_bid** for the whole tender. Proof both w
 per position, checked in code; `no_bid` needs a completed search (the group's result list in the evidence, every
 candidate compared) and an independent confirmation. An unfinished search is never "no match" (4.1).
 Traps: look-alike materials that differ in one attribute or only in status.
-Gather erp · Decide `erp.run`, `calc` · ⚠️ a search cut by its hard deadline is omitted (PR #5), but one forced to
-finish just before the cut can still report no match → false no-bid (F9, F16 → I1, I11) · Check: validate tests with look-alike, blocked and unfinished candidates
+Gather erp · Decide `erp.run`, `calc` · ⚠️ a search cut by its hard deadline, forced to finish, or finishing after its
+time warning never reports no match (F9, F16 → I1); a no match is not yet backed by evidence of every candidate (I1, I11) · Check: validate tests with look-alike, blocked and unfinished candidates
 
 **4 · Unit price.** Take the price condition **valid at `S`** (both validity endpoints inclusive), normalize it by its
 **price unit** (per 1 or per n pieces), and choose the scale with the **highest minimum quantity ≤ the position's

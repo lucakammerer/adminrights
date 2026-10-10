@@ -153,7 +153,7 @@ async def investigate(tab, system: str, mission: str, finish_schema: dict, deadl
     check(result, evidence) -> (result, problem): runs on finish, its model calls bounded by CHECK_TIMEOUT and the
     deadline; a problem sends the model back to work, a check that fails or runs out of time lets the result through.
     `warning` goes to the model `warn_at` seconds before the deadline. A finish forced by the deadline or the step
-    limit is marked `forced`: whatever it says, the agent did not finish its mission."""
+    limit, or sent after the warning, is marked `forced`: whatever it says, the agent did not finish its mission."""
     tools = BROWSER_TOOLS + (extra_tools or []) + [_fn(
         "finish", "Return your findings when the mission is done (or when told time is up: your best findings).",
         {"result": finish_schema}, ["result"])]
@@ -238,6 +238,9 @@ async def investigate(tab, system: str, mission: str, finish_schema: dict, deadl
                         log(tag, f"finish refused: {problem}")
                         messages.append({"role": "tool", "tool_call_id": call.id, "content": problem})
                         continue
+                if warned:  # told to stop: "best findings", not a finished mission (an ERP agent answered no_match
+                    log(tag, "finish after the time warning: marked forced")  # for a search it never completed)
+                    return {**result, "evidence": evidence, "forced": True}
                 return {**result, "evidence": evidence}
             try:
                 if name == "note":
