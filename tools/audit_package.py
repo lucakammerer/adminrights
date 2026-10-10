@@ -34,9 +34,9 @@ def public_values(logs: list[str]) -> set[str]:
     for log in logs:
         text = Path(log).read_text(errors="ignore")
         found |= set(re.findall(IDS, text))
-        found |= set(re.findall(r"https?://([\w.-]+)", text))
+        found |= {host for host in re.findall(r"https?://([\w.-]+)", text) if "." in host}
         found |= set(re.findall(r"[\w.+-]+@[\w-]+\.[\w.]+", text))
-    return found
+    return {value for value in found if len(value) >= 4}
 
 
 def audit(agent: Path, logs: list[str]) -> list[str]:
