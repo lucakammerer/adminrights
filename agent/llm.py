@@ -173,8 +173,12 @@ async def investigate(tab, system: str, mission: str, finish_schema: dict, deadl
     tools = BROWSER_TOOLS + (extra_tools or []) + [_fn(
         "finish", "Return your findings when the mission is done (or when told time is up: your best findings).",
         {"result": finish_schema}, ["result"])]
+    try:
+        page_now = await asyncio.wait_for(tab.read(), TOOL_TIMEOUT)
+    except Exception as error:  # noqa: BLE001  a page that never loads must not hold the agent until its cut
+        page_now = f"Error: {type(error).__name__}: the page did not load; open the site's URL again."
     messages = [{"role": "system", "content": system},
-                {"role": "user", "content": mission + "\n\nThe page now:\n" + await tab.read()}]
+                {"role": "user", "content": mission + "\n\nThe page now:\n" + page_now}]
     steps: list[list[dict]] = []
     evidence: list[str] = []
 

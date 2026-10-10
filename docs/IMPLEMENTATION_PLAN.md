@@ -84,7 +84,8 @@ Phase 5, deadline end − 20 s (DRY_RUN=1 stops before it)
 ```
 
 With fewer than 4 browsers, the remaining sites open as tabs in browser 1. A site whose first load fails is logged
-(`first load failed`); its agent opens the URL itself. Every phase is cut hard by `safe`: the job
+(`first load failed`, `fresh load failed` for a submission tab); its agent opens the URL itself, and a first page read
+that hangs ends after `TOOL_TIMEOUT` instead of holding the agent until its cut. Every phase is cut hard by `safe`: the job
 runs as its own task whose model calls end by the cut (`llm.UNTIL`), and at the cut `safe` returns the fallback without
 waiting for the task to stop (`asyncio.wait_for` waited, and a call that ignored its cancellation held a 780 s cut until
 1093 s). A stage that was cut is in `CUT`; the submission then works in a fresh tab of that site. The submission is

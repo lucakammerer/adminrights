@@ -56,7 +56,10 @@ async def safe(tag: str, job, until: float, fallback=None):
 async def fresh(tab: Tab) -> Tab:
     """A new tab of the same browser (same login) on the site's start page."""
     page = await tab.page.context.new_page()
-    await page.goto(tab.site["url"], wait_until="domcontentloaded")
+    try:
+        await page.goto(tab.site["url"], wait_until="domcontentloaded")
+    except Exception as error:  # noqa: BLE001  a slow site must not end the run: its agent opens the URL itself
+        llm.log(tab.site.get("siteId", "site"), f"fresh load failed: {type(error).__name__}")
     return Tab(page, tab.site)
 
 
