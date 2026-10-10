@@ -30,7 +30,7 @@ TRIM_CHARS = 60_000
 # The API returns the model's reasoning with every reply and reads whatever is sent back as input on every later
 # step. It stays while its step is in the KEEP_STEPS window (the model's train of thought) and goes in the same
 # batches as the older page reads.
-REASONING = ("reasoning", "reasoning_content")
+REASONING = ("reasoning", "reasoning_content", "reasoning_details")  # OpenRouter returns Claude's thinking in details
 CALL_TIMEOUT = 180  # one model call; a slower one is retried while its deadline allows (steps took 20-90 s under load,
 # a tender finish 132 s: a cut call starts over, so the cap sits above the slowest calls seen)
 CHECK_TIMEOUT = 60  # one model call inside a finish check (ERP extract: 13-21 s); one hung call cost a position
@@ -300,6 +300,8 @@ async def investigate(tab, system: str, mission: str, finish_schema: dict, deadl
         url = (getattr(tab, "site", None) or {}).get("url")
         page = f"Error: the page did not load ({type(error).__name__}). " + \
             (f"Open {url} to start." if url else "Read it again.")
+    if CACHE:  # a breakpoint after the shared system: every agent reads it, also after a batch of shortened reads
+        system = [{"type": "text", "text": system, "cache_control": {"type": "ephemeral"}}]
     messages = [{"role": "system", "content": system},
                 {"role": "user", "content": mission + "\n\nfinish takes `result`, a JSON object of this schema:\n" +
                  json.dumps(finish_schema, ensure_ascii=False) + "\n\nThe page now:\n" + page}]
