@@ -73,6 +73,20 @@ class Rest(unittest.TestCase):
         self.assertEqual(len(urls), paging.MAX_PAGES - 1)
         self.assertIn("more not read", note)
 
+    def test_rows_linked_by_id_are_no_pager(self):
+        rows = " ".join(f'[link "Order confirmation {i}" -> ?folder=in&id={i}]' for i in (17, 18, 23, 42))
+        ids = " ".join(f'[link "{i}" -> ?folder=in&id={i}]' for i in (17, 18, 23, 42))
+        for text in (rows, ids):
+            pages, note = asyncio.run(paging.rest(None, "https://s.example/inbox?folder=in", text))
+            self.assertEqual(pages, [], text)
+
+    def test_a_next_link_alone_is_a_pager(self):
+        async def fetch(url: str) -> str:
+            return "Fetched x (HTTP 200)\nsecond page"
+        text = '[link "Order confirmation 7" -> ?folder=in&id=7] [link "Next" -> ?folder=in&page=2]'
+        pages, _ = asyncio.run(paging.rest(fetch, "https://s.example/inbox?folder=in", text))
+        self.assertEqual([u for u, _ in pages], ["https://s.example/inbox?folder=in&page=2"])
+
     def test_a_page_without_pager(self):
         pages, note = asyncio.run(paging.rest(None, BASE, "Fetched x (HTTP 200)\nOne result [link \"a\" -> /a/1]"))
         self.assertEqual(pages, [])

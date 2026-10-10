@@ -6,7 +6,10 @@ import asyncio
 import re
 from urllib.parse import parse_qsl, urljoin, urlsplit
 
-LINK = re.compile(r'\[(?:\d+:)?link ".*?" -> ([^\]\s]+)\]')  # a link as reader.js writes it
+LINK = re.compile(r'\[(?:\d+:)?link "(.*?)" -> ([^\]\s]+)\]')  # a link as reader.js writes it
+# a pager link's label: a page number, maybe with a short word, or a short word alone ("next", an arrow); a row's link
+# carries a title, so a list whose rows link by id (?id=17) is not taken for its pager
+PAGER_LABEL = re.compile(r"\D{0,12}\d{1,4}\D{0,3}|\D{0,15}")
 MAX_PAGES = 8  # pages of one list at most, the first included: a longer list wants a narrower search
 MAX_CHARS = 48_000  # text of the further pages at most, so one result can't crowd out the rest of the context
 PARALLEL = 4
@@ -53,12 +56,29 @@ def number(url: str, key: tuple) -> int:
     return int(value) if value.isdigit() else 0
 
 
+def regular(url: str, key: tuple, numbers: set[int]) -> bool:
+    """Whether the numbers step evenly from the current page and one is a step away, as page numbers and offsets do;
+    record ids (17, 18, 23) don't. A list read without the number is on its first page: 0 or 1."""
+    current = number(url, key)
+    for here in ({current} if current or present(url, key) else {0, 1}):
+        others = [n for n in numbers if n != here]
+        gap = min((abs(n - here) for n in others), default=0)
+        if gap and all((n - here) % gap == 0 for n in others):
+            return True
+    return False
+
+def present(url: str, key: tuple) -> bool:
+    parts = urlsplit(url)
+    if key[0] == "query":
+        return key[1] in dict(parse_qsl(parts.query, keep_blank_values=True))
+    return key[1] < len(parts.path.rstrip("/").split("/"))
+
 def links(url: str, page_url: str, text: str) -> dict[tuple, dict[int, str]]:
     """The links on a page (read at `page_url`) that may lead to other pages of the list at `url`, by where they
     differ: {key: {number: url}}."""
     found: dict[tuple, dict[int, str]] = {}
-    for href in LINK.findall(text):
-        if href.startswith(("#", "javascript:", "mailto:")):
+    for label, href in LINK.findall(text):
+        if href.startswith(("#", "javascript:", "mailto:")) or not PAGER_LABEL.fullmatch(label.strip()):
             continue
         target = urljoin(page_url, href)
         if (hit := step(url, target)) is not None:
@@ -70,7 +90,7 @@ async def rest(fetch, url: str, text: str) -> tuple[list[tuple[str, str]], str]:
     """The further pages of the list `text` shows (read at `url`), each read with `fetch(url) -> text`, in page order;
     and a note for the model on what was read and what was left out. Follows the page links of every page it reads,
     so a pager that shows a few numbers at a time is read to its end."""
-    candidates = links(url, url, text)
+    candidates = {k: v for k, v in links(url, url, text).items() if regular(url, k, set(v))}
     if not candidates:
         return [], "No links to further pages of this list found: it has one page, or its pager is not a link."
     key = max(candidates, key=lambda k: len(candidates[k]))  # the pager: the number with the most links
