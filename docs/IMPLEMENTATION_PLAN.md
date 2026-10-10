@@ -423,7 +423,7 @@ Every item has exactly one owner. When it touches a file someone else owns (§14
 | I14 | ✅ Calculator tests (`tests/test_calc.py`): golden test, values written as text, allocation ties, band edges, inclusive ceilings and thresholds, shared stock | `tests/` | green | 4–9, 12, 15–18, 22–27 | L |
 | I15 | Loud failures instead of silent fallbacks (FX, metal index): tolerant key match and `MISSING` in the trace ✅; omitted positions per rule 9 ✅ (also when all are omitted); a material without prices is submitted with its other fields ✅ | `calc.py` | tests | 9, 22, 28 | L |
 | I23 | Cost: cache-friendly loop (append-only history; when it grows too long, restart from the notes and kept evidence); measure Clef against Qwen for yes/no and pick decisions, then use it or drop it | `llm.py` | cached share of input up; cost per run ≤ $0.10 | T3.4 | F |
-| I24 | Stress harness for levels S1–S3 (§14.1) | `tools/stress/` | S1 and S3 pass; S2 time-boxed to 2 h | T1.12, 3, 19 | Y |
+| I24 | Stress harness for levels S1–S3 (§14.1): S1 ✅ (`s1_sites.py`); single-agent runner and recorder ✅ (`run_agents.py`: results, kept evidence, raw HTML, step summary, gather score against `eval/public-1/gather-facts.json`); S2 mode `--mutate` (`mutations.js`); S3 `s3_nobid.py` | `tools/stress/` | S1 and S3 pass; S2 time-boxed to 2 h | T1.12, 3, 19 | Y |
 
 ### P2: private-dataset readiness
 
