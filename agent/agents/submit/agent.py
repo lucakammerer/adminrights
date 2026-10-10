@@ -1,6 +1,5 @@
 """Submit agent: enters and signs the bid, with a TAN sub-agent in the mailbox. See README.md."""
 import json
-import re
 import time
 
 import llm
@@ -17,19 +16,10 @@ async def run(task, tab, mail_tab, answer: dict, omitted: list, specs: dict, con
     async def fetch_tan(args):
         mission = f"""{login_line(mail_tab.site)}
 In this mailbox (you may already be logged in), find the newest signing-TAN message for tender
-{answer['tender_reference']}. The tender portal just said: "{args.get('portal_message', '')}". The mailbox may still
-show an earlier search: search for the signing-TAN message yourself. Pick the message for that request (highest
-request number / newest), open it and finish with the TAN exactly as written."""
-
-        async def is_tan(result, _evidence):
-            """run_d4419dc2e05fdad8: the agent read a discount mail and finished with "NOT EXTRACTED" as the TAN."""
-            tan = str(result.get("tan") or "").strip()
-            if re.search(r"\d", tan) and len(tan) <= 20:
-                return result, ""
-            return result, f"{tan!r} is not a TAN. Open the signing-TAN message itself and finish with its TAN."
-
+{answer['tender_reference']}. The tender portal just said: "{args.get('portal_message', '')}". Pick the message for
+that request (highest request number / newest), open it and finish with the TAN exactly as written."""
         found = await llm.investigate(mail_tab, SYSTEM, mission, obj(tan=STR, request=STR, subject=STR),
-                                      min(deadline, time.time() + 120), "tan", max_steps=12, check=is_tan)
+                                      min(deadline, time.time() + 120), "tan", max_steps=12)
         found.pop("evidence", None)
         return json.dumps(found, ensure_ascii=False)
 
