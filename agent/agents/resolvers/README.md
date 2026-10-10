@@ -27,7 +27,8 @@ means. The output is typed facts for `calc`, which does all the arithmetic.
   all kept mail if none matches → per
   position `final_quantity_pieces`, `requirement`, `bore_mm`, `stroke_mm`, `pressure_bar`, `mounting`,
   `certification`, `catalogue_group`, plus `quantity_reasoning` and `requirement_reasoning`.
-- `commercials`: brief, evidence from the tender portal and mail agents, plus the pages other websites kept that name
+- `commercials` (three parts asked at once, `COMMERCIAL_PARTS`, merged by `merge_parts`): brief, evidence from the
+  tender portal and mail agents, plus the pages other websites kept that name
   one of the brief's commercial records (`common.commercial_records`, `common.routed`: an approval or rate message on
   an unexpected site; on public-1 none) →
   - `discount`: `percent`, `min_order_value` (or null), `source`
@@ -61,7 +62,10 @@ means. The output is typed facts for `calc`, which does all the arithmetic.
   revision and requirement; a usable stroke plus 2 × the reserve from the latest technical release.
 - `commercials` starts with `requirements` and runs alongside the ERP phase (through `sweep.commercials_with_sweep`,
   which looks for facts it left open), effort medium; only `calc.facts` waits
-  for it. Prompt: exact reference, authorized sender, latest record up to the scenario date, newer replaces older,
+  for it. Its questions go out as three calls at once over the same evidence (discount and condition groups; per-position
+  tariffs, commitments, pool and bonus; FX and metal index): one call for everything took 247 s on the critical path,
+  the parts took 31-35 s against 47-54 s for one call on the recorded evidence, with the same answers. A part that fails
+  leaves the others' fields; positions merge by their number. Prompt: exact reference, authorized sender, latest record up to the scenario date, newer replaces older,
   future-dated records never apply; without a condition group, `base` applies. Every amount is a plain JSON number.
 
 ## Pitfalls

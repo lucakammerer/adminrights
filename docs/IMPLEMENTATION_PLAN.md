@@ -69,6 +69,8 @@ Phase 0, no browser
     resolvers.sites: a model assigns each website its role from the brief (names and ids differ per dataset)
 Phase 1, parallel, one browser each, wrap-up at end − 10 min, hard cut 30 s later
     tender_portal.run · supplier_portal.run · webmail.run · erp.login
+    submit.run starts once webmail.run is done (not with DRY_RUN=1 or an API target), in a fresh tender-portal tab,
+    deadline end − 20 s: bidder data and offer kind, then it waits in bid_values for the bid (phase 5)
 Phase 2, no browser
     resolvers.specs once supplier_portal and webmail are done, unless the tender agent is done already (then
     requirements starts at once): the governing requirements without the tender (cut where the ERP searches keep
@@ -82,11 +84,12 @@ Phase 3, ERP tabs in parallel, hard cut end − 6 min (a cut search → its posi
     erp.run per distinct governing requirement (agent.spec_key compares the values however a model wrote them); a
     position whose values no early search had gets its own search while search time is left (else it is omitted), a
     search no position needs is stopped; a no_match is confirmed by a second erp.run when ≥ 150 s remain;
-    then resolvers.commercials, hard cut end − 5.5 min
+    then resolvers.commercials (three parts at once), hard cut end − 5.5 min
 Phase 4, code
     calc.facts → calc.compute
 Phase 5, deadline end − 20 s (DRY_RUN=1 stops before it)
-    submit.run (+ verify_summary read-back, get_tan in the webmail tab)
+    the bid reaches submit.run through bid_values (+ verify_summary read-back, get_tan in the webmail tab with the
+    webmail agent's search URL)
 ```
 
 With fewer than 4 browsers, the remaining sites open as tabs in browser 1. A site whose first load fails is logged
@@ -156,7 +159,11 @@ Every browser agent is the same loop; agents differ only in mission, result sche
   and keeps a page with the same content only once.
 - **`check` bounds:** its model calls take at most `CHECK_TIMEOUT` (60 s) each and end at the agent's deadline; a
   check that fails or runs out of time lets the result through unchecked.
-- **Model:** `AGENT_MODEL`, default the hosted Qwen; browser steps run with low reasoning effort (`STEP_EFFORT`);
+- **Model:** `AGENT_MODEL`, default the hosted Qwen; a `<provider>/<model>` id runs on OpenRouter through the run's
+  proxy with the team secret `OPENROUTER_API_KEY` (Anthropic models with a moving cache breakpoint). Agents that only
+  navigate and keep pages (tender portal, supplier portal, webmail, ERP login, sweep) step without thinking
+  (`NAV_EFFORT` "none", about half the latency per step); ERP searches, submit and the TAN look-up copy values and
+  keep low reasoning effort (`STEP_EFFORT`);
   `chat` tries up to 6 times, each attempt at most `CALL_TIMEOUT` (180 s; no SDK-internal retries) and all of them
   bounded by the stage's `llm.UNTIL`, which `agent.safe`/`agent.start` set per stage; step calls end at the agent's
   deadline so the forced `finish` keeps its grace. Both limits hold on the wall clock (`asyncio.wait`, the call is
@@ -338,7 +345,8 @@ on disagreement it logs both, re-asks once, then the rule wins.
 | Anything else | a frontier model via team secret | off; only behind a flag where it buys quality (E6) |
 
 - Calls are bounded by the caller's deadline (I2); at most 12 concurrent calls per run (the team shares 32).
-- Reasoning effort: low for browser steps (`STEP_EFFORT`) and for copying values, medium for the resolvers. Low is
+- Reasoning effort: none for navigation (`NAV_EFFORT`), low for browser steps that copy values (`STEP_EFFORT`) and for
+  copying values, medium for the resolvers. Low is
   several times faster; switching thinking off entirely made the model rewrite number formats (PR #5).
 - Prompt layout: static system prompt and tool schemas first (cached input is cheaper), then brief, then dynamic parts.
 - The system prompt teaches meanings (traps, German business terms), never values.
@@ -437,7 +445,7 @@ Every item has exactly one owner. When it touches a file someone else owns (§14
 | I3 | ✅ Site roles from the brief (PR #5); the run's submission target pins the tender portal, and an unclear assignment falls back by elimination instead of crashing. Tests: `tests/test_sites.py`, `tools/stress/s1_sites.py` | `agent.py`, `agents/resolvers` | stress level S1 passes (§14.1) | T1.12 | Y |
 | I4 | Dependency graph + per-stage budgets (§4.1, §4.2). Since PR #5 every phase has a hard cut; remaining: start stages when their inputs exist, budgets computed at stage start | `agent.py`, `budget.py`, `agents/erp` | dry run: ERP starts during the first stage; answer < 8 min | T1.3, T3.2 | F |
 | I5 | Slimmer missions and inputs: no word-for-word copies in `finish` schemas when the evidence holds them; "every needed page kept → finish"; resolvers get only the evidence they need (object `finish` done in PR #5) | `agents/tender_portal`, `agents/supplier_portal`, `agents/resolvers`, `llm.py` | no page fetched twice without reason; commercials resolver much faster | T3.2, T4.2 | F |
-| I6 | Submit in two stages + watchdog: stage 1 at start, stage 2 with the answer, watchdog at end − 3 min | `agents/submit` | a short-budget run still signs | T1.3, 9 | F |
+| I6 | Submit in two stages + watchdog: stage 1 once the mailbox is done ✅ (`bid_values` waits for the bid), stage 2 with the answer ✅, watchdog at end − 3 min | `agents/submit` | a short-budget run still signs | T1.3, 9 | F |
 | I6b | ✅ Read-back before the TAN: `verify_summary` checks every unit price and the total net on the summary page in code | `agents/submit`, `validate.py` | a mistyped value is corrected before signing | T1.9, 7 | L |
 | I7 | Built, first full run pending: `DRY_RUN=1` stops `main` after the answer; `tools/score.sh` (run + `eval/compare.py`) | `agent.py`, `tools/` | one command → a score | T4.3 | L |
 | I8 | ✅ `tools/check_release.sh` (audit, tests, `agent.json`), `tools/audit_package.py` (public-1 values, site paths, own browsers, API keys; repo and `--package`), `tools/ci.py` (gates before every test run, docs/release.md). Was: release tools: `tools/audit_package.py` + `tools/check_release.sh` (audit, tests, `agent.json`). The audit also runs on the uploaded package (`atira run_package`), not only on the repo | `tools/` | green on `main` and on the last uploaded package | T0.1, T0.2, T0.6, T1.1 | L |

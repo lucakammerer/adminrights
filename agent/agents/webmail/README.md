@@ -14,7 +14,7 @@ senders), read at run time by `common.mail_records`, not from public-1.
 
 - Input: brief, mailbox login.
 - Output `RESULT`: `kept` (one line on what was kept), `own_address` (the mailbox's own address, for the contact
-  field in the configurator), `other_relevant_facts`, plus `evidence`. The actual content is the evidence.
+  field in the configurator), `search_url` (one search it ran, so the TAN look-up searches the same way), `other_relevant_facts`, plus `evidence`. The actual content is the evidence.
 
 ## Implementation
 

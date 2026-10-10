@@ -50,6 +50,7 @@ flowchart LR
   erp --> calc
   com -. facts left open .-> sweepnode -. until ERP is done .-> calc
   com --> calc
+  mail -. done: bidder data first .-> submit
   calc --> submit --> bid([✅ Bid])
 
   classDef browser fill:#dbeafe,stroke:#2563eb,color:#111827
