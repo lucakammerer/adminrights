@@ -51,7 +51,6 @@ def reference(brief: str) -> str:
 
 # What the brief says about mail records, read from this run's brief: never typed into a mission.
 LOCAL = re.compile(r"(?<![\w.+-])([A-Za-z0-9][\w.+-]*)@(?![\w-]+\.\w)")  # a sender's local part without its domain
-ADDRESS = re.compile(r"[\w.+-]+@([\w-]+(?:\.[\w-]+)+)")
 PAIR = re.compile(r"^([^\s/,;:()][^/,;:()]*?)\s*/\s*([A-Za-z0-9][\w.+-]*?)@?$")  # "Subject/localpart"
 NOUN = re.compile(r"\b([A-ZÄÖÜ][\w\-äöüß]+)\s+(?:messages?|mails?|e-mails?|records?)\b")
 ARTICLES = {"The", "A", "An", "This", "That", "Each", "Every", "Any", "Its", "Latest", "Newest", "Most", "Recent", "No"}
@@ -81,13 +80,13 @@ def _subject(text: str) -> str:
 
 
 def mail_records(brief: str) -> dict:
-    """The mail records the brief's rules name: {"records": [{"subject", "sender", "rule"}], "senders": [local parts],
-    "domain": the bidder's mailbox domain if the brief writes a full address}. A record has a subject, a sender's local
-    part or both; `rule` is the brief's sentence about it. Never raises: nothing found gives empty lists."""
+    """The mail records the brief's rules name: {"records": [{"subject", "sender", "rule"}], "senders": [local parts]}.
+    A record has a subject, a sender's local part or both; `rule` is the brief's sentence about it. Never raises:
+    nothing found gives empty lists."""
     try:
         return _mail_records(brief or "")
     except Exception:  # noqa: BLE001  an unexpected brief shape must never cost the run
-        return {"records": [], "senders": [], "domain": ""}
+        return {"records": [], "senders": []}
 
 
 def _mail_records(brief: str) -> dict:
@@ -113,8 +112,7 @@ def _mail_records(brief: str) -> dict:
                 subjects = [n for n in NOUN.findall(sentence) if n not in ARTICLES]
                 add(subjects[0] if subjects else "", local, sentence)
     senders = list(dict.fromkeys(r["sender"] for r in records if r["sender"]))
-    domains = [d for d in ADDRESS.findall(brief) if "." in d]
-    return {"records": records, "senders": senders, "domain": domains[0] if domains else ""}
+    return {"records": records, "senders": senders}
 
 
 def technical_records(brief: str) -> list[dict]:

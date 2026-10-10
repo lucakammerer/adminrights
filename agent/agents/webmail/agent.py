@@ -12,14 +12,14 @@ def wanted(brief: str) -> str:
     if not found["records"]:
         return ("The brief's rules name the records you need (approvals, condition and rate messages); derive each "
                 "one's subject and sender from the rules above.")
-    domain = found["domain"] or "the bidder's own mailbox domain (the mailbox shows its own address)"
     lines = []
     for r in found["records"]:
         sender = f"from {r['sender']}@" if r["sender"] else "sender as the rule says"
         lines.append(f'- subject "{r["subject"]}", {sender}' if r["subject"]
                      else f"- {sender}, no subject given; the rule: {r['rule']}")
-    return (f"The records the brief's rules name, as the brief states them. Every sender is the local part at {domain}; "
-            "a sender with another domain, even a similar one, is someone else:\n" + "\n".join(lines))
+    return ("The records the brief's rules name, as the brief states them. Every sender is the local part at the "
+            "bidder's own mailbox domain (the mailbox shows its own address); a sender with another domain, even a "
+            "similar one, is someone else:\n" + "\n".join(lines))
 
 
 async def run(task, tab, deadline):
