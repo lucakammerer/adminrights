@@ -8,10 +8,10 @@ and its documentation (`README.md`); `agent/agents/common.py` holds what they sh
 main (budget = min(time left, 19 min), end = start + budget)
  ├─ Phase 1, parallel, one browser each, deadline end − 9 min
  │   tender.run · spec.run · mail.run · erp.login
- ├─ Phase 2, parallel, no browser
- │   resolvers.requirements · resolvers.commercials
+ ├─ Phase 2, no browser
+ │   resolvers.requirements (resolvers.commercials starts too, runs alongside phase 3)
  ├─ Phase 3, parallel in ERP tabs, deadline end − 6 min
- │   erp.run per distinct requirement
+ │   erp.run per distinct requirement; then await resolvers.commercials
  ├─ Phase 4, code
  │   calc.facts → calc.compute
  └─ Phase 5, deadline end − 20 s

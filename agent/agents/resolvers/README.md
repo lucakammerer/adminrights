@@ -7,7 +7,8 @@ typed facts for `calc`. This is where interpretation happens: which record is va
 
 **Rules:** 1, 2, 13, 14, 17, 20.
 
-**Input:** brief, evidence from tender, spec and mail (from mail only the technical releases matter).
+**Input:** brief, evidence from tender and spec, and only the kept mail pages that mention a technical release
+("technik"), to keep the call small. It is on the critical path: the ERP agents wait for it.
 
 **Output per position:** `final_quantity_pieces` (+ `quantity_reasoning`), `requirement`, `bore_mm`, `stroke_mm`,
 `pressure_bar`, `mounting`, `certification`, `catalogue_group` (+ `requirement_reasoning`).
@@ -19,6 +20,8 @@ typed facts for `calc`. This is where interpretation happens: which record is va
 - Usable stroke: add 2 × the reserve from the latest technical release for that revision to the stroke.
 
 ## commercials
+
+Runs alongside the ERP phase; only `calc.facts` waits for it.
 
 **Rules:** 5, 12, 16, 21, 22, 23, 24, 25, 26, 28.
 

@@ -121,10 +121,14 @@ def compute(facts: dict) -> dict:
 
 def number(text, fmt: str = "") -> float:
     """A number as shown, in its locale: de-DE uses a decimal comma, en-US a decimal point."""
-    s = re.sub(r"[^\d,.\-]", "", str(text))
-    if not s:
+    match = re.search(r"-?\d[\d.,]*", str(text))
+    if not match:
         return 0.0
-    german = "de" in fmt.lower() if fmt else ("," in s and ("." not in s or s.rfind(",") > s.rfind(".")))
+    s = match.group(0).rstrip(".,")
+    if fmt:
+        german = bool(re.search(r"\bde[-_]de\b|^de\b", fmt.strip(), re.I))
+    else:
+        german = "," in s and ("." not in s or s.rfind(",") > s.rfind("."))
     if german:
         s = s.replace(".", "").replace(",", ".")
     else:

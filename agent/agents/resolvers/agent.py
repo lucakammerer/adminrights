@@ -4,6 +4,7 @@ from agents.common import RESOLVE, context, evidence
 
 
 async def requirements(task, tender, spec, mail) -> dict:
+    technical = {"evidence": [page for page in mail.get("evidence", []) if "technik" in page.lower()]}
     question = f"""{context(task)}
 
 Evidence from the tender portal:
@@ -12,8 +13,8 @@ Evidence from the tender portal:
 Evidence from the supplier portal:
 {evidence(spec)}
 
-Messages from the mailbox (only the technical releases matter here):
-{evidence(mail)}
+Technical releases from the mailbox:
+{evidence(technical)}
 
 For every tender position, work out:
 - final_quantity_pieces: tender quantity, replaced by the latest dated clarification that changes it (ignore

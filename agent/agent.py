@@ -50,10 +50,9 @@ async def main() -> int:
         llm.log("spec", json.dumps(spec, ensure_ascii=False)[:3000])
         llm.log("mail", json.dumps(mail, ensure_ascii=False)[:4000])
 
-        requirements, commercials = await asyncio.gather(
-            resolvers.requirements(task, tender, spec, mail), resolvers.commercials(task, tender, mail))
+        commercials_job = asyncio.create_task(resolvers.commercials(task, tender, mail))  # only calc needs it
+        requirements = await resolvers.requirements(task, tender, spec, mail)
         llm.log("requirements", json.dumps(requirements, ensure_ascii=False))
-        llm.log("commercials", json.dumps(commercials, ensure_ascii=False))
 
         erp_tab = tabs["erp"]
 
@@ -73,6 +72,8 @@ async def main() -> int:
         found = dict(await asyncio.gather(*(erp_for(k, r, i == 0) for i, (k, r) in enumerate(distinct.items()))))
         erp = {r["position"]: found[tuple(str(r.get(k)) for k in spec_keys)] for r in requirements["positions"]}
         llm.log("erp", json.dumps(erp, ensure_ascii=False)[:4000])
+        commercials = await commercials_job
+        llm.log("commercials", json.dumps(commercials, ensure_ascii=False))
 
         facts = calc.facts(tender, requirements, commercials, erp)
         result = calc.compute(facts)
