@@ -2,21 +2,18 @@
 
 > **How the system works, how it must change, and who builds what.** Combined from both earlier plans (ours and
 > Luca's architecture notes) and the analysis of his agent on `main`. Every rule and its ID: [RULES.md](RULES.md)
-> (T0–T4 platform rules, 1–29 bid rules). Why the plan looks like this: [PLAN_COMPARISON.md](PLAN_COMPARISON.md)
-> (`F#` = its findings). No public-1 values in this file.
+> (T0–T4 platform rules, 1–29 bid rules). No public-1 values in this file.
 
 ---
 
 ## 0. In short
 
 The agent on `main` works the four websites with one generic model tool loop, applies the bid rules through two
-model "resolvers" and an exact code calculator, and enters the bid with a model-driven submit agent. In a full local
-dry run its resolvers got **every fact right**, and the run still failed. The answer came only after 17 minutes,
-and it was a false **no-bid**, because the ERP agents started after their own deadline and reported "no match" for
-searches they never ran (PLAN_COMPARISON §2.4). PR #5 has since added site roles from the brief and hard phase cuts,
-which bound the run time; the false no-bid path and the rest of P0 are still open (§12).
+model "resolvers" and an exact code calculator, and enters the bid with a model-driven submit agent. On public-1 it
+signs bids that score 100 in 13–18 minutes ([`bench/RUNS.md`](../bench/RUNS.md)); a single slow step can still cost
+positions or the signature.
 
-So the work goes in this order (backlog §12):
+The work goes in this order (backlog §12):
 
 1. **P0, a correct signed bid in time:** unfinished ≠ no match; per-stage budgets and dependency scheduling;
    deadline-bounded model calls; slimmer missions; submission in two stages with a watchdog; dry-run scoring and
@@ -152,7 +149,7 @@ Every browser agent is the same loop; agents differ only in mission, result sche
   bonus bands. Reasoning effort is medium for `requirements` and `commercials`, low for copying values (`sites`,
   ERP `extract`).
 - **Calculator** (`agent/calc.py`, details in [calc.md](calc.md)): `facts` merges the agents' results, `compute`
-  applies rules 3–9, 12, 15–18 and 22–27 in `Decimal` with HALF_UP; exact against the reference (PLAN_COMPARISON §2.3).
+  applies rules 3–9, 12, 15–18 and 22–27 in `Decimal` with HALF_UP; exact against the reference (`tests/test_calc.py`).
   `agent.bid` calls them: if they raise, a position whose facts break the calculation loses its ERP finding (or the
   position itself) and is omitted as unfinished, never no_bid; as a last resort every position is omitted, so the run
   still signs.
@@ -172,13 +169,6 @@ Every line goes through `llm.log` as `[tag  123s] ...` (seconds since start). `m
 (`sites`, `tender-portal`, `supplier-portal`, `webmail`, `requirements`, `commercials`, `erp`, `facts`, `calc`, `answer`,
 `submit`); every agent step
 appears as `[tag  123s] n: tool {args}`.
-
-### 3.6 Measured behaviour
-
-Every test run is a row in [`bench/RUNS.md`](../bench/RUNS.md). Up to `3accb38` plus PR #5: the resolvers got every
-fact right in every run, and `calc` scores 100 on complete facts (`tests/test_calc.py`), but no run signed: ERP
-agents ran into the end − 6 min cut and the submit agent ran out of time (one model call hung 371 s). PR #9 bounds
-both; its first test run is the next row.
 
 ---
 
@@ -235,7 +225,7 @@ flowchart LR
 | `agents/resolvers` | model interpretation of evidence | unchanged outputs in P0/P1; candidate records added in P2 | 1, 2, 5, 12–14, 16, 17, 20–26, 28 | I5, I18 |
 | `numbers.py` *(new, from `calc.number`)* | strict number and unit parsing | `(raw, hint)` → `Decimal` or error | 4, 22 | I10 |
 | `calc.py` | `facts`, `compute` | unchanged; `Decimal` throughout; loud failures | 3–9, 12, 15–18, 22–27 | I10, I14, I15 |
-| `validate.py` *(new)* | answer schema (from the run), arithmetic, ERP match check, no-bid gate | answer or ERP result → ok or problem text | T1.6, 3, 7, 8 | I1, I11 |
+| `validate.py` | answer schema (from the run), arithmetic, ERP match check, no-bid gate | answer or ERP result → ok or problem text | T1.6, 3, 7, 8 | I1, I11 |
 | `select.py` *(new, P2)* | `LATEST` selection as a cross-check of the resolvers | candidate records → governing values + conflicts | 1, 2, 5, 12–14, 16, 17, 20–26, 28 | I18 |
 
 ### 4.4 Contracts
@@ -366,7 +356,7 @@ Same jobs and rules, different software, look, navigation, site names and data, 
 | Mirror world *(stretch)* | a small local re-skin of the four jobs with information split differently and a synthetic scenario with a known answer | — |
 | Sandbox test runs | the official per-field breakdown; paste each result in its PR | I9 |
 
-Two independent references agree on every field: `eval/expected.json` (with `eval/derivation.md`) and `eval/oracle.py`.
+Reference answer: `eval/expected.json` (derived in `eval/derivation.md`); signed test runs with it score 100.
 
 **Experiments** (decide by data): E2 screenshot fallback · E3 browser and tab layout for the ERP fan-out ·
 E4 voting for the clause classification · E5 Clef for yes/no checks · E6 a frontier model for the resolvers ·
@@ -388,14 +378,14 @@ AdminRights/
 │   ├── agent.py, llm.py, browser.py, reader.js, calc.py, run.py, browsers.py
 │   └── agents/<name>/     # agent.py + README.md per agent, common.py
 ├── docs/                  # what the system is and how we build it; no public-1 values
-│   ├── README.md, RULES.md, IMPLEMENTATION_PLAN.md, PLAN_COMPARISON.md, calc.md, challenge.md
-│   └── platform/          # dated copies of the platform docs
-├── eval/                  # local: references, scorer, public-1 data
-│   ├── expected.json, derivation.md, compare.py, oracle.py
-│   └── public-1/          # scouting notes, brief, Q&A extract, scouting JSON, challenge and start pages (logins)
+│   └── README.md, RULES.md, IMPLEMENTATION_PLAN.md, calc.md, challenge.md, release.md
+├── eval/                  # local: reference, scorer, public-1 data
+│   ├── expected.json, derivation.md, compare.py
+│   ├── fixtures/pages/    # recorded pages for the mutation tests
+│   └── public-1/          # scouting notes, brief, Q&A extract, challenge page, gather facts
 ├── tests/                 # local: calculator, parser and validator tests; fixtures/
 ├── bench/                 # local: RUNS.md, one row per test run and submission
-└── tools/                 # local: dev-env.sh, audit_package.py, ci.py (test loop, docs/release.md), stress/
+└── tools/                 # local: dev-env.sh, score.sh, check_release.sh, audit_package.py, ci.py, rescore.py, runs/, stress/
 ```
 
 ---
@@ -411,20 +401,20 @@ Every item has exactly one owner. When it touches a file someone else owns (§14
 | --- | --- | --- | --- | --- | --- |
 | I1 | Unfinished ≠ no match (§4.4). Since PR #5 a search cut by its hard deadline is omitted, and `investigate` marks every forced `finish` (deadline, step limit, or sent after the time warning), whose `no_match` `main` drops; `calc.facts` drops a `no_match` without kept pages; remaining: a `no_match` only with evidence that every candidate was compared | `llm.py` (the mark), `agents/erp`, `validate.py`, `calc.compute` | a run with a starved ERP stage never answers no_bid | 3, 8, 9 | L |
 | I2 | Model calls bounded by the caller's deadline; concurrency cap. Since PR #5 the phase cuts cancel slow calls; remaining: the bound inside a phase, the cap | `llm.py` | test with a fake slow client | T1.3 | F |
-| I3 | ✅ Site roles from the brief (PR #5); the run's submission target pins the tender portal, and an unclear assignment falls back by elimination instead of crashing (F21). Tests: `tests/test_sites.py`, `tools/stress/s1_sites.py` | `agent.py`, `agents/resolvers` | stress level S1 passes (§14.1) | T1.12 | Y |
+| I3 | ✅ Site roles from the brief (PR #5); the run's submission target pins the tender portal, and an unclear assignment falls back by elimination instead of crashing. Tests: `tests/test_sites.py`, `tools/stress/s1_sites.py` | `agent.py`, `agents/resolvers` | stress level S1 passes (§14.1) | T1.12 | Y |
 | I4 | Dependency graph + per-stage budgets (§4.1, §4.2). Since PR #5 every phase has a hard cut; remaining: start stages when their inputs exist, budgets computed at stage start | `agent.py`, `budget.py`, `agents/erp` | dry run: ERP starts during the first stage; answer < 8 min | T1.3, T3.2 | F |
 | I5 | Slimmer missions and inputs: no word-for-word copies in `finish` schemas when the evidence holds them; "every needed page kept → finish"; resolvers get only the evidence they need (object `finish` done in PR #5) | `agents/tender_portal`, `agents/supplier_portal`, `agents/resolvers`, `llm.py` | no page fetched twice without reason; commercials resolver much faster | T3.2, T4.2 | F |
 | I6 | Submit in two stages + watchdog: stage 1 at start, stage 2 with the answer, watchdog at end − 3 min | `agents/submit` | a short-budget run still signs | T1.3, 9 | F |
 | I6b | ✅ Read-back before the TAN: `verify_summary` checks every unit price and the total net on the summary page in code | `agents/submit`, `validate.py` | a mistyped value is corrected before signing | T1.9, 7 | L |
 | I7 | Built, first full run pending: `DRY_RUN=1` stops `main` after the answer; `tools/score.sh` (run + `eval/compare.py`) | `agent.py`, `tools/` | one command → a score | T4.3 | L |
 | I8 | ✅ `tools/check_release.sh` (audit, tests, `agent.json`), `tools/audit_package.py` (public-1 values, site paths, own browsers, API keys; repo and `--package`), `tools/ci.py` (gates before every test run, docs/release.md). Was: release tools: `tools/audit_package.py` + `tools/check_release.sh` (audit, tests, `agent.json`). The audit also runs on the uploaded package (`atira run_package`), not only on the repo | `tools/` | green on `main` and on the last uploaded package | T0.1, T0.2, T0.6, T1.1 | L |
-| I9 | Right after I1's first slice: a sandbox test run of `main`, then the first scored submission as a safety net (we have none yet) | — | eligible, signed, on the leaderboard | D2, D3 | L |
+| I9 | ✅ Sandbox test runs of `main` and scored submissions that score 100 (`bench/RUNS.md`) | — | eligible, signed, on the leaderboard | D2, D3 | L |
 
 ### P1: correctness under pressure
 
 | ID | Change | Where | Acceptance | Rules | Owner |
 | --- | --- | --- | --- | --- | --- |
-| I10 | Strict numbers: a number's own format beats the hint ✅, thousands separators in grams ✅, text values ✅ (`tests/test_calc.py`); remaining: ambiguous forms refused (the agent re-reads); `Decimal` end to end | `numbers.py`, `calc.py` | parser tests incl. the probes in PLAN_COMPARISON §2.3 | 4, 22 | L |
+| I10 | Strict numbers: a number's own format beats the hint ✅, thousands separators in grams ✅, text values ✅ (`tests/test_calc.py`); remaining: ambiguous forms refused (the agent re-reads); `Decimal` end to end | `numbers.py`, `calc.py` | parser tests | 4, 22 | L |
 | I11 | ERP no-match needs proof on kept pages ✅ (`erp.unproven`: result pages kept, every candidate listed with its difference, `tests/test_erp_no_match.py`); ERP match check in code ✅ (`validate.material_mismatch` in the ERP `check`, `tests/test_validate.py`); no-bid gate ✅ (`main` `erp_search`: a `no_match` with ≥ 150 s left gets a second agent in a fresh tab; a material it finds wins); remaining: answer schema validated before signing | `agents/erp`, `validate.py`, `agents/submit` | tests with look-alike and blocked candidates | T1.6, 3, 7, 8 | L |
 | I12 | ✅ Mail topics and senders parsed from the brief (`common.mail_records`, `tests/test_brief.py`); approval found by sender and meaning; technical release for `requirements` from the brief | `agents/webmail`, `agents/common.py`, `agents/resolvers` | no public mail subject in prompts | T0.11, 5, 10, 21 | Y |
 | I13 | ✅ Code-side retry of transient error pages; auto re-login; adaptive settle; `form` ref click falls back to a DOM click, a null value is never typed (`tests/test_browser.py`) | `browser.py` | fewer model turns on the ERP in the dry-run log | T3.2 | Y |
@@ -448,7 +438,7 @@ Every item has exactly one owner. When it touches a file someone else owns (§14
 | ID | Change | Owner |
 | --- | --- | --- |
 | I21 | End-of-run summary (§10): per-stage time, tokens, cost, queue wait | F |
-| I22 | Elegance: cosmetics (PLAN_COMPARISON F15); agent READMEs and this file describe the final system | L |
+| I22 | Elegance: agent READMEs and this file describe the final system | L |
 
 ---
 
@@ -464,8 +454,6 @@ Every item has exactly one owner. When it touches a file someone else owns (§14
   scored submission runs, and timing measurements run alone; ordinary local dry runs may overlap. Only Luca starts
   sandbox test runs, at most 2 at once. Test run 2 waited 15 min in the model queue in total: Finn finds out why
   before budgets are calibrated.
-- **Times:** hackathon end `<fill in>`; freeze from end − 3 h `<fill in>`; sync every 3 h at `<fill in>`
-  (demo a scored dry run, re-plan).
 - **Freeze:** no experimental submissions in the last 3 hours; the last one must be at least as good as the release
   candidate (T4.5).
 - **Final:** opt in to best of 3 (`atira final --best-of 3`) before the final run starts; link the GitHub repository
@@ -478,12 +466,11 @@ Every item has exactly one owner. When it touches a file someone else owns (§14
 | | **Efficiency** · Finn | **Generalization** · Yazan | **Quality & Release** · Luca |
 | --- | --- | --- | --- |
 | KPI | cost × time per run | stress levels S1–S3 pass (S4 stretch) | dry runs and test runs score 100; every run signs; audit clean |
-| Today → target | ~15 min × $0.23 ≈ 207 $·s → < 8 min × ~$0.10 ≈ 48 $·s | S1 green, S3 2/2 + controls, S2/S4 built → S1–S3 green | no complete test run yet → 100 on every run |
+| Today → target | ~15 min × $0.23 ≈ 207 $·s → < 8 min × ~$0.10 ≈ 48 $·s | S1 green, S3 2/2 + controls, S2/S4 built → S1–S3 green | 100 on main, a slow step still costs positions → 100 on every run |
 | Measured by | `atira run_profile`, `get_run`, I21 summary | `tools/stress/` (I24) | `tools/score.sh` (I7), test-run breakdown, `bench/RUNS.md` |
 | Must not break | the score | the time budget | — (owns the PR gate) |
 | Run-killer owned | always sign: watchdog (I6) | — | never a false no-bid (I1, I11) |
 | Backlog | I2, I4, I5, I6, I19, I21, I23 | I3, I12, I13, I16, I17, I20, I24 | I1, I6b, I7, I8, I9, I10, I11, I14, I15, I18, I22 |
-| First task | seams PR (§14.4), then per-stage timing and token logging | stress harness S1–S3 | I1 first slice, then I9 |
 
 Stress levels:
 
@@ -501,9 +488,9 @@ One owner per file, written into [`.github/CODEOWNERS`](../.github/CODEOWNERS):
 
 | Owner | Files |
 | --- | --- |
-| Finn | `agent/agent.py`, `agent/budget.py`, `agent/llm.py`, `agent/agents/submit/`, `agent/agent.json` |
-| Yazan | `agent/browser.py`, `agent/reader.js`, `agent/agents/common.py`, `agent/agents/tender_portal/`, `agent/agents/supplier_portal/`, `agent/agents/webmail/`, `agent/agents/erp/`, `agent/agents/sweep/` (CODEOWNERS entry pending), `tools/stress/` |
-| Luca | `agent/calc.py`, `agent/numbers.py`, `agent/validate.py`, `agent/select.py`, `agent/agents/resolvers/`, `tests/`, `eval/`, `tools/`, `bench/`, `docs/` |
+| Finn | `agent/agent.py`, `agent/llm.py`, `agent/agents/submit/`, `agent/agent.json` |
+| Yazan | `agent/browser.py`, `agent/reader.js`, `agent/agents/common.py`, `agent/agents/tender_portal/`, `agent/agents/supplier_portal/`, `agent/agents/webmail/`, `agent/agents/erp/`, `agent/agents/sweep/`, `tools/stress/` |
+| Luca | `agent/calc.py`, `agent/validate.py`, `agent/agents/resolvers/`, `tests/`, `eval/`, `tools/`, `bench/`, `docs/` |
 
 An item may change a file it doesn't own (I1 marks forced finishes in `llm.py`, I5 trims missions, I6b reads back
 in `agents/submit`); the file's owner reviews that PR.
@@ -518,28 +505,12 @@ in `agents/submit`); the file's owner reviews that PR.
 
 ### 14.4 Working without waiting on each other
 
-- **Seams PR first (~45 min, Finn):** placeholder modules (`budget.py`, `validate.py`, `numbers.py`),
-  `agents/common.py` split by owner, and `investigate` marks forced finishes. After that, everyone works in their own
-  files.
 - **Saved fixtures:** one full run's stage outputs and kept evidence, so resolvers, calculator and validators are
   tested offline in seconds. ✅ `tools/stress/run_agents.py` writes them (results, kept evidence, raw HTML); a few
   recorded pages are kept in `eval/fixtures/pages/`.
 - **Single-agent runner:** run one gathering agent alone against the scouting site. ✅ `tools/stress/run_agents.py`.
 - **Fake agents:** test the scheduling and the watchdog without sites or models.
 - Small PRs, merged into `main` at least every 2 hours.
-
-### 14.5 Timeline
-
-`H+0` = this plan on `main`.
-
-| Window | Goal | Exit criterion |
-| --- | --- | --- |
-| H+0 – H+1 | seams PR; I1 first slice; test run of `main`; first scored submission (I9) | eligible, on the leaderboard |
-| H+1 – H+3 | rest of P0 | a dry run signs in < 8 min with the right decision |
-| H+3 – H+9 | P1 | dry-run score ≥ 95; S1 and S3 pass; cost per run ≤ $0.10 |
-| H+9 – H+15 | P2 | S2 passes; mutation tests green; gap sweep proven (S4) |
-| until 3 h before the end | tuning: time, cost, test-run breakdowns | release candidate tagged |
-| last 3 h | freeze; final submission ≥ release candidate; best of 3 | final submission passed review |
 
 ## 15. Risks and open questions
 
