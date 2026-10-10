@@ -20,9 +20,6 @@ OPENROUTER = "/" in MODEL
 # Anthropic models cache only behind a breakpoint; this top-level one moves with the conversation
 CACHE = {"cache_control": {"type": "ephemeral"}} if MODEL.startswith("anthropic/") else {}
 STEP_EFFORT = os.environ.get("STEP_EFFORT", "low")  # reasoning per browser step; latency is mostly thinking tokens
-# Agents that only navigate and keep pages word for word: no thinking. A step took half the time on a probe; the
-# number-format rewriting that ruled out "none" happens only where a model copies values (ERP, submit, resolvers).
-NAV_EFFORT = os.environ.get("NAV_EFFORT", "none")
 KEEP_STEPS = 4  # tool results of the latest steps stay in full; older page reads shrink so the context stays small
 # Older reads shrink in batches, not every step: a shortened read changes the history, so the prompt cache only covers
 # what comes before it. Trimming each step re-sent the latest pages at full price on every call (50-64% of a run's
@@ -247,12 +244,12 @@ async def page_status(tab) -> int:
 
 async def investigate(tab, system: str, mission: str, finish_schema: dict, deadline: float, tag: str,
                       extra_tools: list | None = None, handlers: dict | None = None, max_steps: int = 60,
-                      check=None, warn_at: float = 60, warning: str = FINISH_NOW, effort: str = STEP_EFFORT) -> dict:
+                      check=None, warn_at: float = 60, warning: str = FINISH_NOW) -> dict:
     """Let the model work the tab until it calls finish(result) or the deadline passes.
 
     check(result, evidence) -> (result, problem): runs on finish, its model calls bounded by CHECK_TIMEOUT and the
     deadline; a problem sends the model back to work, a check that fails or runs out of time lets the result through.
-    `warning` goes to the model `warn_at` seconds before the deadline; `effort` is the reasoning per step. A finish forced by the deadline or the step
+    `warning` goes to the model `warn_at` seconds before the deadline. A finish forced by the deadline or the step
     limit, or sent after the warning, is marked `forced`: whatever it says, the agent did not finish its mission."""
     tools = BROWSER_TOOLS + [FINISH] + (extra_tools or [])  # the same for every agent but submit's own extra tools
     try:  # like every tool, the first read never outlasts TOOL_TIMEOUT: a page that never returns can't eat the stage
@@ -338,7 +335,7 @@ async def investigate(tab, system: str, mission: str, finish_schema: dict, deadl
             break
         try:
             with limits(deadline):  # a step never eats the grace the forced finish below needs
-                reply = await chat(messages, tools, **({"reasoning_effort": effort} if effort else {}))
+                reply = await chat(messages, tools, **({"reasoning_effort": STEP_EFFORT} if STEP_EFFORT else {}))
         except Exception as error:  # noqa: BLE001  out of time or the model keeps failing: finish with what is kept
             log(tag, f"step failed: {type(error).__name__}: {str(error)[:200]}")
             break

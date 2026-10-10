@@ -77,7 +77,7 @@ async def sweep(task: dict, tabs: dict, gap_list: list[dict], deadline: float) -
         for gap in gap_list:
             try:
                 result = await llm.investigate(tab, system(task), mission(task, tab, gap), RESULT, deadline,
-                                               f"sweep:{role}", max_steps=STEPS, effort=llm.NAV_EFFORT)
+                                               f"sweep:{role}", max_steps=STEPS)
             except Exception as error:  # noqa: BLE001  this tab contributes nothing more
                 llm.log(f"sweep:{role}", f"failed: {type(error).__name__}: {str(error)[:200]}")
                 return

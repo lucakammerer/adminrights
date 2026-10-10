@@ -163,10 +163,9 @@ Every browser agent is the same loop; agents differ only in mission, result sche
   check that fails or runs out of time lets the result through unchecked.
 - **Model:** `AGENT_MODEL`, default the hosted Qwen; a `<provider>/<model>` id runs on OpenRouter through the run's
   proxy with the team secret `OPENROUTER_API_KEY` (Anthropic models with a moving cache breakpoint); its last three
-  attempts at a call go to the hosted Qwen (`llm.FALLBACK`), which `agent.json` keeps warm at no cost in time. Agents that only
-  navigate and keep pages (tender portal, supplier portal, webmail, ERP login, sweep) step without thinking
-  (`NAV_EFFORT` "none", about half the latency per step); ERP searches, submit and the TAN look-up copy values and
-  keep low reasoning effort (`STEP_EFFORT`);
+  attempts at a call go to the hosted Qwen (`llm.FALLBACK`), which `agent.json` keeps warm at no cost in time. Browser steps run
+  with low reasoning effort (`STEP_EFFORT`): without thinking a step took a fifth of the time, but a webmail agent kept
+  its only record after 12 steps and then searched on to its step limit of 60 (it never judged itself done);
   `chat` tries up to 6 times, each attempt at most `CALL_TIMEOUT` (180 s; no SDK-internal retries) and all of them
   bounded by the stage's `llm.UNTIL`, which `agent.safe`/`agent.start` set per stage; step calls end at the agent's
   deadline so the forced `finish` keeps its grace. Both limits hold on the wall clock (`asyncio.wait`, the call is
@@ -348,9 +347,9 @@ on disagreement it logs both, re-asks once, then the rule wins.
 | Anything else | a frontier model via team secret | off; only behind a flag where it buys quality (E6) |
 
 - Calls are bounded by the caller's deadline (I2); at most 12 concurrent calls per run (the team shares 32).
-- Reasoning effort: none for navigation (`NAV_EFFORT`), low for browser steps that copy values (`STEP_EFFORT`) and for
-  copying values, medium for the resolvers. Low is
-  several times faster; switching thinking off entirely made the model rewrite number formats (PR #5).
+- Reasoning effort: low for browser steps (`STEP_EFFORT`) and for copying values, medium for the resolvers. Low is
+  several times faster; switching thinking off entirely made the model rewrite number formats (PR #5) and loop
+  without ever finishing (a webmail agent searched 48 steps past its only record).
 - Prompt layout: static system prompt and tool schemas first (cached input is cheaper), then brief, then dynamic parts.
 - The system prompt teaches meanings (traps, German business terms), never values.
 - Resolver inputs only carry the evidence they need (I5); later, extraction while browsing (I19).

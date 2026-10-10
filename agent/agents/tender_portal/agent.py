@@ -26,5 +26,4 @@ If its documents need an expression of interest (the brief's Submission section 
 Keep the bill of quantities and every Q&A page with save_evidence as you read them.
 {ALSO_KEEP} {NOT_HERE}
 Do not start the bid submission yet. Finish with the result."""
-    return await llm.investigate(tab, system(task), mission, RESULT, deadline, "tender-portal", max_steps=45,
-                                 effort=llm.NAV_EFFORT)
+    return await llm.investigate(tab, system(task), mission, RESULT, deadline, "tender-portal", max_steps=45)
