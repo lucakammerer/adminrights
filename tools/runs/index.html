@@ -138,7 +138,7 @@ const delta = (run, base) => (answered(run) ? run.score.quality : 0) - base.scor
 
 function state(run) {
   if (!run.finished_at) return run.started_at ? "running" : "queued";
-  if (run.status === "cancelled") return "cancelled";
+  if (run.failure_class === "cancelled") return "cancelled";
   if (!answered(run)) return "failure";
   return run.score.eligible && run.score.quality >= 50 ? "success" : "warning";
 }
@@ -171,7 +171,7 @@ function renderStats() {
 }
 
 function renderTrend() {
-  const done = runs.filter((r) => r.finished_at && r.status !== "cancelled").reverse();
+  const done = runs.filter((r) => r.finished_at && r.failure_class !== "cancelled").reverse();
   const w = 1000 / Math.max(done.length, 12);
   document.getElementById("trend").innerHTML = done.map((r, i) => {
     const q = answered(r) ? r.score.quality : 0;
