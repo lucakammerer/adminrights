@@ -9,7 +9,10 @@ from contextvars import ContextVar
 
 from openai import AsyncOpenAI
 
-MODEL = os.environ.get("AGENT_MODEL", "qwen3.8-flash-next")
+MODEL = os.environ.get("AGENT_MODEL", "anthropic/claude-haiku-5.5")
+OPENROUTER = "/" in MODEL  # "<provider>/<model>" runs on OpenRouter with the team secret OPENROUTER_API_KEY
+# Anthropic caches only behind a breakpoint; the top-level one moves with the conversation
+CACHE = {"extra_body": {"cache_control": {"type": "ephemeral"}}} if MODEL.startswith("anthropic/") else {}
 STEP_EFFORT = os.environ.get("STEP_EFFORT", "low")  # reasoning per browser step; latency is mostly thinking tokens
 KEEP_STEPS = 4  # tool results of the latest steps stay in full; older page reads shrink so the context stays small
 CALL_TIMEOUT = 180  # one model call; a slower one is retried while its deadline allows (steps took 20-90 s under load,
@@ -51,14 +54,18 @@ def client() -> AsyncOpenAI:
     global _client
     if _client is None:
         # no retries inside the SDK: they would multiply the timeout behind chat's back
-        _client = AsyncOpenAI(base_url=os.environ["QWEN_BASE_URL"], api_key=os.environ["QWEN_API_KEY"],
-                              timeout=CALL_TIMEOUT, max_retries=0)
+        if OPENROUTER:  # a run reaches OpenRouter only through the platform's proxy
+            proxy = os.environ.get("LLM_PROXY_URL")
+            url, key = f"{proxy}/openrouter/v1" if proxy else "https://openrouter.ai/api/v1", "OPENROUTER_API_KEY"
+        else:
+            url, key = os.environ["QWEN_BASE_URL"], "QWEN_API_KEY"
+        _client = AsyncOpenAI(base_url=url, api_key=os.environ[key], timeout=CALL_TIMEOUT, max_retries=0)
     return _client
 
 
 def send(messages: list, tools: list | None, limit: float, kwargs: dict) -> asyncio.Future:
     call = asyncio.ensure_future(client().chat.completions.create(model=MODEL, messages=messages, tools=tools,
-                                                                  timeout=limit, **kwargs))
+                                                                  timeout=limit, **CACHE, **kwargs))
     call.add_done_callback(lambda c: c.cancelled() or c.exception())  # a dropped call's failure stays quiet
     return call
 
