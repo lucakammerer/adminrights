@@ -62,7 +62,9 @@ class Site(BaseHTTPRequestHandler):
         if path == "/form":
             return self.page('<div style="position:relative"><button id="b" onclick="document.title=\'clicked\'">Go'
                              '</button><div style="position:absolute;inset:0;background:#fff"></div></div>'
-                             '<label>Note <input id="n" value="kept"></label>')
+                             '<label>Note <input id="n" value="kept"></label>'
+                             '<label class="fancy"><input type="checkbox" id="c" style="opacity:0;position:absolute">'
+                             '<span style="position:relative;z-index:2;background:#eee">Accept</span></label>')
         return self.page("start")
 
     def do_POST(self):
@@ -160,6 +162,19 @@ class TabAgainstLocalSite(unittest.TestCase):
         for line in ("Portal banner", "Service hotline", "Imprint and privacy", "All rights reserved", "Record 3"):
             self.assertIn(line, full)
         self.assertNotIn("left out", full)
+
+    def test_a_custom_styled_checkbox_by_ref_is_ticked_at_once(self):
+        async def steps(tab):
+            await tab.act("goto", {"url": "/form"})
+            text = await tab.read()
+            ref = int(text.split('checkbox "Accept"')[0].rsplit("[", 1)[1].rstrip(":"))
+            loop = asyncio.get_running_loop()
+            started = loop.time()
+            await tab.form([{"ref": ref}])
+            return loop.time() - started, await tab.page.is_checked("#c")
+        took, checked = self.run_tab(steps)
+        self.assertTrue(checked)
+        self.assertLess(took, 4)  # a covered checkbox waited 8 s for Playwright before the DOM click
 
     def test_late_content_is_waited_for(self):
         self.assertIn("late value", self.run_tab(lambda tab: tab.act("goto", {"url": "/late"})))
