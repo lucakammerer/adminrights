@@ -39,7 +39,8 @@ means. The output is typed facts for `calc`, which does all the arithmetic.
   websites are ignored); a role still open gets a remaining website by elimination. It never fails the run.
 - `requirements` runs after phase 1, effort medium, and is on the critical path: the ERP agents wait for it. It gets
   only the technical mail because all mail doubles its time (66 s instead of 34 s on public-1). Prompt: tender
-  quantity replaced by the latest dated clarification, withdrawn answers ignored, sets into pieces; the current
+  quantity replaced by the latest dated clarification, a withdrawn answer as if never given (an older change it
+  replaced applies again), sets into pieces; decided from the kept pages, not the agents' summaries; the current
   revision's requirement plus only the amendments naming exactly that revision and requirement; a usable stroke plus
   2 × the reserve from the latest technical release.
 - `commercials` starts with `requirements` and runs alongside the ERP phase, effort medium; only `calc.facts` waits

@@ -74,9 +74,12 @@ Evidence from the supplier portal:
 Technical releases from the mailbox:
 {evidence(technical)}
 
+Decide from the pages kept as evidence: the agents' own summaries above them can be incomplete or wrong.
 For every tender position, work out:
-- final_quantity_pieces: tender quantity, replaced by the latest dated clarification that changes it (ignore
-  withdrawn answers), converted to pieces with the governing revision's pieces per set when the unit is a set;
+- final_quantity_pieces: tender quantity, replaced by the latest dated clarification that changes it, converted to
+  pieces with the governing revision's pieces per set when the unit is a set. A withdrawn answer counts as if it had
+  never been given: the latest change that is not withdrawn still applies, even when it is older than the withdrawn
+  one. List every quantity clarification for the position in quantity_reasoning before you decide;
 - the governing requirement: the current revision's requirement, with the latest applicable scoped technical
   amendments (only those naming that revision and requirement, only the named attributes); if the stroke is a usable
   stroke, add twice the per-end reserve of its key from the latest technical release for that revision to get the
@@ -96,6 +99,7 @@ Evidence from the tender portal:
 Messages from the sales mailbox:
 {evidence(mail)}
 
+Decide from the pages kept as evidence: the agents' own summaries above them can be incomplete or wrong.
 Resolve, by the brief's rules (exact reference, authorized sender, latest record no later than the scenario date,
 newer replaces older, future-dated records never apply):
 - discount: the latest director approval for this exact reference: percent and, if it is conditional, its minimum
