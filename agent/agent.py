@@ -3,6 +3,7 @@ code does the arithmetic, and a model enters and signs the bid. Each agent lives
 import asyncio
 import contextvars
 import json
+import os
 import sys
 import time
 
@@ -126,6 +127,8 @@ async def main() -> int:
         llm.log("facts", json.dumps(facts, ensure_ascii=False))
         llm.log("calc", result["trace"])
         llm.log("answer", json.dumps(result["answer"], ensure_ascii=False))
+        if os.environ.get("DRY_RUN"):  # local scoring stops before anything binding (tools/score.sh)
+            return 0
 
         specs = {r["position"]: ", ".join(f"{k} {r.get(k)}" for k in spec_keys) for r in requirements["positions"]}
         # a phase-1 agent that was cut may still be acting on its tab: the submission then works in a tab of its own

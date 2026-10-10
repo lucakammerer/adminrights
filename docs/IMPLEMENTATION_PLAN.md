@@ -339,7 +339,7 @@ Same jobs and rules, different software, look, navigation, site names and data, 
 | --- | --- | --- |
 | Unit tests | calc golden test with facts as the pages show them, allocation ties, band edges, inclusive ceilings and thresholds; number parser; validators; selection | I10, I11, I14, I18 |
 | Recorded pages | pages saved from dry runs; reader tests for every trap category | I17 |
-| Dry run + score | `DRY_RUN=1` stops before the binding confirmation and writes `answer.json`; `eval/compare.py` scores it with the official weights | I7 |
+| Dry run + score | `tools/score.sh`: a local run with `DRY_RUN=1` stops after the answer, `eval/compare.py` scores the logged answer with the official weights | I7 |
 | Mutation tests | recorded pages relabelled, locale-swapped, nested in iframes, with injected decoys and shuffled rows: extraction must not change | I20 |
 | Chaos runs *(stretch)* | local runs with random 503s, a forced session expiry, slow responses: the run must still sign | — |
 | Mirror world *(stretch)* | a small local re-skin of the four jobs with information split differently and a synthetic scenario with a known answer | — |
@@ -395,7 +395,7 @@ Every item has exactly one owner. When it touches a file someone else owns (§14
 | I5 | Slimmer missions and inputs: no word-for-word copies in `finish` schemas when the evidence holds them; "every needed page kept → finish"; resolvers get only the evidence they need (object `finish` done in PR #5) | `agents/tender_portal`, `agents/supplier_portal`, `agents/resolvers`, `llm.py` | no page fetched twice without reason; commercials resolver much faster | T3.2, T4.2 | F |
 | I6 | Submit in two stages + watchdog: stage 1 at start, stage 2 with the answer, watchdog at end − 3 min | `agents/submit` | a short-budget run still signs | T1.3, 9 | F |
 | I6b | Read-back of the review page before the TAN: every entered value matches the answer | `agents/submit`, `validate.py` | a mistyped value is corrected before signing | T1.9, 7 | L |
-| I7 | Dry-run mode + `tools/score.sh` (run + `eval/compare.py`) | `agents/submit`, `tools/` | one command → a score | T4.3 | L |
+| I7 | Built, first full run pending: `DRY_RUN=1` stops `main` after the answer; `tools/score.sh` (run + `eval/compare.py`) | `agent.py`, `tools/` | one command → a score | T4.3 | L |
 | I8 | ✅ `tools/audit_package.py` (repo and `--package`) and `tools/ci.py` (gates before every test run, docs/release.md). Was: release tools: `tools/audit_package.py` + `tools/check_release.sh` (audit, tests, `agent.json`). The audit also runs on the uploaded package (`atira run_package`), not only on the repo | `tools/` | green on `main` and on the last uploaded package | T0.1, T0.2, T0.6, T1.1 | L |
 | I9 | Right after I1's first slice: a sandbox test run of `main`, then the first scored submission as a safety net (we have none yet) | — | eligible, signed, on the leaderboard | D2, D3 | L |
 

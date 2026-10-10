@@ -54,6 +54,7 @@ runs.
 atira models proxy                                  # terminal 1, keep it open
 cd agent && eval "$(atira scout --env)"             # terminal 2: scouting logins, model variables
 HEADLESS=1 uv run --no-sync python agent.py         # one local run, never counts
+tools/score.sh                                      # from the repo root: local dry run (DRY_RUN=1, no submission) + points per field
 uv run --project agent --no-sync python -m unittest discover -s tests   # from the repo root, in seconds
 python tools/audit_package.py                       # no public-1 value, no own browser in agent/
 atira test-run .                                    # sandbox, points per field, not on the leaderboard
