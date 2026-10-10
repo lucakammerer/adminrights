@@ -1,6 +1,7 @@
 """RFQ agent: models investigate the four websites in parallel, models resolve the evidence by the brief's rules,
 code does the arithmetic, and a model enters and signs the bid. Each agent lives in agents/<name>/."""
 import asyncio
+import contextvars
 import json
 import sys
 import time
@@ -20,14 +21,42 @@ from agents.webmail import agent as webmail
 from browser import Tab
 
 
+CUT: set[str] = set()  # stages cut at their deadline: their task may still hold its tab for a moment
+
+
+def start(job, until: float) -> asyncio.Task:
+    """Run a job as its own task whose model calls end by `until`."""
+    context = contextvars.copy_context()
+    context.run(llm.UNTIL.set, until)
+    task = asyncio.create_task(job, context=context)
+    task.add_done_callback(lambda t: t.cancelled() or t.exception())  # a late failure after a cut stays quiet
+    return task
+
+
 async def safe(tag: str, job, until: float, fallback=None):
     """One agent's crash or overrun must not end the run: cut it at `until`, log it and carry on with what the
-    others found. A hosted model under load can make every step slow, so phase deadlines are hard."""
-    try:
-        return await asyncio.wait_for(job, timeout=max(1.0, until - time.time()))
-    except (Exception, asyncio.TimeoutError) as error:  # noqa: BLE001
+    others found. A hosted model under load can make every step slow, so phase deadlines are hard: the job's model
+    calls end by `until` (llm.UNTIL), and the cut doesn't wait for the job to stop (asyncio.wait_for did, and a model
+    call that ignored its cancellation held a 780 s cut until 1093 s)."""
+    task = job if isinstance(job, asyncio.Task) else start(job, until)
+    await asyncio.wait({task}, timeout=max(1.0, until - time.time()))
+    if not task.done():
+        task.cancel()
+        CUT.add(tag)
+        llm.log(tag, "cut at its deadline")
+    elif task.exception() is None:
+        return task.result()
+    else:
+        error = task.exception()
         llm.log(tag, f"failed: {type(error).__name__}: {str(error)[:300]}")
-        return {} if fallback is None else fallback
+    return {} if fallback is None else fallback
+
+
+async def fresh(tab: Tab) -> Tab:
+    """A new tab of the same browser (same login) on the site's start page."""
+    page = await tab.page.context.new_page()
+    await page.goto(tab.site["url"], wait_until="domcontentloaded")
+    return Tab(page, tab.site)
 
 
 async def main() -> int:
@@ -63,7 +92,7 @@ async def main() -> int:
         llm.log("webmail", json.dumps(mail, ensure_ascii=False)[:4000])
 
         erp_end = end - 6 * 60  # leaves the submission six minutes
-        commercials_job = asyncio.create_task(resolvers.commercials(task, tender, mail))  # only calc needs it
+        commercials_job = start(resolvers.commercials(task, tender, mail), erp_end + 30)  # only calc needs it
         requirements = await safe("requirements", resolvers.requirements(task, tender, spec, mail), end - 8 * 60) or \
             await safe("requirements", resolvers.requirements(task, tender, spec, mail, effort="low"), erp_end - 60,
                        {"positions": []})
@@ -76,14 +105,15 @@ async def main() -> int:
         for r in requirements["positions"]:
             distinct.setdefault(tuple(str(r.get(k)) for k in spec_keys), {k: r.get(k) for k in spec_keys})
 
+        async def erp_search(req, first):
+            tab = erp_tab if first and "erp-login" not in CUT else await fresh(erp_tab)
+            result = await erp_agent.run(task, tab, req, erp_end - 30)
+            if result.get("forced"):  # cut off: its search did not finish, so it can't have proven "no match"
+                result.pop("no_match", None)
+            return result
+
         async def erp_for(key, req, first):
-            tab = erp_tab
-            if not first:
-                page = await erp_tab.page.context.new_page()
-                await page.goto(erp_tab.site["url"], wait_until="domcontentloaded")
-                tab = Tab(page, erp_tab.site)
-            return key, await safe(f"erp:{req.get('catalogue_group')}", erp_agent.run(task, tab, req, erp_end - 30),
-                                   erp_end)
+            return key, await safe(f"erp:{req.get('catalogue_group')}", erp_search(req, first), erp_end)
 
         found = dict(await asyncio.gather(*(erp_for(k, r, i == 0) for i, (k, r) in enumerate(distinct.items()))))
         erp = {r["position"]: found[tuple(str(r.get(k)) for k in spec_keys)] for r in requirements["positions"]}
@@ -98,8 +128,11 @@ async def main() -> int:
         llm.log("answer", json.dumps(result["answer"], ensure_ascii=False))
 
         specs = {r["position"]: ", ".join(f"{k} {r.get(k)}" for k in spec_keys) for r in requirements["positions"]}
-        outcome = await submit_agent.run(task, tabs["tender_portal"], tabs["webmail"], result["answer"],
-                                         result["omitted"], specs, mail.get("own_address", ""), end - 20)
+        # a phase-1 agent that was cut may still be acting on its tab: the submission then works in a tab of its own
+        portal = await fresh(tabs["tender_portal"]) if "tender-portal" in CUT else tabs["tender_portal"]
+        mailbox = await fresh(tabs["webmail"]) if "webmail" in CUT else tabs["webmail"]
+        outcome = await safe("submit", submit_agent.run(task, portal, mailbox, result["answer"], result["omitted"],
+                                                        specs, mail.get("own_address", ""), end - 20), end)
         llm.log("submit", json.dumps(outcome, ensure_ascii=False))
     return 0
 

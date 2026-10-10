@@ -9,6 +9,7 @@ from urllib.parse import urljoin
 
 READER = (Path(__file__).parent / "reader.js").read_text()
 MAX_CHARS = 14000
+OPEN_DETAILS = "e => { for (let d = e.closest('details'); d; d = d.parentElement?.closest('details')) d.open = true }"
 
 
 class Tab:
@@ -89,6 +90,7 @@ class Tab:
                 except Exception:  # noqa: BLE001  covered, off-screen in a scroll box, inert: click it in the DOM
                     await loc.evaluate("e => e.click()")
             elif action == "fill":
+                await loc.evaluate(OPEN_DETAILS)
                 kind = await loc.evaluate("e => e.type")
                 if kind == "range":
                     await loc.evaluate("(e, v) => { e.value = v; e.dispatchEvent(new Event('input', {bubbles: true}));"
@@ -113,6 +115,13 @@ class Tab:
                     steps_left = [{"field": step["field"], "value": step.get("value")}, {"click": step["click"]}]
                     log.append((await self.form(steps_left)).split("\n", 1)[0].removeprefix("Form steps: "))
                     continue
+                if step.get("ref") is not None and "value" not in step:
+                    loc = await self.locate(int(step["ref"]))
+                    await loc.evaluate(OPEN_DETAILS)
+                    await loc.click(timeout=5000)
+                    await self.settle()
+                    log.append(f"clicked ref {step['ref']}")
+                    continue
                 if step.get("click"):
                     loc = page.get_by_role("button", name=str(step["click"]))
                     if not await loc.count():
@@ -122,11 +131,16 @@ class Tab:
                     await self.settle()
                     log.append(f"clicked {step['click']}")
                     continue
-                label, value = str(step["field"]), step.get("value")
-                loc = page.get_by_label(label, exact=True)
-                if not await loc.count():
-                    loc = page.get_by_label(label)
-                loc = loc.first
+                value = step.get("value")
+                if step.get("ref") is not None:
+                    label, loc = f"ref {step['ref']}", await self.locate(int(step["ref"]))
+                else:
+                    label = str(step["field"])
+                    loc = page.get_by_label(label, exact=True)
+                    if not await loc.count():
+                        loc = page.get_by_label(label)
+                    loc = loc.first
+                await loc.evaluate(OPEN_DETAILS)  # a field in a collapsed section can't be filled
                 tag = await loc.evaluate("e => e.tagName + ':' + (e.type || '')")
                 if tag.startswith("SELECT"):
                     options = await loc.evaluate("e => [...e.options].map(o => [o.value, o.textContent.trim()])")

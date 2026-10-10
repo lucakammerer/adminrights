@@ -17,8 +17,11 @@ bindingly. Without a submission the run scores 0.
 
 ## Implementation
 
-- `agent.py` `run` → `llm.investigate`, tag `submit`, at most 70 steps, deadline end − 20 s.
-  Values in German format with two decimals (`german`). Whole form pages in one `form` call.
+- `agent.py` `run` → `llm.investigate`, tag `submit`, at most 70 steps, deadline end − 20 s, cut hard at `end`.
+  Values in German format with two decimals (`german`). Whole form pages in one `form` call, a configurator's
+  dependent choices each followed by its apply button; `form` opens collapsed sections around a field itself.
+- Watchdog (first slice): `SIGN_BY` = 180 s before the deadline the agent gets its own warning: omit every position
+  not completely entered, request the TAN, sign. The generic "call finish now" would end the run unsigned.
 - Extra tool `get_tan`: starts its own `investigate` in the mail tab, tag `tan`, at most 12 steps, at most 2 min.
   Finds the newest TAN mail for the request just made.
 - Fixed guardrails in the mission: no extra positions, none skipped except the `omitted` ones (omit option in the form), never tick our own terms, request the TAN exactly
@@ -31,7 +34,5 @@ bindingly. Without a submission the run scores 0.
 
 ## Open
 
-- Unfinished positions are omitted, but there is no watchdog yet: if the submit agent itself runs short of time, it
-  doesn't sign what it has entered so far.
-- Locally the submission alone takes about 275 s. In the first full local run it started around end − 6 min, ran out
-  of time after 32 steps and submitted nothing.
+- The watchdog is a warning to the model, not code: if the model ignores it or the TAN look-up stalls, nothing signs.
+- Stage 1 (bidder data, offer type) could run while the ERP agents work (I6).

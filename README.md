@@ -1,77 +1,77 @@
 # adminrights
 
-Team AdminRights' agent system for the Atira hackathon challenge
-[From RFQ to bid](https://ehl-challenge.atira.ai/challenges/rfq.md): it reads a public tender across four websites
-and enters one priced, signed bid, with no human in the loop. Rules, plan and work split live in [docs/](docs/README.md).
-
-## Model flow
+Our agent system for the Atira hackathon challenge [`rfq`](https://ehl-challenge.atira.ai/challenges/rfq.md): it
+turns a public tender into one signed bid. Four websites, 20 minutes, no human in the loop. Models decide where to go
+and what matters; code reads pages, keeps evidence and does the arithmetic.
 
 ```mermaid
 flowchart LR
-    START(("▶ Run"))
+  run([▶ Run]) --> roles
 
-    subgraph P0["0 · Roles"]
-        SITES["🧭 Match sites<br/>to roles"]
-    end
+  subgraph P0["0 · Roles"]
+    roles["🧭 Match sites<br/>to roles"]
+  end
 
-    subgraph P1["1 · Gather · ⏱ −10 min"]
-        TEN["🏛️ Tender portal<br/>positions · Q&A"]
-        SUP["📐 Supplier portal<br/>current spec"]
-        WEB["✉️ Webmail<br/>approvals · terms"]
-        LOG["🔑 ERP login"]
-    end
+  subgraph P1["1 · Gather · ⏱ −10 min"]
+    tender["🏛️ Tender portal<br/>positions · Q#amp;A"]
+    supplier["📐 Supplier portal<br/>current spec"]
+    mail["✉️ Webmail<br/>approvals · terms"]
+    login["🔑 ERP login"]
+  end
 
-    EV[("📄 Kept<br/>evidence")]
+  evidence[("📄 Kept<br/>evidence")]
 
-    subgraph P2["2 · Interpret · ⏱ −8 min"]
-        REQ["🧠 Requirements<br/>quantities · specs"]
-        COM["🧠 Commercials<br/>discount · fees"]
-    end
+  subgraph P2["2 · Interpret · ⏱ −8 min"]
+    req["🧠 Requirements<br/>quantities · specs"]
+    com["🧠 Commercials<br/>discount · fees"]
+  end
 
-    subgraph P3["3 · Materials · ⏱ −6 min"]
-        ERP["🏭 ERP search<br/>one tab per spec"]
-    end
+  subgraph P3["3 · Materials · ⏱ −6 min"]
+    erp["🏭 ERP search<br/>one tab per spec"]
+  end
 
-    subgraph P4["4 · Calculate"]
-        CALC["🧮 calc.py<br/>exact arithmetic"]
-    end
+  subgraph P4["4 · Calculate"]
+    calc["🧮 calc.py<br/>exact arithmetic"]
+  end
 
-    subgraph P5["5 · Submit · ⏱ −20 s"]
-        SUB["✍️ Fill & sign<br/>TAN from webmail"]
-    end
+  subgraph P5["5 · Submit · ⏱ −20 s"]
+    submit["✍️ Fill #amp; sign<br/>TAN from webmail"]
+  end
 
-    DONE(("✅ Bid"))
+  roles --> tender & supplier & mail & login
+  tender & supplier & mail --> evidence
+  evidence --> req & com
+  req --> erp
+  login -. session .-> erp
+  erp --> calc
+  com --> calc
+  calc --> submit --> bid([✅ Bid])
 
-    START --> SITES
-    SITES --> TEN & SUP & WEB & LOG
-    TEN & SUP & WEB --> EV
-    EV --> REQ & COM
-    REQ --> ERP
-    LOG -. session .-> ERP
-    ERP --> CALC
-    COM --> CALC
-    CALC --> SUB
-    SUB --> DONE
-
-    classDef agent fill:#dbeafe,stroke:#2563eb,stroke-width:2px,color:#0f172a
-    classDef model fill:#ede9fe,stroke:#7c3aed,stroke-width:2px,color:#0f172a
-    classDef code fill:#dcfce7,stroke:#16a34a,stroke-width:2px,color:#0f172a
-    classDef store fill:#fef3c7,stroke:#d97706,stroke-width:2px,color:#0f172a
-    classDef edge fill:#0f172a,stroke:#0f172a,color:#ffffff
-
-    class TEN,SUP,WEB,LOG,ERP,SUB agent
-    class SITES,REQ,COM model
-    class CALC code
-    class EV store
-    class START,DONE edge
-
-    style P0 fill:#f8fafc,stroke:#cbd5e1,stroke-width:1px,color:#334155
-    style P1 fill:#f8fafc,stroke:#cbd5e1,stroke-width:1px,color:#334155
-    style P2 fill:#f8fafc,stroke:#cbd5e1,stroke-width:1px,color:#334155
-    style P3 fill:#f8fafc,stroke:#cbd5e1,stroke-width:1px,color:#334155
-    style P4 fill:#f8fafc,stroke:#cbd5e1,stroke-width:1px,color:#334155
-    style P5 fill:#f8fafc,stroke:#cbd5e1,stroke-width:1px,color:#334155
+  classDef browser fill:#dbeafe,stroke:#2563eb,color:#111827
+  classDef model fill:#ede9fe,stroke:#7c3aed,color:#111827
+  classDef code fill:#dcfce7,stroke:#16a34a,color:#111827
+  classDef store fill:#fef3c7,stroke:#d97706,color:#111827
+  classDef terminal fill:#111827,stroke:#111827,color:#ffffff
+  class tender,supplier,mail,login,erp,submit browser
+  class roles,req,com model
+  class calc code
+  class evidence store
+  class run,bid terminal
 ```
 
-🟦 browser agent (a model clicks, searches and keeps pages) · 🟪 single model call on the kept evidence ·
-🟩 code · ⏱ hard cut, measured back from the end of the run budget (19 min)
+Blue: a model working a website in its own tab. Purple: a model call without a browser. Green: code. Times are hard
+deadlines counted back from the end of the run's budget (at most 19 min); a phase cut at its deadline hands on what it
+has. Source of truth: `main` in [`agent/agent.py`](agent/agent.py).
+
+| Where | What |
+| --- | --- |
+| [`agent/`](agent/README.md) | The package we upload: orchestration, agents, browser tools, `calc.py` |
+| [`docs/`](docs/README.md) | Rules we are judged by, the plan, one README per agent |
+| `eval/`, `tests/`, `tools/` | Reference answers and scorer, tests, dev helpers; stay local |
+
+```sh
+atira models proxy                                  # terminal 1, keep it open
+cd agent && eval "$(atira scout --env)"             # terminal 2
+HEADLESS=1 uv run --no-sync python agent.py         # one local run
+atira test-run .                                    # sandbox run with points per field
+```
