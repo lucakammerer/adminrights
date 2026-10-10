@@ -23,15 +23,21 @@ RUN_ENDED = {"submitted", "failed", "timed_out", "cancelled"}
 SUBMISSION_ENDED = {"complete", "failed", "rejected", "disqualified"}
 
 
-def sh(*cmd, cwd=ROOT, check=True) -> str:
-    done = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, stdin=subprocess.DEVNULL, timeout=300)
+def sh(*cmd, cwd=ROOT, check=True, timeout=300) -> str:
+    done = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, stdin=subprocess.DEVNULL, timeout=timeout)
     if check and done.returncode:
         raise RuntimeError(f"{' '.join(cmd)}: {done.stderr.strip() or done.stdout.strip()}")
     return done.stdout.strip()
 
 
 def atira(*args) -> dict:
-    return json.loads(sh("atira", *args, "--json"))
+    """The platform sometimes doesn't answer for minutes: two short tries, then the tick ends and the next retries."""
+    for attempt in range(2):
+        try:
+            return json.loads(sh("atira", *args, "--json", timeout=60))
+        except subprocess.TimeoutExpired:
+            if attempt:
+                raise SystemExit(f"wait: atira {' '.join(args)} did not answer")
 
 
 def load() -> dict:
@@ -120,6 +126,7 @@ def tick(dry: bool) -> list[str]:
     state = load()
     sh("git", "fetch", "-q", "--prune", "origin")
     lines = collect(state)
+    STATE.write_text(json.dumps(state, indent=1))
     status = atira("status", "--challenge", "rfq")
     busy = [s["submission_id"] for s in status["submissions"] if s.get("status") not in SUBMISSION_ENDED]
     active = [r for r in status["test_runs"] if r.get("status") not in RUN_ENDED]
@@ -144,7 +151,8 @@ def tick(dry: bool) -> list[str]:
         elif dry:
             lines.append(f"would test {label} (tree {tree[:10]})")
         else:
-            started = atira("test-run", str(path / "agent"), "--challenge", "rfq", "--no-open")
+            # never retried: a slow upload that went through would start a second run
+            started = json.loads(sh("atira", "test-run", str(path / "agent"), "--challenge", "rfq", "--no-open", "--json"))
             state["tested"][tree] = started["run_id"]
             state["runs"][started["run_id"]] = {"label": label, "tree": tree, "rehearsal": started["rehearsal_id"]}
             active.append(started)
