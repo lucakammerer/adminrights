@@ -1,0 +1,298 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AdminRights · runs</title>
+<style>
+  :root {
+    --bg: #fff; --panel: #f6f8fa; --line: #d0d7de; --text: #1f2328; --muted: #656d76;
+    --green: #1a7f37; --red: #cf222e; --amber: #9a6700; --blue: #0969da; --gray: #8c959f;
+    --green-bg: #dafbe1; --red-bg: #ffebe9; --amber-bg: #fff8c5; --blue-bg: #ddf4ff;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0d1117; --panel: #161b22; --line: #30363d; --text: #e6edf3; --muted: #8d96a0;
+      --green: #3fb950; --red: #f85149; --amber: #d29922; --blue: #4493f8; --gray: #6e7681;
+      --green-bg: #12261e; --red-bg: #25171c; --amber-bg: #272115; --blue-bg: #121d2f;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+    font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; }
+  main { max-width: 1100px; margin: 0 auto; padding: 24px 16px 48px; }
+  h1 { font-size: 20px; margin: 0; }
+  h3 { font-size: 13px; margin: 16px 0 6px; }
+  a { color: var(--blue); }
+  .muted { color: var(--muted); }
+  .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
+  .box { border: 1px solid var(--line); border-radius: 6px; }
+
+  header { display: flex; align-items: baseline; gap: 12px; }
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; margin: 16px 0; }
+  .stat { padding: 10px 12px; background: var(--panel); }
+  .stat b { display: block; font-size: 22px; line-height: 1.2; }
+  .stat span { color: var(--muted); font-size: 12px; }
+  .trend { padding: 12px; margin-bottom: 16px; }
+  .trend svg { display: block; width: 100%; height: 72px; }
+
+  .toolbar { display: flex; gap: 8px; margin-bottom: 8px; }
+  .toolbar input, .toolbar select { background: var(--bg); color: var(--text); border: 1px solid var(--line);
+    border-radius: 6px; padding: 5px 10px; font: inherit; }
+  .toolbar input { flex: 1; }
+
+  .list { overflow: hidden; }
+  .list > header { background: var(--panel); padding: 10px 16px; border-bottom: 1px solid var(--line); font-weight: 600; }
+  .run { border-bottom: 1px solid var(--line); }
+  .run:last-child { border-bottom: 0; }
+  .row { display: grid; grid-template-columns: 20px 1fr auto; gap: 12px; padding: 12px 16px; cursor: pointer;
+    align-items: center; }
+  .row:hover { background: var(--panel); }
+  .title { font-weight: 600; }
+  .meta { color: var(--muted); font-size: 12px; }
+  .metrics { display: flex; gap: 14px; align-items: center; color: var(--muted); font-size: 12px; white-space: nowrap; }
+  .pill { border-radius: 999px; padding: 1px 8px; font-size: 12px; font-weight: 600; }
+  .green { background: var(--green-bg); color: var(--green); }
+  .red { background: var(--red-bg); color: var(--red); }
+  .amber { background: var(--amber-bg); color: var(--amber); }
+  .blue { background: var(--blue-bg); color: var(--blue); }
+
+  .dot { width: 14px; height: 14px; border-radius: 50%; }
+  .dot.success { background: var(--green); }
+  .dot.warning { background: var(--amber); }
+  .dot.failure { background: var(--red); }
+  .dot.cancelled { border: 2px solid var(--gray); }
+  .dot.queued { border: 2px solid var(--amber); }
+  .dot.running { border: 2px solid var(--line); border-top-color: var(--amber); animation: spin 1s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .details { display: none; padding: 0 16px 16px 48px; }
+  .run.open .details { display: block; }
+  .error { background: var(--red-bg); color: var(--red); border-radius: 6px; padding: 8px 10px; font-size: 12px; }
+  ul { margin: 0; padding-left: 18px; }
+  li { margin: 2px 0; }
+  .advice li b { font-weight: 600; color: var(--muted); font-size: 12px; }
+
+  .gantt { display: grid; grid-template-columns: 130px 1fr 100px; white-space: nowrap; gap: 3px 10px; font-size: 12px; align-items: center; }
+  .track { position: relative; height: 10px; background: var(--panel); border-radius: 3px; }
+  .bar { position: absolute; top: 0; bottom: 0; background: var(--blue); border-radius: 3px; min-width: 2px; }
+  .bar.point { width: 10px !important; margin-left: -5px; border-radius: 50%; background: var(--muted); }
+
+  table { border-collapse: collapse; font-size: 12px; }
+  th, td { border: 1px solid var(--line); padding: 3px 8px; text-align: left; }
+  th { background: var(--panel); font-weight: 600; }
+  td.ok { background: var(--green-bg); }
+  td.miss { background: var(--red-bg); }
+  .tables { display: flex; gap: 16px; flex-wrap: wrap; align-items: flex-start; }
+  .empty { padding: 24px 16px; color: var(--muted); }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>AdminRights · runs</h1>
+    <span class="muted" id="updated">loading…</span>
+  </header>
+  <section class="stats" id="stats"></section>
+  <section class="trend box">
+    <div class="meta">Quality of finished runs, oldest → newest · green: eligible bid · amber: ineligible · gray: no bid</div>
+    <svg id="trend" viewBox="0 0 1000 72" preserveAspectRatio="none"></svg>
+  </section>
+  <div class="toolbar">
+    <input id="filter" placeholder="Filter by branch, commit, run id or error">
+    <select id="kind">
+      <option value="">All runs</option>
+      <option value="rehearsal">Test runs</option>
+      <option value="scored">Scored runs</option>
+    </select>
+  </div>
+  <section class="list box">
+    <header id="count"></header>
+    <div id="runs"></div>
+  </section>
+</main>
+
+<script>
+const FIELDS = ["material_number", "quantity", "base_unit_price", "surcharge_per_unit", "packaging_per_unit",
+  "rebate_total", "unit_price", "lead_time_weeks"];
+const open = new Set();
+let runs = [];
+
+const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const words = (key) => key.replace(/_/g, " ");
+const dollars = (micro) => `$${(micro / 1e6).toFixed(3)}`;
+const clock = (s) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
+const answered = (run) => run.has_answer && run.score;
+const num = (x) => (typeof x === "number" ? Number(x.toFixed(2)) : x);
+
+function state(run) {
+  if (!run.finished_at) return run.started_at ? "running" : "queued";
+  if (run.status === "cancelled") return "cancelled";
+  if (!answered(run)) return "failure";
+  return run.score.eligible && run.score.quality >= 50 ? "success" : "warning";
+}
+
+function seconds(run) {
+  if (answered(run)) return run.score.duration_ms / 1000;
+  return run.started_at ? ((run.finished_at || Date.now()) - run.started_at) / 1000 : 0;
+}
+
+function ago(ms) {
+  const s = (Date.now() - ms) / 1000;
+  if (s < 90) return "just now";
+  if (s < 5400) return `${Math.round(s / 60)} min ago`;
+  return s < 129600 ? `${Math.round(s / 3600)} h ago` : new Date(ms).toLocaleString();
+}
+
+function renderStats() {
+  const done = runs.filter((r) => r.finished_at);
+  const bids = done.filter(answered);
+  const best = bids.reduce((b, r) => (!b || r.score.quality > b.score.quality ? r : b), null);
+  const stats = [
+    [runs.filter((r) => r.started_at && !r.finished_at).length, "running"],
+    [runs.filter((r) => !r.started_at).length, "queued"],
+    [`${bids.length} / ${done.length}`, "runs that signed a bid"],
+    [best ? best.score.quality : "–", best ? `best quality · ${esc(best.source.commit || best.run_id)}` : "best quality"],
+    [bids.length ? clock(bids.reduce((a, r) => a + seconds(r), 0) / bids.length) : "–", "average time to a bid"],
+  ];
+  document.getElementById("stats").innerHTML =
+    stats.map(([v, l]) => `<div class="stat box"><b>${v}</b><span>${l}</span></div>`).join("");
+}
+
+function renderTrend() {
+  const done = runs.filter((r) => r.finished_at && r.status !== "cancelled").reverse();
+  const w = 1000 / Math.max(done.length, 12);
+  document.getElementById("trend").innerHTML = done.map((r, i) => {
+    const q = answered(r) ? r.score.quality : 0;
+    const h = Math.max(3, (q / 100) * 68);
+    const color = !answered(r) ? "var(--gray)" : r.score.eligible ? "var(--green)" : "var(--amber)";
+    return `<rect x="${i * w + 2}" y="${70 - h}" width="${w - 4}" height="${h}" rx="2" fill="${color}">
+      <title>${esc(r.source.commit || r.run_id)}: ${q}</title></rect>`;
+  }).join("") + '<line x1="0" y1="70.5" x2="1000" y2="70.5" stroke="var(--line)"/>';
+}
+
+function whatRan(src) {
+  if (!src.commit) {
+    return `<p class="muted">The package matches no commit in this clone: it was built from uncommitted changes or a
+      deleted merge. Run <span class="mono">git fetch</span>, or upload with a label (<span class="mono">branch@sha</span>).</p>`;
+  }
+  const ahead = src.on_main ? `<li>On main</li>` : src.ahead.map((c) => `<li class="mono">${esc(c)}</li>`).join("");
+  const files = src.files.length ? `<p class="meta">Changed against main: ${src.files.map(esc).join(", ")}</p>` : "";
+  const differs = src.differs.length
+    ? `<p class="meta">Not committed: the package also changes ${src.differs.map(esc).join(", ")}</p>` : "";
+  return `<p><span class="mono">${src.commit}</span> ${esc(src.subject)}
+      ${!src.on_main && src.branches.length ? `<span class="meta">· ${src.branches.map(esc).join(", ")}</span>` : ""}</p>
+    <ul>${ahead}</ul>${files}${differs}`;
+}
+
+function timeline(run) {
+  if (!run.phases?.length) return '<p class="muted">No phase timings in this run\'s logs.</p>';
+  const total = Math.max(seconds(run), ...run.phases.map((p) => p.end), 1);
+  return `<div class="gantt">${run.phases.map((p) => `
+    <span class="mono">${esc(p.phase)}</span>
+    <div class="track"><div class="bar ${p.start === p.end ? "point" : ""}" style="left:${(100 * p.start) / total}%;width:${(100 * (p.end - p.start)) / total}%"></div></div>
+    <span class="meta">${p.start === p.end ? `done at ${p.end} s` : `${p.start}–${p.end} s`}</span>`).join("")}</div>`;
+}
+
+function improve(run) {
+  if (!run.finished_at) return '<p class="muted">Shown when the run has finished.</p>';
+  if (!run.advice?.length) return '<p class="muted">Nothing to flag.</p>';
+  return `<ul class="advice">${run.advice.map((a) => `<li>${esc(a.text)} <b>${esc(a.owner)}</b></li>`).join("")}</ul>`;
+}
+
+function points(run) {
+  if (!answered(run)) return '<p class="muted">No bid, no points.</p>';
+  const b = run.score.breakdown;
+  const cell = (f) => (f == null ? "<td></td>"
+    : `<td class="${f.points > 0 ? "ok" : "miss"}" title="entered ${esc(JSON.stringify(f.got))}">${num(f.points)}</td>`);
+  const top = Object.entries(b).filter(([, v]) => v && typeof v === "object" && "points" in v && !Array.isArray(v));
+  const rows = (b.positions || []).map((p) =>
+    `<tr><th>${esc(p.position)}</th>${FIELDS.map((f) => cell(p[f])).join("")}<td><b>${num(p.points)}</b></td></tr>`);
+  return `<div class="tables">
+    <table><tr><th>Field</th><th>Points</th></tr>${top.map(([k, v]) => `<tr><th>${words(k)}</th>${cell(v)}</tr>`).join("")}</table>
+    <table><tr><th>Position</th>${FIELDS.map((f) => `<th>${words(f)}</th>`).join("")}<th>Σ</th></tr>${rows.join("")}</table>
+  </div>`;
+}
+
+function badge(run) {
+  if (answered(run)) {
+    const tone = !run.score.eligible ? "red" : run.score.quality >= 50 ? "green" : "amber";
+    return `<span class="pill ${tone}">Q ${run.score.quality}${run.score.eligible ? "" : " · ineligible"}</span>`;
+  }
+  if (run.finished_at) return `<span class="pill red">${esc(run.failure_class || run.status)}</span>`;
+  return `<span class="pill blue">${run.started_at ? "running" : `queued${run.queue_position != null ? ` #${run.queue_position}` : ""}`}</span>`;
+}
+
+function renderRun(run) {
+  const src = run.source;
+  const where = src.on_main ? "main" : src.branches?.[0] || "commit";
+  const title = src.label || (src.commit ? `${where} @ ${src.commit}` : "unknown package");
+  const cost = Math.max(run.cost_micro_usd / 1e6, 0.01);
+  return `<div class="run ${open.has(run.run_id) ? "open" : ""}" data-id="${run.run_id}">
+    <div class="row">
+      <div class="dot ${state(run)}"></div>
+      <div>
+        <div class="title">${esc(title)}${src.subject ? ` <span class="muted">· ${esc(src.subject)}</span>` : ""}</div>
+        <div class="meta"><span class="mono">${run.run_id}</span> · ${run.kind === "rehearsal" ? "test run" : esc(run.kind)} · ${ago(run.created_at)}</div>
+      </div>
+      <div class="metrics">
+        ${badge(run)}
+        <span title="run time">⏱ <span data-clock="${run.run_id}">${clock(seconds(run))}</span></span>
+        <span title="LLM cost">${dollars(run.cost_micro_usd)}</span>
+        <span title="cost × time, as ranked">${(cost * Math.max(seconds(run), 1)).toFixed(0)} $·s</span>
+      </div>
+    </div>
+    <div class="details">
+      ${run.error ? `<div class="error">${esc(run.error)}</div>` : ""}
+      <h3>What ran</h3>${whatRan(src)}
+      <h3>Where the time went</h3>${timeline(run)}
+      <h3>How to improve</h3>${improve(run)}
+      <h3>Points per field</h3>${points(run)}
+      <p class="meta">${run.calls} model calls · ${(run.input_tokens / 1e6).toFixed(2)} M tokens in · ${(run.output_tokens / 1e3).toFixed(0)} k out ·
+        <a href="https://ehl-challenge.atira.ai/runs/${run.run_id}" target="_blank">run page ↗</a></p>
+    </div>
+  </div>`;
+}
+
+function render() {
+  const q = document.getElementById("filter").value.toLowerCase();
+  const kind = document.getElementById("kind").value;
+  const shown = runs.filter((r) => (!kind || r.kind === kind) && (!q || [r.run_id, r.error, r.source.label,
+    r.source.commit, r.source.subject, ...(r.source.branches || [])].some((v) => String(v ?? "").toLowerCase().includes(q))));
+  document.getElementById("count").textContent = `${shown.length} runs`;
+  document.getElementById("runs").innerHTML = shown.map(renderRun).join("") || '<div class="empty">No runs yet.</div>';
+  renderStats();
+  renderTrend();
+}
+
+function tick() {
+  for (const run of runs.filter((r) => r.started_at && !r.finished_at)) {
+    const el = document.querySelector(`[data-clock="${run.run_id}"]`);
+    if (el) el.textContent = clock(seconds(run));
+  }
+}
+
+async function load() {
+  try {
+    runs = await (await fetch("api/runs")).json();
+    document.getElementById("updated").textContent = `updated ${new Date().toLocaleTimeString()} · refreshes every 15 s`;
+    render();
+  } catch (error) {
+    document.getElementById("updated").textContent = `update failed: ${error}`;
+  }
+}
+
+document.getElementById("runs").addEventListener("click", (event) => {
+  const run = event.target.closest(".run");
+  if (!run || !event.target.closest(".row")) return;
+  open.has(run.dataset.id) ? open.delete(run.dataset.id) : open.add(run.dataset.id);
+  run.classList.toggle("open");
+});
+document.getElementById("filter").addEventListener("input", render);
+document.getElementById("kind").addEventListener("change", render);
+load();
+setInterval(load, 15000);
+setInterval(tick, 1000);
+</script>
+</body>
+</html>

@@ -58,6 +58,7 @@ tools/score.sh                                      # from the repo root: local 
 uv run --project agent --no-sync python -m unittest discover -s tests   # from the repo root, in seconds
 tools/check_release.sh                              # before every submit: audit, tests, agent.json
 atira test-run .                                    # sandbox, points per field, not on the leaderboard
+python3 tools/runs/serve.py                         # run dashboard: what each run tested, its time, how to improve
 atira submit .                                      # only after Luca approves and docs/RULES.md §9 holds
 ```
 
