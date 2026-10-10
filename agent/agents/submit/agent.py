@@ -1,5 +1,6 @@
 """Submit agent: enters and signs the bid, with a TAN sub-agent in the mailbox. See README.md."""
 import json
+import re
 import time
 
 import llm
@@ -19,11 +20,15 @@ In this mailbox (you may already be logged in), find the newest signing-TAN mess
 {answer['tender_reference']}. The tender portal just said: "{args.get('portal_message', '')}". Search for it
 yourself: a list on the page may be left from an earlier search, and its newest message is not necessarily a TAN
 message. Pick only a message that gives a signing TAN for this tender, the one for that request (highest request
-number / newest), open it and finish with found true and the TAN exactly as written."""
+number / newest). As soon as a list shows that message, open it (no broader search) and finish with found true and
+the TAN exactly as written."""
+
+        def valid(result) -> bool:  # one look-up finished with "Not captured — located in message ..." as its TAN
+            return bool(result.get("found")) and bool(re.fullmatch(r"\S{4,20}", str(result.get("tan") or "").strip()))
 
         async def check(result, _evidence):
             """A look-up that found no TAN keeps searching instead of handing the portal a non-TAN."""
-            if result.get("found") and str(result.get("tan") or "").strip():
+            if valid(result):
                 return result, ""
             return result, ("Not done: no signing-TAN message found yet. Search the mailbox for it (newest first, "
                             "every folder), open it and finish with found true and its TAN.")
@@ -33,8 +38,9 @@ number / newest), open it and finish with found true and the TAN exactly as writ
         except Exception as error:  # noqa: BLE001  a slow page: the agent opens the mailbox itself
             llm.log("tan", f"start page failed: {type(error).__name__}")
         found = await llm.investigate(mail_tab, SYSTEM, mission, obj(found=BOOL, tan=STR, request=STR, subject=STR),
-                                      min(deadline, time.time() + 120), "tan", max_steps=12, check=check)
+                                      min(deadline, time.time() + 120), "tan", max_steps=12, check=check, warn_at=30)
         found.pop("evidence", None)
+        found["found"] = valid(found)
         return json.dumps(found, ensure_ascii=False)
 
     async def verify_summary(_args):
