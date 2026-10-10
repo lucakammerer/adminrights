@@ -11,6 +11,10 @@ Run from the repo root, with `atira models proxy` running and `source tools/dev-
 --mutate SEED runs stress level S2: every read-only page (GET, no password field, no POST form) is rewritten by
 tools/stress/mutations.js before the agent sees it (synonym labels, hidden decoys, shuffled menus, swapped number
 formats with their hints), in this tool's browser only. Pass: the gather score stays what it is unmutated.
+--s4 PAGE runs stress level S4 (needs --resolve): the mail message recorded in PAGE (raw HTML from a fixture, its
+URL in that fixture's index.json) disappears from the mailbox (its list rows go, its pages answer 404) and appears
+as an attachment page linked from every tender-portal page. After the resolvers, agents.sweep looks for the open
+facts on the open tabs and the resolver runs again with the swept pages. Pass: the moved fact is resolved.
 --requirements FILE (a requirements.json of an earlier fixture) runs one ERP agent per distinct requirement after the
 ERP login. --from DIR reuses the agent results of an earlier fixture for agents not run now (e.g. --resolve only).
 Check `atira status` first: nothing runs while a scored submission runs.
@@ -38,6 +42,7 @@ from agents.erp import agent as erp_agent  # noqa: E402
 from agents.resolvers import agent as resolvers  # noqa: E402
 from agents.supplier_portal import agent as supplier_portal  # noqa: E402
 from agents.tender_portal import agent as tender_portal  # noqa: E402
+from agents.sweep import agent as sweep_agent  # noqa: E402
 from agents.webmail import agent as webmail  # noqa: E402
 from browser import Tab  # noqa: E402
 
@@ -116,6 +121,7 @@ class Recorder:
 
 MUTATIONS = (Path(__file__).parent / "mutations.js").read_text()
 MUTATED: Counter = Counter()
+SWEEP: dict = {}
 
 
 async def mutator(playwright, seed: int):
@@ -128,7 +134,10 @@ async def mutator(playwright, seed: int):
         request = route.request
         if request.method != "GET" or request.resource_type not in ("document", "fetch", "xhr"):
             return await route.continue_()
-        response = await route.fetch()
+        try:
+            response = await route.fetch()
+        except Exception:  # noqa: BLE001  the real site was too slow: fail this request, the agent retries
+            return await route.abort()
         body = await response.text() if "html" in response.headers.get("content-type", "") else None
         if body is None or re.search(r"type=[\"']?password|<form[^>]+method=[\"']?post", body, re.I):
             return await route.fulfill(response=response)
@@ -139,6 +148,47 @@ async def mutator(playwright, seed: int):
         MUTATED.update({k: v for k, v in stats.items()} | {"pages": 1})
         await route.fulfill(response=response, body=body)
     return browser, handle
+
+
+S4_LINK = "/s4-moved-attachment"
+
+
+def s4_routes(page_file: Path):
+    """Route handlers for S4: hide one recorded message from the mailbox, serve it on the tender portal."""
+    index = json.loads((page_file.parent / "index.json").read_text())
+    url = next(e["url"] for e in index if e["file"] == page_file.name)
+    message = re.search(r"([\w-]+)$", url.rstrip("/")).group(1)
+    body = page_file.read_text(errors="ignore")
+
+    async def mailbox(route):
+        if message in route.request.url:
+            return await route.fulfill(status=404, content_type="text/html", body="<h1>Nicht gefunden</h1>")
+        if route.request.resource_type not in ("document", "fetch", "xhr"):
+            return await route.continue_()
+        try:
+            response = await route.fetch()
+        except Exception:  # noqa: BLE001  the real site was too slow: fail this request, the agent retries
+            return await route.abort()
+        if "html" not in response.headers.get("content-type", ""):
+            return await route.fulfill(response=response)
+        text = await response.text()
+        text = re.sub(r"<tr\b(?:(?!<tr\b).)*?" + re.escape(message) + r".*?</tr>", "", text, flags=re.S)
+        await route.fulfill(response=response, body=text)
+
+    async def portal(route):
+        if route.request.url.split("?")[0].endswith(S4_LINK):
+            return await route.fulfill(status=200, content_type="text/html; charset=utf-8", body=body)
+        if route.request.resource_type != "document":
+            return await route.continue_()
+        try:
+            response = await route.fetch()
+        except Exception:  # noqa: BLE001  the real site was too slow: fail this request, the agent retries
+            return await route.abort()
+        if "html" not in response.headers.get("content-type", ""):
+            return await route.fulfill(response=response)
+        link = f'<p><a href="{S4_LINK}">Anlage: weitergeleitete Mitteilung zur Vergabe</a></p>'
+        await route.fulfill(response=response, body=(await response.text()).replace("</body>", link + "</body>", 1))
+    return mailbox, portal, message
 
 
 class RecordingTab(Tab):
@@ -152,6 +202,8 @@ class RecordingTab(Tab):
         return text
 
     async def act(self, action: str, args: dict) -> str:
+        if action == "fetch":  # timed in fetch below
+            return await super().act(action, args)
         started = time.time()
         try:
             return await super().act(action, args)
@@ -172,12 +224,14 @@ class RecordingTab(Tab):
                 log("timing", f"browser fetch took {took:.0f}s")
 
 
-async def open_tab(playwright, browsers: list, entry: dict, recorder: Recorder, mutate=None) -> RecordingTab:
+async def open_tab(playwright, browsers: list, entry: dict, recorder: Recorder, mutate=None, extra=None) -> RecordingTab:
     browser = await playwright.chromium.launch(headless=os.environ.get("HEADLESS") == "1")
     browsers.append(browser)
     context = await browser.new_context()
     if mutate:
         await context.route("**/*", mutate)
+    if extra:
+        await context.route("**/*", extra)
     context.on("response", recorder.on_response)
     page = await context.new_page()
     try:
@@ -304,6 +358,7 @@ async def main() -> int:
     parser.add_argument("--requirements", type=Path)
     parser.add_argument("--from", dest="previous", type=Path)
     parser.add_argument("--mutate", type=int, help="S2: rewrite read-only pages with this seed")
+    parser.add_argument("--s4", type=Path, help="S4: recorded mail message page to move to the tender portal")
     args = parser.parse_args()
     chosen = [a for a in args.agents.split(",") if a]
     unknown = set(chosen) - set(AGENTS)
@@ -331,10 +386,15 @@ async def main() -> int:
             if args.mutate is not None:
                 scratch, mutate = await mutator(playwright, args.mutate)
                 browsers.append(scratch)
+            extra: dict = {}
+            if args.s4:
+                mailbox_route, portal_route, moved = s4_routes(args.s4)
+                extra = {"webmail": mailbox_route, "tender_portal": portal_route}
+                log("s4", f"message {moved} moved from the mailbox to the tender portal")
             tabs = {}
             for name in chosen:
                 recorders[name] = Recorder(out / "html" / name)
-                tabs[name] = await open_tab(playwright, browsers, roles[name], recorders[name], mutate)
+                tabs[name] = await open_tab(playwright, browsers, roles[name], recorders[name], mutate, extra.get(name))
             deadline = time.time() + args.deadline
             jobs = {"tender_portal": lambda: tender_portal.run(task, tabs["tender_portal"], deadline),
                     "supplier_portal": lambda: supplier_portal.run(task, tabs["supplier_portal"], deadline),
@@ -373,11 +433,29 @@ async def main() -> int:
                     erp_found[json.dumps(key)] = result
                     summaries[f"erp:{key[-1]}"] = info
                 (out / "erp.json").write_text(json.dumps(erp_found, indent=1, ensure_ascii=False))
+
+            if args.s4 and args.resolve and requirements:
+                first = await orchestration.safe("commercials", resolvers.commercials(
+                    task, results["tender_portal"], results["webmail"]), time.time() + 300)
+                (out / "commercials-first-pass.json").write_text(json.dumps(first, indent=1, ensure_ascii=False))
+                SWEEP["first"] = commercials_score(first, facts)
+                open_facts = sweep_agent.gaps(results["tender_portal"], requirements, first, erp_found or None)
+                log("s4", f"open facts after the first pass: {[g['fact'] for g in open_facts]}")
+                started = time.time()
+                swept = await sweep_agent.sweep(task, tabs, open_facts, time.time() + 240) if open_facts else {}
+                summaries["sweep"] = {"seconds": round(time.time() - started), "gaps": len(open_facts),
+                                      "pages": {k: len(v) for k, v in swept.items()}}
+                if swept.get("commercials"):  # the swept pages reach the resolver as more tender-portal evidence
+                    results["tender_portal"] = {**results["tender_portal"], "evidence":
+                                                (results["tender_portal"].get("evidence") or []) + swept["commercials"]}
         finally:
             for name, recorder in recorders.items():
                 recorder.write_index()
             for browser in browsers:
-                await browser.close()
+                try:
+                    await browser.close()
+                except Exception as error:  # noqa: BLE001  a request still pending must not lose the run's score
+                    log("runner", f"browser close failed: {type(error).__name__}")
 
     for name in chosen:
         (out / f"{name}.json").write_text(json.dumps({"result": results[name], "summary": summaries[name]},
@@ -396,6 +474,10 @@ async def main() -> int:
         summaries["commercials"] = {"seconds": round(time.time() - started)}
         (out / "commercials.json").write_text(json.dumps(commercials, indent=1, ensure_ascii=False))
         rows += commercials_score(commercials, facts)
+        if "first" in SWEEP:  # S4: what the first pass got, before the sweep's pages
+            first_ok, first_all = sum(ok for _, ok in SWEEP["first"]), len(SWEEP["first"])
+            after_ok = sum(ok for name, ok in rows if name.startswith("commercials"))
+            log("s4", f"commercials before the sweep {first_ok}/{first_all}, after {after_ok}/{first_all}")
     if MUTATED:
         summaries["mutations"] = dict(MUTATED)
     summaries["timing"] = {kind: {"calls": len(v), "total_s": round(sum(v)), "max_s": round(max(v), 1) if v else 0,

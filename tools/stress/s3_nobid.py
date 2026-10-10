@@ -82,7 +82,10 @@ async def erp_stage(task, entry, requirement, seconds, material=None):
         result = await erp_agent.run(task, tab, requirement, time.time() + seconds - 30)  # the search's own time
         if result.get("forced"):  # as agent.main: a search cut at its deadline proves nothing
             result.pop("no_match", None)
-        await browser.close()
+        try:
+            await browser.close()
+        except Exception:  # noqa: BLE001  a request still pending must not lose the stage's result
+            pass
     return result, rewritten[0]
 
 
