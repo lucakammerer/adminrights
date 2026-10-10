@@ -5,6 +5,8 @@ logged answer scored by `eval/compare.py` (what the bid would have scored if sig
 
 | Date (UTC) | Run | Commit | Platform | Eval | Time | Cost | Outcome and top problem (owner) |
 | --- | --- | --- | --- | --- | --- | --- | --- |
+| 2026-10-10 18:43 | run_cce8dd95d7f6edd0 | p2/yazan@1163d99 | 100, eligible | – | 18 min | $0.187 | Signed 100 on PR #28 plus Yazan's latest head. |
+| 2026-10-10 18:35 | run_c339fb4e72ccffd4 | main 0686ab0 (agent tree 6d47406) | 100, eligible | – | 17 min | $0.193 | Main after PR #28, Finn's TAN look-up and label configurator, Yazan's p2: the package submitted as sub_03756a1e6bfd23a7 (files identical, audit clean). |
 | 2026-10-10 18:23 | run_35eaa0de2b7a81df | (teammate, unlabeled) | 0, not eligible | – | 11 min | $0.084 | Cancelled by hand at 11:18. |
 | 2026-10-10 18:15 | run_951dc7fc11eb67e0 | (teammate, package without `TOOL_TIMEOUT`) | 0, not eligible | 100.00 | 19 min | $0.150 | Not signed: correct answer at 576 s, then the submit agent's first `goto` never returned (9 min, no model call, no input) until the cut at 1140 s. A tool bounded by `llm.TOOL_TIMEOUT` (on main since PR #28) returns after 60 s; the page read after a navigation is a `page.evaluate` without its own timeout (Yazan: `browser.py`). |
 | 2026-10-10 18:03 | run_84f19f49ee5beba6 | p1/configurator-by-label@d40b028 | 41, eligible | 100.00 | 18 min | $0.190 | Correct answer (eval 100) at 716 s, signed with 2 of 5 positions: one submit model step took 145 s (811→956 s, timeout and retry), then the time warning omitted 01.01/01.03/01.05. Not the label change itself; a slow step in the submit phase costs whole positions (Finn: a submit step bounded below `CALL_TIMEOUT`, or the answer earlier). |
