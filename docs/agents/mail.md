@@ -1,34 +1,33 @@
-# Mail-Agent
+# Mail agent
 
-## Auftrag
+## Mission
 
-Im Vertriebspostfach jede Nachricht sichern, die die Regeln für exakt diese Referenz brauchen, in Posteingang und
-Archiv. Auch überholte und bedingte Freigaben sichern, damit der Resolver die gültige wählen kann.
+Keep every message in the sales mailbox that the rules need for this exact reference, in inbox and archive. Keep
+superseded and conditional approvals too, so the resolver can choose the valid one.
 
-## Regeln
+## Rules
 
-Sammelt für 5, 12, 16, 20, 21, 22, 23, 24, 25, 26, 28. Die Themen stammen aus dem Brief (Regel 21 nennt Betreffe und
-Absender), nicht aus public-1.
+Gathers for 5, 12, 16, 20, 21, 22, 23, 24, 25, 26, 28. The topics come from the brief (rule 21 names subjects and
+senders), not from public-1.
 
-## Eingang / Ausgang
+## Input / output
 
-- Eingang: Brief, Login des Postfachs.
-- Ausgang `MAIL_RESULT`: `kept` (eine Zeile, was gesichert ist), `own_address` (eigene Postfachadresse, für das
-  Kontaktfeld im Konfigurator), `other_relevant_facts`, plus `evidence`. Die eigentlichen Inhalte sind die Belege.
+- Input: brief, mailbox login.
+- Output `MAIL_RESULT`: `kept` (one line on what was kept), `own_address` (the mailbox's own address, for the contact
+  field in the configurator), `other_relevant_facts`, plus `evidence`. The actual content is the evidence.
 
-## Implementierung
+## Implementation
 
-`agent/agent.py` `run_mail` → `llm.investigate`, Tag `mail`, max. 60 Schritte, Deadline Phase 1.
-Suche immer „Referenz + ein Themenwort“, weil die Suche Wörter mit UND verknüpft. Jede Nachricht über ihre eigene
-URL sichern, damit Absender, Datum und Text vollständig sind. TAN-Mails überspringen, die holt `get_tan`
-([submit.md](submit.md)).
+`agent/agent.py` `run_mail` → `llm.investigate`, tag `mail`, at most 60 steps, phase 1 deadline.
+Always searches "reference + one topic word", because search combines words with AND. Keeps each message via its own
+URL so sender, date and body are complete. Skips TAN mails; `get_tan` fetches those ([submit.md](submit.md)).
 
-## Fallen
+## Pitfalls
 
-- Ähnliche Freigaben für andere Ausschreibungen, etwa Referenz mit Suffix.
-- Überholte Freigaben, Archivordner, Paging.
+- Look-alike approvals for other tenders, e.g. the reference with a suffix.
+- Superseded approvals, archive folder, paging.
 
-## Offen
+## Open
 
-- Die Themenliste steht fest im Auftrag. Ändert der private Brief Betreffe oder Absender, muss sie aus dem Brief
-  abgeleitet werden.
+- The topic list is fixed in the mission. If the private brief changes subjects or senders, the list must be derived
+  from the brief.

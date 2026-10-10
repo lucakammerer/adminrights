@@ -1,36 +1,35 @@
-# Rechnung
+# Calculation
 
-Kein Modell. `agent/agent.py` `build_facts` führt die Ergebnisse zusammen, `agent/calc.py` `compute` rechnet.
+No model. `agent/agent.py` `build_facts` merges the results, `agent/calc.py` `compute` calculates.
 
-## Regeln
+## Rules
 
-3 (no_bid), 4, 6, 7, 8, 15, 16, 18, 22–27.
+3 (no bid), 4, 6, 7, 8, 15, 16, 18, 22–27.
 
 ## build_facts
 
-Pro Position aus Anforderung, Konditionen und ERP: Menge, Material, Staffeln (Zahl im Format der Kondition geparst,
-`number`), Preiseinheit, Währung und Kurs, Zuschlagsmasse in kg (`grams_to_kg`) × Metallindex, Rüstgebühr aus Mail
-und ERP, Rabatt-Regel, Bestand, Lieferzeiten, Lieferzusage, Kartongröße und -preis, Pool- und Bonus-Mitgliedschaft,
-Allokationsmasse. Dazu Referenz, Rabatt, Pool-Gebühr, Bonus-Staffeln.
+Per position, from requirement, commercial terms and ERP: quantity, material, scales (parsed in the condition's
+number format, `number`), price unit, currency and rate, surcharge mass in kg (`grams_to_kg`) × metal index, setup fee
+from mail and ERP, discount rule, stock, lead times, delivery commitment, carton size and price, pool and bonus
+membership, allocation mass. Plus reference, discount, pool fee, bonus bands.
 
 ## compute
 
-1. Fehlt bei einer Position das Material: `no_bid`, keine Positionen, Summe 0; bedingte Freigabe → 0 %.
-2. Basispreis = Staffelpreis (höchste erreichte Staffel, `scale_price`) / Preiseinheit × Kurs, auf Cent.
-3. Bestellwert vor Rabatt = Σ Menge × Basis. Unter `min_order_value` → 0 %.
-4. Bedarf je Material über alle Positionen summieren (gemeinsamer Bestand, Lieferzusage).
-5. Rüstpool nach Menge × Allokationsmasse verteilen, Projektbonus über marginale Staffeln (`bonus_credit`) und nach
-   Warenwert verteilen. Beides mit `allocate`: Cent abrunden, Rest an die größten Reste, Gleichstand nach Position.
-6. Endpreis = Basis (rabattiert je Regel) + Zuschlag (rabattiert nur bei `base_and_surcharge`)
-   + (Rüstung + Pool-Anteil + Verpackung − Bonus) / Menge, einmal HALF_UP.
-7. Lieferzeit: Zusage, wenn Material passt und Bedarf ≤ Obergrenze; sonst Lager, wenn Bestand ≥ Bedarf; sonst
-   Produktion.
-8. Summe = Σ Menge × Endpreis, auf Cent. Dazu ein Rechenprotokoll (`trace`) für die Logs.
+1. Any position without a material: `no_bid`, no positions, total 0; a conditional approval → 0 %.
+2. Base price = scale price (highest scale reached, `scale_price`) / price unit × rate, to the cent.
+3. Order value before discount = Σ quantity × base. Below `min_order_value` → 0 %.
+4. Sum demand per material across positions (shared stock, delivery commitment).
+5. Split the setup pool by quantity × allocation mass; compute the project bonus over marginal bands
+   (`bonus_credit`) and split it by goods value. Both via `allocate`: floor to cents, leftover cents to the largest
+   remainders, ties by position.
+6. Final price = base (discounted per rule) + surcharge (discounted only for `base_and_surcharge`)
+   + (setup + pool share + packaging − bonus) / quantity, HALF_UP once.
+7. Lead time: commitment if the material matches and demand ≤ ceiling; else stock if stock ≥ demand; else production.
+8. Total = Σ quantity × final price, to the cent. Plus a calculation trace (`trace`) for the logs.
 
-Gemeldet werden Basis, Zuschlag je Stück (Masse + Rüstung, vor Rabatt), Verpackung je Stück und Bonus je Position.
+Reported fields: base, surcharge per piece (mass + setup, before discount), packaging per piece, bonus per position.
 
-## Offen
+## Open
 
-- Schritt 1 unterscheidet nicht zwischen „kein Material“ und „ERP-Agent gescheitert“ (siehe [erp.md](erp.md#offen)).
-  Im zweiten Fall sollte die Position ausgelassen statt `no_bid` werden; No-Bid kostet bei einem Bid-Szenario fast
-  alle Positionspunkte.
+- Step 1 doesn't distinguish "no material" from "ERP agent failed" (see [erp.md](erp.md#open)). In the second case
+  the position should be omitted instead of `no_bid`; a no bid in a bid scenario loses almost all position points.

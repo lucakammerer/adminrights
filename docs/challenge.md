@@ -1,37 +1,38 @@
 # Challenge
 
-Quellen: [rfq.md](https://ehl-challenge.atira.ai/challenges/rfq.md), [scoring](https://ehl-challenge.atira.ai/docs/scoring.md),
+Sources: [rfq.md](https://ehl-challenge.atira.ai/challenges/rfq.md), [scoring](https://ehl-challenge.atira.ai/docs/scoring.md),
 [fair play](https://ehl-challenge.atira.ai/docs/fair-play.md), [run contract](https://ehl-challenge.atira.ai/docs/run-contract.md),
-[submitting](https://ehl-challenge.atira.ai/docs/submitting.md). Bei Widerspruch gelten die Quellen und der Brief des Runs.
+[submitting](https://ehl-challenge.atira.ai/docs/submitting.md). If anything here contradicts them or the run's brief,
+they win.
 
-## Rahmen
+## Frame
 
 | | |
 | --- | --- |
-| Gewerteter Lauf | 20 min; Setup davor bis 5 min mit Netz, zählt nicht |
-| Testlauf | bis 2 h, bis zu 4 gleichzeitig, Punkte pro Feld |
-| Einreichung | eine zur Zeit, Review durch KI vorab |
-| Browser | bis 4 (`"browsers"` in `agent.json`), Tabs frei, keine eigenen Browser |
-| Sandbox | 4 vCPU, 8 GB, 1280×800; nur Plattform, Websites und Modell-Proxy erreichbar |
-| Antwort | im Konfigurator des Vergabeportals, signiert mit TAN aus dem Postfach |
+| Scored run | 20 min; setup before it up to 5 min with network, not counted |
+| Test run | up to 2 h, up to 4 at once, points per field |
+| Submission | one at a time, AI review first |
+| Browsers | up to 4 (`"browsers"` in `agent.json`), any number of tabs, no browsers of our own |
+| Sandbox | 4 vCPU, 8 GB, 1280×800; only the platform, the websites and the model proxy are reachable |
+| Answer | entered in the tender portal's configurator, signed with a TAN from the mailbox |
 
-## Modelle
+## Models
 
-| Modell | Preis (simuliert) | Limit | Einsatz |
+| Model | Price (simulated) | Limit | Use |
 | --- | --- | --- | --- |
-| Qwen3.8-Flash-Next | $0.15/M in, $0.016/M cached, $0.47/M out | 32 gleichzeitig/Team | alles |
-| Cloudflare Clef | $0.24/M in | 16 gleichzeitig/Team | ungenutzt, nur wenn messbar schneller |
+| Qwen3.8-Flash-Next | $0.15/M in, $0.016/M cached, $0.47/M out | 32 concurrent per team | everything |
+| Cloudflare Clef | $0.24/M in | 16 concurrent per team | unused; only if measurably faster |
 
-## Scoring (Bid)
+## Scoring (bid)
 
-Entscheidung 5, Referenz 5, Rabatt 5, Summe 5, Arithmetik 5, falls vorhanden: zurückgezogene Q&A 5, Metallindex
-nach Datum 5. Rest auf die Positionen verteilt: Material 20 %, Menge 15 %, Basispreis 15 %, Zuschlag, Verpackung,
-Projektbonus, Endpreis, Lieferzeit je 10 %. Zusätzliche oder doppelte Positionen kosten je einen Positionsanteil.
+Decision 5, reference 5, discount 5, total 5, arithmetic 5, when present: withdrawn Q&A 5, dated metal index 5. The
+rest is split across positions: material 20 %, quantity 15 %, base price 15 %, surcharge, packaging, project bonus,
+final unit price, lead time 10 % each. Extra or duplicate positions cost one position's share each.
 
-No-Bid: Entscheidung 75, Referenz 5, keine Positionen 5, Summe 0 15.
+No bid: decision 75, reference 5, no positions 5, total of 0 15.
 
-## Ranking und Gewinner
+## Ranking and winners
 
-Lauf: zulässig → Qualität → Kosten × Zeit (Kosten mindestens $0.01, Zeit mindestens 1 s).
-Leaderboard: beste Einreichung. Finale: **letzte** bestandene Einreichung, auf privatem Datensatz, optional Best of 3.
-Gewinner: privater Datensatz → öffentlicher Datensatz → Eleganz.
+Run: eligible → quality → cost × time (cost at least $0.01, time at least 1 s).
+Leaderboard: best submission. Final: **latest** passed submission, on the private dataset, optionally best of 3.
+Winners: private dataset → public dataset → elegance.

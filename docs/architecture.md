@@ -1,51 +1,56 @@
-# Architektur
+# Architecture
 
-Modelle sammeln und entscheiden, Code rechnet. Ein Durchlauf in `agent/agent.py` `main`:
+Models gather and decide, code calculates. One run in `agent/agent.py` `main`:
 
 ```
-main (Budget = min(Restzeit, 19 min), end = Start + Budget)
- ├─ Phase 1, parallel, je ein Browser, Deadline end − 9 min
+main (budget = min(time left, 19 min), end = start + budget)
+ ├─ Phase 1, parallel, one browser each, deadline end − 9 min
  │   tender · spec · mail · erp-login
- ├─ Phase 2, parallel, kein Browser
+ ├─ Phase 2, parallel, no browser
  │   resolve_requirements · resolve_commercials
- ├─ Phase 3, parallel in ERP-Tabs, Deadline end − 6 min
- │   run_erp_position je unterschiedlicher Anforderung
- ├─ Phase 4, Code
+ ├─ Phase 3, parallel in ERP tabs, deadline end − 6 min
+ │   run_erp_position per distinct requirement
+ ├─ Phase 4, code
  │   build_facts → calc.compute
- └─ Phase 5, Deadline end − 20 s
-     run_submit (+ get_tan im Mail-Tab)
+ └─ Phase 5, deadline end − 20 s
+     run_submit (+ get_tan in the mail tab)
 ```
 
-Gibt es weniger als 4 Browser, öffnet `main` die übrigen Seiten als Tabs in Browser 1.
+With fewer than 4 browsers, `main` opens the remaining sites as tabs in browser 1.
 
-## Die Tool-Schleife (`agent/llm.py` `investigate`)
+## The tool loop (`agent/llm.py` `investigate`)
 
-Jeder Browser-Agent ist dieselbe Schleife. Er unterscheidet sich nur durch Auftrag, Ergebnis-Schema, Deadline und
-`max_steps`.
+Every browser agent is the same loop. Agents differ only in mission, result schema, deadline and `max_steps`.
 
-- **Sicht:** `Tab.read` liefert die Seite als Text (`agent/reader.js`): versteckte Köder raus, Labels, Tooltips,
-  eingeklappte Details und gleiche-Origin-iframes rein, jedes Bedienelement als `[n:kind "label"]`. Max. 14 000
-  Zeichen pro Lesen, Rest per `offset`.
-- **Tools:** `read`, `goto`, `click`, `fill`, `select`, `check`, `press`, `back`, `form` (ganze Formularseite nach
-  sichtbaren Labels), `fetch` (URL lesen ohne Navigation, öffnet PDFs und ZIPs), `save_evidence`, `note`, `finish`.
-- **Belege:** `save_evidence` speichert eine Seite wörtlich. Nur diese Belege sehen Resolver und `extract_erp`.
-- **Kontext klein halten:** Tool-Ergebnisse der letzten 4 Schritte bleiben ganz (`KEEP_STEPS`), ältere werden auf
-  300 Zeichen gekürzt. Was der Agent behalten will, schreibt er mit `note` fest.
-- **`check`:** optionaler Prüfer beim `finish`. Meldet er ein Problem, wird `finish` abgelehnt und der Agent arbeitet
-  weiter (genutzt vom ERP-Agent).
-- **Zeit:** 60 s vor der Deadline kommt „call finish now“; danach wird `finish` per `tool_choice` erzwungen.
-- **Modell:** `AGENT_MODEL`, Standard Qwen3.8-Flash-Next über `QWEN_BASE_URL`. `chat` versucht es bis zu 6-mal.
+- **View:** `Tab.read` returns the page as text (`agent/reader.js`): hidden decoys removed; labels, tooltips,
+  collapsed details and same-origin iframes included; every control as `[n:kind "label"]`. At most 14,000 characters
+  per read, the rest via `offset`.
+- **Tools:** `read`, `goto`, `click`, `fill`, `select`, `check`, `press`, `back`, `form` (a whole form page by
+  visible labels), `fetch` (read a URL without navigating; opens PDFs and ZIPs), `save_evidence`, `note`, `finish`.
+- **Evidence:** `save_evidence` keeps a page word for word. Only this evidence reaches the resolvers and `extract_erp`.
+- **Small context:** tool results of the last 4 steps stay in full (`KEEP_STEPS`); older ones are cut to 300
+  characters. Whatever the agent wants to keep, it pins with `note`.
+- **`check`:** optional validator on `finish`. If it reports a problem, `finish` is refused and the agent keeps
+  working (used by the ERP agent).
+- **Time:** 60 s before the deadline the agent is told to finish now; after that `finish` is forced via `tool_choice`.
+- **Model:** `AGENT_MODEL`, default Qwen3.8-Flash-Next via `QWEN_BASE_URL`. `chat` retries up to 6 times.
 
-Der gemeinsame System-Prompt `SYSTEM` in `agent/agent.py` beschreibt die Fallen der Seiten allgemein: Cookie-Wall,
-Popups mit irreführendem „Weiter“, falsche Toolbars, Entsperr-Slider, veraltete Versionen zuerst, Paging, 503,
-Zahlenformate. Er nennt keine Seite und keinen Wert.
+The shared system prompt `SYSTEM` in `agent/agent.py` describes the websites' traps in general terms: cookie walls,
+popups with a misleading "continue", fake toolbars, unlock sliders, outdated versions first, paging, 503s, number
+formats. It names no site and no value.
 
-## Resolver (`agent/llm.py` `ask_json`)
+## Resolvers (`agent/llm.py` `ask_json`)
 
-Ein Aufruf mit `response_format=json_object`, bis zu 3 Versuche bei ungültigem JSON. Eingang ist der Brief plus die
-Belege der Agents, Ausgang ein festes JSON-Schema im Prompt.
+One call with `response_format=json_object`, up to 3 attempts on invalid JSON. Input is the brief plus the agents'
+evidence; output is a fixed JSON schema stated in the prompt.
 
 ## Logs
 
-`main` schreibt pro Phase eine Zeile: `[tender]`, `[spec]`, `[mail]`, `[requirements]`, `[commercials]`, `[erp]`,
-`[facts]`, `[calc]`, `[answer]`, `[submit]`. Jeder Agent-Schritt erscheint als `[tag] n: tool {args}`.
+`main` prints one line per phase: `[tender]`, `[spec]`, `[mail]`, `[requirements]`, `[commercials]`, `[erp]`,
+`[facts]`, `[calc]`, `[answer]`, `[submit]`. Every agent step appears as `[tag] n: tool {args}`.
+
+## Timing
+
+The first full local run took 1088 s and never submitted: phase 1 ran to its deadline, the ERP phase to end − 6 min,
+and the submit agent (about 275 s on its own) ran out of time. Phases wait for each other although the ERP search only
+needs the spec result. Lines carry no timestamps yet, so per-phase times have to be inferred.

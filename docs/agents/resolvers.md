@@ -1,48 +1,48 @@
-# Resolver
+# Resolvers
 
-Zwei `ask_json`-Aufrufe ohne Browser, parallel nach Phase 1. Sie wenden die Regeln auf die Belege an und liefern
-typisierte Fakten für `calc`. Hier steckt die Auslegung: welcher Datensatz gilt, was eine Klausel bedeutet.
+Two `ask_json` calls without a browser, in parallel after phase 1. They apply the rules to the evidence and return
+typed facts for `calc`. This is where interpretation happens: which record is valid, what a clause means.
 
 ## resolve_requirements
 
-**Regeln:** 1, 2, 13, 14, 17, 20.
+**Rules:** 1, 2, 13, 14, 17, 20.
 
-**Eingang:** Brief, Belege von tender, spec und mail (aus mail nur die Technikfreigaben).
+**Input:** brief, evidence from tender, spec and mail (from mail only the technical releases matter).
 
-**Ausgang je Position:** `final_quantity_pieces` (+ `quantity_reasoning`), `requirement`, `bore_mm`, `stroke_mm`,
+**Output per position:** `final_quantity_pieces` (+ `quantity_reasoning`), `requirement`, `bore_mm`, `stroke_mm`,
 `pressure_bar`, `mounting`, `certification`, `catalogue_group` (+ `requirement_reasoning`).
 
-**Logik im Prompt:**
-- Menge: Tender-Menge, ersetzt durch die neueste datierte Klarstellung, zurückgezogene ignorieren, Satz in Stück.
-- Anforderung: gültige Revision, darauf nur die Änderungen, die genau diese Revision und Anforderung nennen, nur die
-  genannten Attribute.
-- Nutzbarer Weg: zum Hub 2 × die Reserve aus der neuesten Technikfreigabe für diese Revision addieren.
+**Logic in the prompt:**
+- Quantity: tender quantity, replaced by the latest dated clarification, withdrawn answers ignored, sets into pieces.
+- Requirement: current revision, plus only the amendments naming exactly this revision and requirement, only the
+  named attributes.
+- Usable stroke: add 2 × the reserve from the latest technical release for that revision to the stroke.
 
 ## resolve_commercials
 
-**Regeln:** 5, 12, 16, 21, 22, 23, 24, 25, 26, 28.
+**Rules:** 5, 12, 16, 21, 22, 23, 24, 25, 26, 28.
 
-**Eingang:** Brief, Belege von tender und mail.
+**Input:** brief, evidence from tender and mail.
 
-**Ausgang:**
-- `discount`: `percent`, `min_order_value` (oder null), `source`
-- je Position: `discount_applies_to` (`base` | `base_and_surcharge` | `none`), `carton_price`,
-  `delivery_commitment` (`material_number`, `max_pieces`, `weeks`) oder null, `setup_pool_member`,
+**Output:**
+- `discount`: `percent`, `min_order_value` (or null), `source`
+- per position: `discount_applies_to` (`base` | `base_and_surcharge` | `none`), `carton_price`,
+  `delivery_commitment` (`material_number`, `max_pieces`, `weeks`) or null, `setup_pool_member`,
   `project_bonus_member`, `setup_fee`
-- global: `fx_rates` (EUR je Fremdwährungseinheit nach FX-Schlüssel), `metal_indices` (EUR/kg am Stichtag),
+- global: `fx_rates` (EUR per foreign currency unit by FX key), `metal_indices` (EUR/kg on the scenario date),
   `setup_pool_fee`, `project_bonus_bands`
 
-**Logik im Prompt:** exakte Referenz, berechtigter Absender, neuester Datensatz bis zum Stichtag, neuer ersetzt
-alten, zukünftige gelten nie. Ohne Konditionsgruppe gilt `base`.
+**Logic in the prompt:** exact reference, authorized sender, latest record up to the scenario date, newer replaces
+older, future-dated records never apply. Without a condition group, `base` applies.
 
-## Implementierung
+## Implementation
 
-`agent/agent.py` `resolve_requirements`, `resolve_commercials`, System-Prompt `RESOLVE`. `agent/llm.py` `ask_json`:
-JSON-Modus, bis zu 3 Versuche.
+`agent/agent.py` `resolve_requirements`, `resolve_commercials`, system prompt `RESOLVE`. `agent/llm.py` `ask_json`:
+JSON mode, up to 3 attempts.
 
-## Offen
+## Open
 
-- Beide hängen an einem einzigen Modellaufruf. Ein Fehler hier trifft viele Felder auf einmal. Die `*_reasoning`-Felder
-  in den Logs sind der erste Ort zum Debuggen.
-- `build_facts` greift bei FX-Kurs und Metallindex auf den einzigen vorhandenen Wert zurück, wenn der Schlüssel nicht
-  passt. Das kann bei mehreren Indizes falsch zuordnen.
+- Both depend on a single model call. A mistake here hits many fields at once. The `*_reasoning` fields in the logs
+  are the first place to debug.
+- `build_facts` falls back to the only available value when an FX or metal index key doesn't match. With several
+  indices that can assign the wrong one.

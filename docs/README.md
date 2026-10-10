@@ -1,32 +1,33 @@
 # docs
 
-Was das System *ist*: Regeln, Architektur und jeder Agent. Wie es entstanden ist, steht in den Entire-Checkpoints.
+What the system *is*: rules, architecture and every agent. How it came to be lives in the Entire checkpoints.
 
-| Datei | Inhalt |
+| File | Contents |
 | --- | --- |
-| [challenge.md](challenge.md) | Rahmen der Challenge: Laufzeit, Modelle, Scoring, Fair Play |
-| [architecture.md](architecture.md) | Phasen, Deadlines, Datenfluss, die Tool-Schleife |
-| [rules.md](rules.md) | Die 29 Bid-Regeln: wer sie umsetzt, wo im Code, Status |
-| [agents/tender.md](agents/tender.md) | Vergabeportal: Positionen und Q&A |
-| [agents/spec.md](agents/spec.md) | Lieferantenportal: gültige Revision und Anforderungen |
-| [agents/mail.md](agents/mail.md) | Postfach: Freigaben und Konditionsmails |
-| [agents/erp.md](agents/erp.md) | ERP: Login, Material je Anforderung, Faktenextraktion |
-| [agents/resolvers.md](agents/resolvers.md) | Anforderungen und Konditionen aus den Belegen |
-| [agents/calc.md](agents/calc.md) | Die Arithmetik |
-| [agents/submit.md](agents/submit.md) | Konfigurator, TAN, Signatur |
+| [challenge.md](challenge.md) | Challenge frame: time, models, scoring, fair play |
+| [architecture.md](architecture.md) | Phases, deadlines, data flow, the tool loop |
+| [rules.md](rules.md) | The 29 bid rules: who implements them, where in the code, status |
+| [agents/tender.md](agents/tender.md) | Tender portal: positions and Q&A |
+| [agents/spec.md](agents/spec.md) | Supplier portal: current revision and requirements |
+| [agents/mail.md](agents/mail.md) | Mailbox: approvals and condition mails |
+| [agents/erp.md](agents/erp.md) | ERP: login, material per requirement, fact extraction |
+| [agents/resolvers.md](agents/resolvers.md) | Requirements and commercial terms from the evidence |
+| [agents/calc.md](agents/calc.md) | The arithmetic |
+| [agents/submit.md](agents/submit.md) | Configurator, TAN, signing |
 
-## Jede Agent-Datei hat dieselben Abschnitte
+## Every agent file has the same sections
 
-1. **Auftrag:** was der Agent erreichen soll, in zwei Sätzen
-2. **Regeln:** welche Bid-Regeln (Nummern aus [rules.md](rules.md)) er abdeckt
-3. **Eingang / Ausgang:** was er bekommt und welches Schema er zurückgibt
-4. **Implementierung:** Datei, Funktion, Limits
-5. **Fallen:** was auf den Seiten schiefgeht und wie der Auftrag darauf reagiert
-6. **Offen:** bekannte Lücken; erledigt heißt löschen
+1. **Mission:** what the agent has to achieve, in two sentences
+2. **Rules:** which bid rules (numbers from [rules.md](rules.md)) it covers
+3. **Input / output:** what it receives and which schema it returns
+4. **Implementation:** file, function, limits
+5. **Pitfalls:** what goes wrong on the websites and how the mission handles it
+6. **Open:** known gaps; done means delete
 
-## Regeln für diese Doku
+## Rules for these docs
 
-- Keine Werte aus public-1 (Referenzen, Materialnummern, Preise, Namen). Beobachtungen allgemein formulieren.
-- Code per `datei.py` + Funktionsname verlinken, nie per Zeilennummer.
-- Doku und Code im selben Commit ändern. Was nicht mehr stimmt, löschen.
-- Kurz halten. Was der Code klar sagt, nicht nacherzählen.
+- No values from public-1 (references, material numbers, prices, names). Describe observations in general terms.
+- Link code by `file.py` + function name, never by line number.
+- Change docs and code in the same commit. Delete what is no longer true.
+- Keep it short. Don't retell what the code already says clearly.
+- English only.

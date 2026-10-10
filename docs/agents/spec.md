@@ -1,32 +1,32 @@
-# Spec-Agent
+# Spec agent
 
-## Auftrag
+## Mission
 
-Im Lieferantenportal die technische Spezifikation des Käufers finden, die als gültig markierte Revision bestimmen
-(nicht die, die zuerst aufgeht) und jede Anforderung dieser Revision vollständig sichern.
+Find the buyer's technical specification in the supplier portal, determine the revision marked current (not the one
+that opens first) and keep every requirement of that revision in full.
 
-## Regeln
+## Rules
 
-Sammelt für 2, 3, 17, 20 (gültige Revision, Attribute fürs Material-Matching, Stück pro Satz, nutzbarer Weg).
+Gathers for 2, 3, 17, 20 (current revision, attributes for material matching, pieces per set, usable stroke).
 
-## Eingang / Ausgang
+## Input / output
 
-- Eingang: Brief, Login des Portals.
-- Ausgang `SPEC_RESULT`: `document`, `current_revision`, `revisions[]` (`revision`, `date`, `status`),
+- Input: brief, portal login.
+- Output `SPEC_RESULT`: `document`, `current_revision`, `revisions[]` (`revision`, `date`, `status`),
   `requirements[]` (`requirement`, `position`, `bore_mm`, `stroke_mm`, `pressure_bar`, `mounting`, `certification`,
   `catalogue_group`, `original_wording`), `other_relevant_facts`, plus `evidence`.
 
-## Implementierung
+## Implementation
 
-`agent/agent.py` `run_spec` → `llm.investigate`, Tag `spec`, max. 40 Schritte, Deadline Phase 1.
-`original_wording` bleibt wörtlich, weil dort „nutzbarer Weg“ mit Reserve-Schlüssel oder Stück pro Satz stehen kann.
+`agent/agent.py` `run_spec` → `llm.investigate`, tag `spec`, at most 40 steps, phase 1 deadline.
+`original_wording` stays verbatim because it may state a usable stroke with a reserve key, or pieces per set.
 
-## Fallen
+## Pitfalls
 
-- Öffnet zuerst die älteste Revision.
-- Verschachtelte Dokumentenbetrachter, Anforderungstabellen über mehrere Seiten.
+- Opens the oldest revision first.
+- Nested document viewers, requirement tables spread over pages.
 
-## Offen
+## Open
 
-- Die ERP-Suche wartet auf beide Resolver, braucht aber nur dieses Ergebnis plus Änderungen aus den Q&A. Früher
-  starten spart Zeit.
+- The ERP search waits for both resolvers but only needs this result plus amendments from the Q&A. Starting it
+  earlier saves time.

@@ -1,36 +1,37 @@
-# Submit-Agent
+# Submit agent
 
-## Auftrag
+## Mission
 
-Das berechnete Angebot im Konfigurator des Vergabeportals eintragen, mit einer TAN aus dem Postfach signieren und
-verbindlich abgeben. Ohne Abgabe gibt es 0 Punkte.
+Enter the calculated bid in the tender portal's configurator, sign it with a TAN from the mailbox and submit it
+bindingly. Without a submission the run scores 0.
 
-## Regeln
+## Rules
 
-8, 9, 18 und der Abschnitt „Submission“ des Briefs.
+8, 9, 18 and the brief's "Submission" section.
 
-## Eingang / Ausgang
+## Input / output
 
-- Eingang: Antwort aus `calc.compute`, Spezifikation je Position (für die Konfigurator-Auswahl), eigene
-  Postfachadresse aus dem Mail-Agent (Kontaktfeld), Login des Portals, der Mail-Tab für die TAN.
-- Ausgang `{confirmation}`: was das Portal bestätigt hat.
+- Input: answer from `calc.compute`, specification per position (for the configurator choices), own mailbox address
+  from the mail agent (contact field), portal login, the mail tab for the TAN.
+- Output `{confirmation}`: what the portal confirmed.
 
-## Implementierung
+## Implementation
 
-- `agent/agent.py` `run_submit` → `llm.investigate`, Tag `submit`, max. 70 Schritte, Deadline end − 20 s.
-  Werte im deutschen Format mit zwei Nachkommastellen (`german`). Ganze Formularseiten per `form` in einem Aufruf.
-- Zusatz-Tool `get_tan`: startet einen eigenen `investigate` im Mail-Tab, Tag `tan`, max. 12 Schritte, höchstens
-  2 min. Sucht die neueste TAN-Mail zur gerade gestellten Anfrage.
-- Feste Leitplanken im Auftrag: keine zusätzlichen Positionen, keine auslassen, keine eigenen AGB ankreuzen, TAN
-  genau einmal anfordern (neue Anfrage macht die alte ungültig, 5 min gültig), Netto statt Brutto.
+- `agent/agent.py` `run_submit` → `llm.investigate`, tag `submit`, at most 70 steps, deadline end − 20 s.
+  Values in German format with two decimals (`german`). Whole form pages in one `form` call.
+- Extra tool `get_tan`: starts its own `investigate` in the mail tab, tag `tan`, at most 12 steps, at most 2 min.
+  Finds the newest TAN mail for the request just made.
+- Fixed guardrails in the mission: no extra positions, none skipped, never tick our own terms, request the TAN exactly
+  once (a new request invalidates the old one, valid 5 min), net not gross.
 
-## Fallen
+## Pitfalls
 
-- Positionen erscheinen in beliebiger Reihenfolge; pro Seite prüfen, welche gemeint ist.
-- Formulare mit Reset-Knopf zuerst: gezielt klicken statt Enter.
+- Positions appear in any order; check on every page which one it is.
+- Forms with a reset button first: click the intended button instead of pressing Enter.
 
-## Offen
+## Open
 
-- Keine Teilabgabe (Regel 9). Ist die Zeit knapp oder fehlt eine Position, wird nicht ausgelassen und trotzdem
-  signiert. Gebraucht wird ein Watchdog, der spätestens bei end − 3 min mit dem aktuellen Stand abgibt.
-- Lokal dauert die Abgabe etwa 275 s; mit Deadline end − 6 min für das ERP bleibt wenig Puffer.
+- No partial submission (rule 9). When time is short or a position is missing, nothing is omitted and signed. Needed:
+  a watchdog that submits the current state by end − 3 min at the latest.
+- Locally the submission alone takes about 275 s. In the first full local run it started around end − 6 min, ran out
+  of time after 32 steps and submitted nothing.
