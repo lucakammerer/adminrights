@@ -31,6 +31,16 @@ reads get shortened. Never guess or reconstruct a value from memory: if you lack
 exactly what was asked, every value copied from the website."""
 
 
+# Every gathering mission ends with these: the private sites may split the information differently than the brief
+# suggests, so a record found on the "wrong" site is still kept, and a site without the part's records is left early.
+ALSO_KEEP = ("Records may sit on another website than the brief suggests: if this website also shows other records the "
+             "brief's rules need (bidder Q&A or clarifications, specification revisions, technical releases, approvals, "
+             "condition, tariff or rate messages), keep each one with save_evidence when you come across it; don't "
+             "search for them beyond your part.")
+NOT_HERE = ("If this website does not hold what your part asks for, say so in other_relevant_facts and finish instead "
+            "of searching on.")
+
+
 def login_line(entry: dict) -> str:
     c = entry["credentials"]
     return f"Website {entry['url']} · username {c['username']} · password {c['password']}"
@@ -51,7 +61,9 @@ def reference(brief: str) -> str:
 
 # What the brief says about mail records, read from this run's brief: never typed into a mission.
 LOCAL = re.compile(r"(?<![\w.+-])([A-Za-z0-9][\w.+-]*)@(?![\w-]+\.\w)")  # a sender's local part without its domain
-PAIR = re.compile(r"^([^\s/,;:()][^/,;:()]*?)\s*/\s*([A-Za-z0-9][\w.+-]*?)@?$")  # "Subject/localpart"
+PAIR = re.compile(r"^([^\s/,;:()][^/,;:()]*?)\s*/\s*([A-Za-z0-9][\w.+-]*?)@?(?:<[^>]*>)?$")  # "Subject/localpart"
+PAIR_PAREN = re.compile(r"^([^\s/,;:()][^/,;:()]*?)\s*\(\s*([A-Za-z0-9][\w.+-]*?)@?(?:<[^>]*>)?\s*\)$")  # "Subject (sender)"
+PAIR_FROM = re.compile(r"^([^\s/,;:()][^/,;:()]*?)\s+(?:from|by)\s+([A-Za-z0-9][\w.+-]*?)@(?:<[^>]*>)?$")  # "Subject from x@"
 NOUN = re.compile(r"\b([A-ZÄÖÜ][\w\-äöüß]+)\s+(?:messages?|mails?|e-mails?|records?)\b")
 ARTICLES = {"The", "A", "An", "This", "That", "Each", "Every", "Any", "Its", "Latest", "Newest", "Most", "Recent", "No"}
 TECHNICAL = re.compile(r"\btechnical\b|\bstroke\b|\breserve\b", re.I)
@@ -103,7 +115,7 @@ def _mail_records(brief: str) -> dict:
     for unit in _units(brief):
         for sentence in _sentences(unit):
             items = [i.strip(" .") for i in re.split(r",|;|\band\b", sentence.rsplit(":", 1)[-1])]
-            pairs = [m for m in (PAIR.match(i) for i in items) if m]
+            pairs = [m for m in (PAIR.match(i) or PAIR_PAREN.match(i) or PAIR_FROM.match(i) for i in items) if m]
             if len(pairs) >= 2:  # a list like "Subject/sender, Subject/sender" (one alone is ordinary prose)
                 for m in pairs:
                     add(_subject(m.group(1)), m.group(2), sentence)
@@ -124,6 +136,23 @@ def technical_records(brief: str) -> list[dict]:
                                           or (r["sender"] and f"{r['sender']}@" in u.lower()) for u in units)]
     except Exception:  # noqa: BLE001
         return []
+
+
+def commercial_records(brief: str) -> list[dict]:
+    """The mail records the commercial rules use: every record the brief names except the technical release."""
+    technical = technical_records(brief)
+    return [r for r in mail_records(brief)["records"] if r not in technical]
+
+
+def names_position(page: str, positions: list[str]) -> bool:
+    """Whether a page names one of the tender's positions (ids of three characters or more, so a bare "1" never
+    matches every page)."""
+    return any(re.search(r"(?<![\w.])" + re.escape(p) + r"(?![\w]|\.\d)", page) for p in positions if len(p) >= 3)
+
+
+def routed(results: list[dict], keep) -> list[str]:
+    """The kept pages of other websites' results that `keep(page)` selects (records found on an unexpected site)."""
+    return [page for result in results if isinstance(result, dict) for page in result.get("evidence") or [] if keep(page)]
 
 
 def mentions(page: str, records: list[dict]) -> bool:

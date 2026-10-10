@@ -17,6 +17,7 @@ from agents.erp import agent as erp_agent
 from agents.resolvers import agent as resolvers
 from agents.submit import agent as submit_agent
 from agents.supplier_portal import agent as supplier_portal
+from agents.sweep import agent as sweep
 from agents.tender_portal import agent as tender_portal
 from agents.webmail import agent as webmail
 from browser import Tab
@@ -188,8 +189,14 @@ async def main() -> int:
         llm.log("webmail", json.dumps(mail, ensure_ascii=False)[:4000])
 
         erp_end = end - 6 * 60  # leaves the submission six minutes
-        # only calc needs it; one call may use the whole window, a cut call would only be asked again
-        commercials_job = start(resolvers.commercials(task, tender, mail), erp_end + 30, erp_end + 30 - time.time())
+        async def sweep_tabs():  # the other websites are idle while the ERP searches run: tabs of their own for a sweep
+            return {role: await fresh(tabs[role]) for role in ("tender_portal", "supplier_portal", "webmail")}
+
+        # only calc needs it; one call may use the whole window, a cut call would only be asked again. Commercial facts
+        # it leaves open are looked for on the other websites until the ERP searches are done (I16).
+        erp_done = asyncio.Event()
+        commercials_job = start(sweep.commercials_with_sweep(task, tender, mail, [spec], sweep_tabs, erp_end + 30,
+                                                             erp_done), erp_end + 30, erp_end + 30 - time.time())
         erp_search_end = erp_end - 30 - erp_agent.FINISH_GRACE  # where each ERP agent's own search must end
         requirements = {"positions": await resolve_requirements((task, tender, spec, mail),
                                                                 erp_search_end - ERP_SEARCH_MIN)}
@@ -218,6 +225,7 @@ async def main() -> int:
             return key, await safe(f"erp:{req.get('catalogue_group')}", erp_search(req, first), erp_end)
 
         found = dict(await asyncio.gather(*(erp_for(k, r, i == 0) for i, (k, r) in enumerate(distinct.items()))))
+        erp_done.set()  # a sweep still looking for commercial facts stops: calc must not wait for it
         erp = {r["position"]: found[tuple(str(r.get(k)) for k in spec_keys)] for r in requirements["positions"]}
         llm.log("erp", json.dumps(erp, ensure_ascii=False)[:4000])
         commercials = await safe("commercials", commercials_job, erp_end + 30)
@@ -227,6 +235,13 @@ async def main() -> int:
         llm.log("calc", result["trace"])
         llm.log("answer", json.dumps(result["answer"], ensure_ascii=False))
         if os.environ.get("DRY_RUN"):  # local scoring stops before anything binding (tools/score.sh)
+            return 0
+        if (task.get("submission") or {}).get("kind") == "api":  # the run takes its answer by API, not on a website
+            try:
+                status, body = contract.submit_answer(task, token, result["answer"])
+                llm.log("submit", f"answer posted: HTTP {status} {body[:300]}")
+            except Exception as error:  # noqa: BLE001
+                llm.log("submit", f"posting the answer failed: {type(error).__name__}: {str(error)[:300]}")
             return 0
 
         specs = {r["position"]: ", ".join(f"{k} {r.get(k)}" for k in spec_keys) for r in requirements["positions"]}

@@ -19,7 +19,10 @@ Gathers for 2, 3, 17, 20 (current revision, attributes for material matching, pi
 ## Implementation
 
 `agent.py` `run` → `llm.investigate`, tag `supplier-portal`, at most 40 steps, phase 1 deadline.
-`original_wording` stays verbatim because it may state a usable stroke with a reserve key, or pieces per set.
+`original_wording` stays verbatim because it may state a usable stroke with a reserve key, or pieces per set. The mission
+ends with `common.ALSO_KEEP` (keep any other record the rules need found here: the private sites may split the
+information differently) and, except in the mailbox, `common.NOT_HERE` (finish early when the site doesn't hold the
+part's records).
 
 ## Pitfalls
 

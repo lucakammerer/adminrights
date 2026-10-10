@@ -24,7 +24,10 @@ packaging tariff, delivery commitment, setup pool). Decisions happen in [resolve
 
 `agent.py` `run` → `llm.investigate`, tag `tender-portal`, at most 45 steps, phase 1 deadline.
 Registers interest (the step the brief's Submission section names) if documents are behind it. Keeps the bill of
-quantities and every Q&A page with `save_evidence`.
+quantities and every Q&A page with `save_evidence`. The mission
+ends with `common.ALSO_KEEP` (keep any other record the rules need found here: the private sites may split the
+information differently) and, except in the mailbox, `common.NOT_HERE` (finish early when the site doesn't hold the
+part's records).
 
 ## Pitfalls
 
@@ -34,4 +37,5 @@ quantities and every Q&A page with `save_evidence`.
 
 ## Open
 
-- Only searches the tender portal. If the private dataset puts Q&A elsewhere, they are missed.
+- Only searches the tender portal; Q&A kept by another agent on another site still reach the resolvers
+  (`common.ALSO_KEEP`, routing in [resolvers](../resolvers/README.md)).

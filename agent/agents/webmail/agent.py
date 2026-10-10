@@ -1,6 +1,6 @@
 """Webmail agent: approvals and condition mails from the sales mailbox. See README.md."""
 import llm
-from agents.common import STR, SYSTEM, context, login_line, mail_records, obj
+from agents.common import ALSO_KEEP, STR, SYSTEM, context, login_line, mail_records, obj
 
 
 RESULT = obj(kept=STR, own_address=STR, other_relevant_facts=STR)
@@ -36,6 +36,6 @@ its subject in each folder. Never search without the reference: a word or a send
 record without a subject is recognised by its sender and its meaning (e.g. an approval for this reference). Once a
 search URL's shape is known, fetch independent searches and result pages in one turn. Stop searching once every record
 above is kept or its searches came back empty. Keep superseded and conditional records too (they are judged later);
-skip messages for other, merely similar references and the signing-TAN mails. Finish with a one-line list of what you
-kept and the mailbox's own e-mail address (own_address) as shown on the site."""
+skip messages for other, merely similar references and the signing-TAN mails. {ALSO_KEEP} Finish with a one-line list
+of what you kept and the mailbox's own e-mail address (own_address) as shown on the site."""
     return await llm.investigate(tab, SYSTEM, mission, RESULT, deadline, "webmail", max_steps=60)

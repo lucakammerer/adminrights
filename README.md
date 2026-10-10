@@ -28,6 +28,7 @@ flowchart LR
 
   subgraph P3["3 · Materials · ⏱ −6 min"]
     erp["🏭 ERP search<br/>one tab per spec<br/>no match checked twice"]
+    sweepnode["🔎 Gap sweep<br/>open commercial facts<br/>on the other sites"]
   end
 
   subgraph P4["4 · Calculate"]
@@ -44,6 +45,7 @@ flowchart LR
   req --> erp
   login -. session .-> erp
   erp --> calc
+  com -. facts left open .-> sweepnode -. until ERP is done .-> calc
   com --> calc
   calc --> submit --> bid([✅ Bid])
 
@@ -52,7 +54,7 @@ flowchart LR
   classDef code fill:#dcfce7,stroke:#16a34a,color:#111827
   classDef store fill:#fef3c7,stroke:#d97706,color:#111827
   classDef terminal fill:#111827,stroke:#111827,color:#ffffff
-  class tender,supplier,mail,login,erp,submit browser
+  class tender,supplier,mail,login,erp,sweepnode,submit browser
   class roles,req,com model
   class calc code
   class evidence store
