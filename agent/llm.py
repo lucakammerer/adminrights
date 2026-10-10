@@ -15,6 +15,16 @@ import paging
 MODEL = os.environ.get("AGENT_MODEL", "qwen3.8-flash-next")
 STEP_EFFORT = os.environ.get("STEP_EFFORT", "low")  # reasoning per browser step; latency is mostly thinking tokens
 KEEP_STEPS = 4  # tool results of the latest steps stay in full; older page reads shrink so the context stays small
+# Older reads shrink in batches, not every step: a shortened read changes the history, so the prompt cache only covers
+# what comes before it. Trimming each step re-sent the latest pages at full price on every call (50-64% of a run's
+# uncached input); between batches the history only grows and is read from the cache. A batch is due once TRIM_EVERY
+# steps have left the KEEP_STEPS window, or earlier when their tool results reach TRIM_CHARS.
+TRIM_EVERY = 6
+TRIM_CHARS = 60_000
+# The API returns the model's reasoning with every reply and reads whatever is sent back as input on every later
+# step. It stays while its step is in the KEEP_STEPS window (the model's train of thought) and goes in the same
+# batches as the older page reads.
+REASONING = ("reasoning", "reasoning_content")
 CALL_TIMEOUT = 180  # one model call; a slower one is retried while its deadline allows (steps took 20-90 s under load,
 # a tender finish 132 s: a cut call starts over, so the cap sits above the slowest calls seen)
 CHECK_TIMEOUT = 60  # one model call inside a finish check (ERP extract: 13-21 s); one hung call cost a position
@@ -156,6 +166,13 @@ BROWSER_TOOLS = [
 ]
 
 
+# One finish tool for every agent, its result schema in the mission: the provider caches a prompt prefix only for
+# the same tool list, so with the same system message and tools every agent's calls share the first ~5,000 tokens.
+FINISH = _fn("finish", "Return your findings when the mission is done (or when told time is up: your best findings). "
+             "result is a JSON object with the fields the mission's schema names. Tools of one turn run in order, so call "
+             "finish in the same turn as your last save_evidence calls.",
+             {"result": {"type": "object", "description": "the findings, as the mission's schema asks"}}, ["result"])
+
 HTTP_STATUS = re.compile(r"Fetched \S+ \(HTTP (\d+)\)")
 FINISH_NOW = "Time is almost up: call finish now with your best findings."
 KEPT_PREFIX = "Kept as evidence #"
@@ -188,10 +205,7 @@ async def investigate(tab, system: str, mission: str, finish_schema: dict, deadl
     deadline; a problem sends the model back to work, a check that fails or runs out of time lets the result through.
     `warning` goes to the model `warn_at` seconds before the deadline. A finish forced by the deadline or the step
     limit, or sent after the warning, is marked `forced`: whatever it says, the agent did not finish its mission."""
-    tools = BROWSER_TOOLS + (extra_tools or []) + [_fn(
-        "finish", "Return your findings when the mission is done (or when told time is up: your best findings). "
-        "Tools of one turn run in order, so call finish in the same turn as your last save_evidence calls.",
-        {"result": finish_schema}, ["result"])]
+    tools = BROWSER_TOOLS + [FINISH] + (extra_tools or [])  # the same for every agent but submit's own extra tools
     try:  # like every tool, the first read never outlasts TOOL_TIMEOUT: a page that never returns can't eat the stage
         page = await asyncio.wait_for(tab.read(), max(1.0, min(TOOL_TIMEOUT, deadline - time.time())))
     except Exception as error:  # noqa: BLE001
@@ -199,8 +213,11 @@ async def investigate(tab, system: str, mission: str, finish_schema: dict, deadl
         page = f"Error: the page did not load ({type(error).__name__}). " + \
             (f"Open {url} to start." if url else "Read it again.")
     messages = [{"role": "system", "content": system},
-                {"role": "user", "content": mission + "\n\nThe page now:\n" + page}]
+                {"role": "user", "content": mission + "\n\nfinish takes `result`, a JSON object of this schema:\n" +
+                 json.dumps(finish_schema, ensure_ascii=False) + "\n\nThe page now:\n" + page}]
     steps: list[list[dict]] = []
+    said: list[dict] = []  # the model's message of each step, beside its tool results in `steps`
+    trimmed = 0  # steps before this index are shortened already
     evidence: list[str] = []
     if (stage := KEPT.get()) is not None:
         stage.append(evidence)
@@ -285,6 +302,7 @@ async def investigate(tab, system: str, mission: str, finish_schema: dict, deadl
             continue
         results: list[dict] = []
         steps.append(results)
+        said.append(messages[-1])
         names = [call.function.name for call in message.tool_calls]
         last_action = max((i for i, name in enumerate(names) if name in PAGE_ACTIONS), default=-1)
         for i, call in enumerate(message.tool_calls):
@@ -353,10 +371,16 @@ async def investigate(tab, system: str, mission: str, finish_schema: dict, deadl
             entry = {"role": "tool", "tool_call_id": call.id, "content": output}
             messages.append(entry)
             results.append(entry)
-        for old in (entry for results in steps[:-KEEP_STEPS] for entry in results):
-            if len(old["content"]) > 400:
-                old["content"] = old["content"][:300] + (SHORTENED_KEPT if old["content"].startswith(KEPT_PREFIX)
-                                                         else SHORTENED)
+        stale = [entry for results in steps[trimmed:-KEEP_STEPS] for entry in results]
+        if len(steps) - KEEP_STEPS - trimmed >= TRIM_EVERY or sum(len(e["content"]) for e in stale) >= TRIM_CHARS:
+            for old in stale:
+                if len(old["content"]) > 400:
+                    old["content"] = old["content"][:300] + (SHORTENED_KEPT if old["content"].startswith(KEPT_PREFIX)
+                                                             else SHORTENED)
+            for old in said[trimmed:-KEEP_STEPS]:
+                for key in REASONING:
+                    old.pop(key, None)
+            trimmed = len(steps) - KEEP_STEPS
     messages.append({"role": "user", "content": "Stop now and call finish with your best findings."})
     log(tag, "finish forced (deadline or step limit)")
     try:

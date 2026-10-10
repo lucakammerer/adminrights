@@ -53,6 +53,12 @@ def context(task: dict) -> str:
     return "The task brief (it contains the rules):\n" + brief
 
 
+def system(task: dict) -> str:
+    """The system prompt of every browser agent: the same text in every call of a run, so the model's prompt cache
+    serves it (and the browser tools after it) to all agents; what differs goes into the mission."""
+    return SYSTEM + "\n\n" + context(task)
+
+
 def reference(brief: str) -> str:
     """The tender reference: the first identifier the brief puts in parentheses (no spaces, with a digit), preferring
     one with letters or separators over a bare number such as a year."""
