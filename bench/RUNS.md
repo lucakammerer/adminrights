@@ -5,6 +5,7 @@ logged answer scored by `eval/compare.py` (what the bid would have scored if sig
 
 | Date (UTC) | Run | Commit | Platform | Eval | Time | Cost | Outcome and top problem (owner) |
 | --- | --- | --- | --- | --- | --- | --- | --- |
+| 2026-10-10 21:25 | run_df4704e4309b3b80 | luca/haiku-openrouter@efe748a | 0, not signed | – | 12 min | $0.104 | 11 of about 100 OpenRouter calls through the run proxy lost again (the site assignment alone 112 s); webmail kept nothing, 01.01 omitted, and the submit agent refused a position priced 0.00. Haiku on this route: 1 of 4 runs signed. |
 | 2026-10-10 21:14 | run_0bf3628e04112a0c | luca/haiku-openrouter@6f9adc4 | 100, eligible | – | 6 min | $0.215 | Claude Haiku 5.5 on OpenRouter: 100 in 5:55 (76 $·s); sites done at 68 s, answer at 156 s; no call lost. Only 48 % of the input cached: the trimming of old reads breaks the prefix (Finn). |
 | 2026-10-10 21:00 | run_cd3f96f25f803950 | luca/haiku-openrouter@6f9adc4 | 0, no answer | – | 12 min | $0.116 | The tender portal never loaded: its agent hung on the first read until its cut, then `fresh` crashed the run (fixed in efe748a). |
 | 2026-10-10 20:32 | run_834abcf85968c21b | luca/haiku-openrouter@ba32c35 | 0, not signed | – | 19 min | $0.118 | About one in six OpenRouter calls through the run proxy never came back; each held 120 s (45 s since 6f9adc4), 01.02/01.03 omitted, submit ran out. |
