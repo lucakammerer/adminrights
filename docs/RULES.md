@@ -75,7 +75,7 @@ include it.
 | T1.9 | Saving is not submitting: sign and submit, also when positions are omitted. | ⚠️ no watchdog (F5 → I6) |
 | T1.10 | Read the run from `GET /v1/runs/current` with `x-api-key` and our own User-Agent (Python's default is refused). | ✅ `run.py` |
 | T1.11 | Wizards: going back clears later steps; an expired session loses unsaved entries. Move forward step by step, saving each. | ✅ in the mission |
-| T1.12 | Site roles and the submission target come from the run (`access`, `submission`), never from assumed ids; an unknown id must not crash the run. | ⚠️ roles assigned by a model from the brief since PR #5; the run's `submission` target is still not read, and an unclear assignment crashes the run (F2, F21 → I3) |
+| T1.12 | Site roles and the submission target come from the run (`access`, `submission`), never from assumed ids; an unknown id must not crash the run. | ✅ roles assigned by a model from the brief (PR #5); the `submission` target pins the tender portal, and an unclear assignment falls back by elimination instead of crashing (I3) |
 
 ---
 
