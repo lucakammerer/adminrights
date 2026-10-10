@@ -120,7 +120,9 @@ Every browser agent is the same loop; agents differ only in mission, result sche
   (keep a page word for word), `note` (pin verified facts), `finish`.
 - **Small context:** tool results of the last 4 steps stay in full (`KEEP_STEPS`); older ones shrink to 300 characters, and a
   shortened `save_evidence` result tells the model the page is kept in full for the analyst, so it doesn't reopen it
-  to copy values (`llm.SHORTENED_KEPT`).
+  to copy values (`llm.SHORTENED_KEPT`). They shrink in batches, once 6 steps have left the window (`TRIM_EVERY`) or
+  their results reach 60,000 characters (`TRIM_CHARS`): every shortening invalidates the prompt cache from that point
+  on, and between batches the history only grows, so the model reads it from the cache.
 - **`finish`:** a result that isn't a JSON object is refused while more than 30 s remain; fields sent without the
   `result` wrapper are taken as the result.
 - **Tools:** a browser tool runs at most `TOOL_TIMEOUT` (60 s) and never past the agent's deadline, an extra tool

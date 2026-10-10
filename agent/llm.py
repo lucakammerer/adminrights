@@ -12,6 +12,12 @@ from openai import AsyncOpenAI
 MODEL = os.environ.get("AGENT_MODEL", "qwen3.8-flash-next")
 STEP_EFFORT = os.environ.get("STEP_EFFORT", "low")  # reasoning per browser step; latency is mostly thinking tokens
 KEEP_STEPS = 4  # tool results of the latest steps stay in full; older page reads shrink so the context stays small
+# Older reads shrink in batches, not every step: a shortened read changes the history, so the prompt cache only covers
+# what comes before it. Trimming each step re-sent the latest pages at full price on every call (50-64% of a run's
+# uncached input); between batches the history only grows and is read from the cache. A batch is due once TRIM_EVERY
+# steps have left the KEEP_STEPS window, or earlier when their tool results reach TRIM_CHARS.
+TRIM_EVERY = 6
+TRIM_CHARS = 60_000
 CALL_TIMEOUT = 180  # one model call; a slower one is retried while its deadline allows (steps took 20-90 s under load,
 # a tender finish 132 s: a cut call starts over, so the cap sits above the slowest calls seen)
 CHECK_TIMEOUT = 60  # one model call inside a finish check (ERP extract: 13-21 s); one hung call cost a position
@@ -181,6 +187,7 @@ async def investigate(tab, system: str, mission: str, finish_schema: dict, deadl
     messages = [{"role": "system", "content": system},
                 {"role": "user", "content": mission + "\n\nThe page now:\n" + await tab.read()}]
     steps: list[list[dict]] = []
+    trimmed = 0  # steps before this index are shortened already
     evidence: list[str] = []
     if (stage := KEPT.get()) is not None:
         stage.append(evidence)
@@ -288,10 +295,13 @@ async def investigate(tab, system: str, mission: str, finish_schema: dict, deadl
             entry = {"role": "tool", "tool_call_id": call.id, "content": output}
             messages.append(entry)
             results.append(entry)
-        for old in (entry for results in steps[:-KEEP_STEPS] for entry in results):
-            if len(old["content"]) > 400:
-                old["content"] = old["content"][:300] + (SHORTENED_KEPT if old["content"].startswith(KEPT_PREFIX)
-                                                         else SHORTENED)
+        stale = [entry for results in steps[trimmed:-KEEP_STEPS] for entry in results]
+        if len(steps) - KEEP_STEPS - trimmed >= TRIM_EVERY or sum(len(e["content"]) for e in stale) >= TRIM_CHARS:
+            for old in stale:
+                if len(old["content"]) > 400:
+                    old["content"] = old["content"][:300] + (SHORTENED_KEPT if old["content"].startswith(KEPT_PREFIX)
+                                                             else SHORTENED)
+            trimmed = len(steps) - KEEP_STEPS
     messages.append({"role": "user", "content": "Stop now and call finish with your best findings."})
     log(tag, "finish forced (deadline or step limit)")
     try:
