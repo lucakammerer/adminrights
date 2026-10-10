@@ -119,7 +119,11 @@ Every browser agent is the same loop; agents differ only in mission, result sche
 - **Small context:** tool results of the last 4 steps stay in full (`KEEP_STEPS`); older ones shrink to 300 characters, and a
   shortened `save_evidence` result tells the model the page is kept in full for the analyst, so it doesn't reopen it
   to copy values (`llm.SHORTENED_KEPT`).
-- **`finish`:** a result that isn't a JSON object is refused while more than 30 s remain.
+- **`finish`:** a result that isn't a JSON object is refused while more than 30 s remain; fields sent without the
+  `result` wrapper are taken as the result.
+- **Tools:** a browser tool runs at most `TOOL_TIMEOUT` (60 s) and never past the agent's deadline, an extra tool
+  (`get_tan`) until the deadline; a timeout reaches the model as an error, so a hung fetch can't hold the agent to
+  its stage cut and lose what it kept.
 - **`check`:** optional validator on `finish`: a problem refuses `finish` and the agent keeps working.
 - **Time:** 60 s before the deadline the agent is told to finish (the caller may send its own warning earlier: submit
   does, see §3.4); at the deadline or the step limit `finish` is forced via `tool_choice` and the result is marked
