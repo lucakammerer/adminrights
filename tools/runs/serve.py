@@ -3,10 +3,11 @@
 usage: python3 tools/runs/serve.py [port]    then open http://127.0.0.1:8770
        DASHBOARD_HOST=10.0.0.1 python3 tools/runs/serve.py    bind elsewhere, e.g. behind a reverse proxy
 
-Read-only. Uses the personal token (`atira token`, or ATIRA_TOKEN) and the local git history: a run's package is
-matched to the commit whose agent/ tree it equals, or to the closest one plus the files that differ, so every run
-shows the code it ran, with or without a label. Each run is compared with the previous run that signed a bid: the
-commits since that change agent/, with their pull requests.
+Stops a test run on request; scored runs can't be stopped here. Uses the personal token (`atira token`, or
+ATIRA_TOKEN) and the local git history: a run's package is matched to the commit whose agent/ tree it equals, or
+to the closest one plus the files that differ, so every run shows the code it ran, with or without a label. Each
+run is compared with the previous run that signed a bid: the commits since that change agent/, with their pull
+requests.
 """
 import io
 import json
@@ -16,6 +17,7 @@ import subprocess
 import sys
 import tarfile
 import tempfile
+import urllib.error
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -32,14 +34,16 @@ OWNER = {"time": "Efficiency · Finn", "evidence": "Generalization · Yazan", "l
 FIELDS = ("material_number", "quantity", "base_unit_price", "surcharge_per_unit", "packaging_per_unit",
           "rebate_total", "unit_price", "lead_time_weeks")
 PULL = re.compile(r"Merge pull request #(\d+)")
+CANCEL = re.compile(r"/api/runs/([\w-]+)/cancel")
 finished: dict[str, dict] = {}  # a finished run never changes, so it is built once
 sources: dict[str, dict] = {}  # a run's package never changes either
 ranges: dict[tuple[str, str, str], list[dict]] = {}
 
 
-def get(path: str, raw: bool = False):
+def get(path: str, raw: bool = False, method: str = "GET"):
     # the API refuses Python's default user agent
-    request = urllib.request.Request(API + path, headers={"x-api-key": TOKEN, "user-agent": "adminrights-runs"})
+    request = urllib.request.Request(API + path, method=method,
+                                     headers={"x-api-key": TOKEN, "user-agent": "adminrights-runs"})
     with urllib.request.urlopen(request, timeout=60) as response:
         return response.read() if raw else json.load(response)
 
@@ -247,13 +251,29 @@ def runs() -> list[dict]:
 class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         if self.path == "/api/runs":
-            body, kind = json.dumps(runs()).encode(), "application/json"
+            self.reply(200, json.dumps(runs()).encode())
         elif self.path == "/":
-            body, kind = (HERE / "index.html").read_bytes(), "text/html; charset=utf-8"
+            self.reply(200, (HERE / "index.html").read_bytes(), "text/html; charset=utf-8")
         else:
             self.send_error(404)
-            return
-        self.send_response(200)
+
+    def do_POST(self):
+        match = CANCEL.fullmatch(self.path)
+        if not match:
+            self.send_error(404)
+        elif not self.headers.get("x-dashboard"):  # a custom header forces a CORS preflight, so no other site can post
+            self.send_error(403)
+        else:
+            try:
+                if get(f"/v1/runs/{match[1]}")["kind"] != "rehearsal":
+                    self.reply(403, b'{"error": "only test runs can be stopped from the dashboard"}')
+                else:
+                    self.reply(200, get(f"/v1/runs/{match[1]}/cancel", raw=True, method="POST"))
+            except urllib.error.HTTPError as error:
+                self.reply(error.code, error.read())
+
+    def reply(self, status: int, body: bytes, kind: str = "application/json"):
+        self.send_response(status)
         self.send_header("content-type", kind)
         self.end_headers()
         self.wfile.write(body)

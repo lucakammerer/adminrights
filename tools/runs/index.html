@@ -56,6 +56,10 @@
   .red { background: var(--red-bg); color: var(--red); }
   .amber { background: var(--amber-bg); color: var(--amber); }
   .blue { background: var(--blue-bg); color: var(--blue); }
+  .stop { background: none; border: 1px solid var(--line); border-radius: 6px; padding: 0 8px; color: var(--red);
+    font: inherit; font-size: 12px; cursor: pointer; }
+  .stop:hover { background: var(--red-bg); }
+  .stop:disabled { color: var(--muted); cursor: default; }
   .up { color: var(--green); }
   .down { color: var(--red); }
 
@@ -120,6 +124,7 @@ const FIELDS = ["material_number", "quantity", "base_unit_price", "surcharge_per
 const open = new Set();
 let runs = [];
 
+const base = () => location.pathname.replace(/\/?$/, "/");
 const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 const words = (key) => key.replace(/_/g, " ");
 const dollars = (micro) => `$${(micro / 1e6).toFixed(3)}`;
@@ -133,7 +138,7 @@ const delta = (run, base) => (answered(run) ? run.score.quality : 0) - base.scor
 
 function state(run) {
   if (!run.finished_at) return run.started_at ? "running" : "queued";
-  if (run.status === "cancelled") return "cancelled";
+  if (run.failure_class === "cancelled") return "cancelled";
   if (!answered(run)) return "failure";
   return run.score.eligible && run.score.quality >= 50 ? "success" : "warning";
 }
@@ -166,7 +171,7 @@ function renderStats() {
 }
 
 function renderTrend() {
-  const done = runs.filter((r) => r.finished_at && r.status !== "cancelled").reverse();
+  const done = runs.filter((r) => r.finished_at && r.failure_class !== "cancelled").reverse();
   const w = 1000 / Math.max(done.length, 12);
   document.getElementById("trend").innerHTML = done.map((r, i) => {
     const q = answered(r) ? r.score.quality : 0;
@@ -269,6 +274,7 @@ function renderRun(run) {
       </div>
       <div class="metrics">
         ${badge(run)}
+        ${!run.finished_at && run.kind === "rehearsal" ? `<button class="stop" data-stop="${run.run_id}">Stop</button>` : ""}
         ${shift(run)}
         <span title="run time">⏱ <span data-clock="${run.run_id}">${clock(seconds(run))}</span></span>
         <span title="LLM cost">${dollars(run.cost_micro_usd)}</span>
@@ -308,7 +314,7 @@ function tick() {
 
 async function load() {
   try {
-    runs = await (await fetch(location.pathname.replace(/\/?$/, "/") + "api/runs")).json();
+    runs = await (await fetch(base() + "api/runs")).json();
     document.getElementById("updated").textContent = `updated ${new Date().toLocaleTimeString()} · refreshes every 15 s`;
     render();
   } catch (error) {
@@ -316,7 +322,18 @@ async function load() {
   }
 }
 
+async function stop(button) {
+  const id = button.dataset.stop;
+  if (!confirm(`Stop ${id}? Its sandbox is removed and the run fails.`)) return;
+  button.disabled = true;
+  const response = await fetch(`${base()}api/runs/${id}/cancel`, { method: "POST", headers: { "x-dashboard": "1" } });
+  if (!response.ok) alert(`Could not stop ${id}: ${await response.text()}`);
+  load();
+}
+
 document.getElementById("runs").addEventListener("click", (event) => {
+  const button = event.target.closest("[data-stop]");
+  if (button) return stop(button);
   const run = event.target.closest(".run");
   if (!run || !event.target.closest(".row")) return;
   open.has(run.dataset.id) ? open.delete(run.dataset.id) : open.add(run.dataset.id);
