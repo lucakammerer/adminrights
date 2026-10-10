@@ -3,7 +3,7 @@ import json
 import time
 
 import llm
-from agents.common import STR, SYSTEM, context, login_line, obj
+from agents.common import BOOL, STR, SYSTEM, context, login_line, obj
 
 SIGN_BY = 180  # seconds before the deadline: stop entering, omit what is unfinished, sign (TAN look-up ~2 min)
 
@@ -16,10 +16,24 @@ async def run(task, tab, mail_tab, answer: dict, omitted: list, specs: dict, con
     async def fetch_tan(args):
         mission = f"""{login_line(mail_tab.site)}
 In this mailbox (you may already be logged in), find the newest signing-TAN message for tender
-{answer['tender_reference']}. The tender portal just said: "{args.get('portal_message', '')}". Pick the message for
-that request (highest request number / newest), open it and finish with the TAN exactly as written."""
-        found = await llm.investigate(mail_tab, SYSTEM, mission, obj(tan=STR, request=STR, subject=STR),
-                                      min(deadline, time.time() + 120), "tan", max_steps=12)
+{answer['tender_reference']}. The tender portal just said: "{args.get('portal_message', '')}". Search for it
+yourself: a list on the page may be left from an earlier search, and its newest message is not necessarily a TAN
+message. Pick only a message that gives a signing TAN for this tender, the one for that request (highest request
+number / newest), open it and finish with found true and the TAN exactly as written."""
+
+        async def check(result, _evidence):
+            """A look-up that found no TAN keeps searching instead of handing the portal a non-TAN."""
+            if result.get("found") and str(result.get("tan") or "").strip():
+                return result, ""
+            return result, ("Not done: no signing-TAN message found yet. Search the mailbox for it (newest first, "
+                            "every folder), open it and finish with found true and its TAN.")
+
+        try:  # an earlier agent may have left this tab inside one of its search lists
+            await mail_tab.page.goto(mail_tab.site["url"], wait_until="domcontentloaded", timeout=15000)
+        except Exception as error:  # noqa: BLE001  a slow page: the agent opens the mailbox itself
+            llm.log("tan", f"start page failed: {type(error).__name__}")
+        found = await llm.investigate(mail_tab, SYSTEM, mission, obj(found=BOOL, tan=STR, request=STR, subject=STR),
+                                      min(deadline, time.time() + 120), "tan", max_steps=12, check=check)
         found.pop("evidence", None)
         return json.dumps(found, ensure_ascii=False)
 
