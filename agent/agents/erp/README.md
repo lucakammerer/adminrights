@@ -15,8 +15,9 @@ match exactly, and keep every page holding its facts. If there is none, report t
 
 - `login`: login, output `{ok}`.
 - `run`: input is one requirement from `resolvers.requirements` (5 attributes + `catalogue_group`).
-  Agent output `{material_number, no_match, why}`. `no_match` is true only after every candidate was checked and
-  none qualifies (→ `no_bid`); an empty result without it means the search didn't finish (→ position omitted).
+  Agent output `{material_number, no_match, why, candidates}`. `no_match` is true only after every candidate was
+  checked and none qualifies (→ `no_bid`); `candidates` lists each one with the attribute that differs (`differs_in`)
+  or `blocked`. An empty result without `no_match` means the search didn't finish (→ position omitted).
 - `extract`: turns that into `RESULT`: status, attributes, `available_stock_pieces` (unrestricted only),
   stock and production lead times, `pieces_per_carton`, `allocation_mass`, `surcharge_mass`, `price_index_key`,
   `setup_fee`, `price_condition` (validity, currency, FX key, price unit, number format, scales as shown).
@@ -33,6 +34,10 @@ match exactly, and keep every page holding its facts. If there is none, report t
   that read fails, the material and its kept pages still count.
 - `agent/agent.py` `erp_search`: a `no_match` (it turns into `no_bid`) is confirmed by a second, independent agent in a
   fresh tab when at least 150 s remain before the ERP deadline; if that one finds a material, its result wins.
+- `agent.py` `run` `check`, no-match proof (rules 3, 8): a `no_match` finish is refused (`unproven`) when no page was
+  kept, no candidate is listed, or a listed candidate is on no kept page; the mission says an empty or over-broad
+  search is not "no match". At most `NO_MATCH_REFUSALS` (2) refusals, so it never loops; after that the second agent
+  in `main` `erp_search` still confirms it. `tests/test_erp_no_match.py` plays it with a fake model.
 - `agent.py` `run` `check`: after `extract`, `validate.material_mismatch` compares bore, stroke, pressure, mounting and
   certification with the requirement (rule 3). A difference refuses `finish` once per material with the exact
   difference; finishing again with the same material is accepted, so a misread page never loops to the deadline.
