@@ -65,6 +65,10 @@ FRAMED = """async ([html, url]) => {
   try { return (READER)({root: frame.contentDocument}) } finally { frame.remove() }
 }"""
 RELOGINS = 3  # automatic logins per tab at most, so a rejected login never loops
+# Inside llm.TOOL_TIMEOUT (60 s per tool): a fetch gives up on its own first, so the model gets a clear answer.
+FETCH_ABORT = 40  # seconds without an answer before one in-page request is aborted
+FETCH_BUDGET = 45  # seconds after which a 5xx is no longer retried
+RELOAD_TIMEOUT = 15  # seconds per reload of an error page (two at most)
 
 
 class Tab:
@@ -142,7 +146,7 @@ class Tab:
                 break
             await asyncio.sleep(2 + 2 * attempt)
             try:
-                await self.page.reload(wait_until="domcontentloaded", timeout=30000)
+                await self.page.reload(wait_until="domcontentloaded", timeout=RELOAD_TIMEOUT * 1000)
             except Exception:  # noqa: BLE001
                 pass
             await self.settle()
@@ -308,13 +312,15 @@ class Tab:
 
     async def fetch(self, url: str) -> str:
         """Read a same-origin URL through the logged-in page without navigating: text only, no refs. A server error
-        is retried twice before the model sees it."""
+        is retried twice before the model sees it, within FETCH_BUDGET."""
+        started = asyncio.get_running_loop().time()
         for attempt in range(3):
             result = await self._fetch(url)
-            if result.get("failed"):  # no answer within a minute (or no connection): the model decides what next
-                return (f"Fetched {result['url']} (HTTP 504) no answer within 60 s ({result['failed']}): the site may be "
-                        "slow; try again or open another page\n")  # a 5xx status, so it is never kept as evidence
-            if result["status"] < 500 or attempt == 2:
+            if result.get("failed"):  # no answer in time (or no connection): the model decides what next
+                return (f"Fetched {result['url']} (HTTP 504) no answer within {FETCH_ABORT} s ({result['failed']}): the "
+                        "site may be slow; try again or open another page\n")  # a 5xx, so never kept as evidence
+            spent = asyncio.get_running_loop().time() - started
+            if result["status"] < 500 or attempt == 2 or spent > FETCH_BUDGET:
                 break
             await asyncio.sleep(1.5 * (attempt + 1))
         head = f"Fetched {result['url']} (HTTP {result['status']})" + (f" after {attempt} retries" if attempt else "") + "\n"
@@ -336,8 +342,8 @@ class Tab:
 
     async def _fetch(self, url: str) -> dict:
         return await self.page.evaluate(
-            """async (url) => {
-                const stop = new AbortController(); const timer = (window.__arefSetTimeout || setTimeout)(() => stop.abort(), 60000)
+            """async ([url, abortMs]) => {
+                const stop = new AbortController(); const timer = (window.__arefSetTimeout || setTimeout)(() => stop.abort(), abortMs)
                 let r
                 try { r = await fetch(url, {credentials: 'include', signal: stop.signal}) }
                 catch (e) { return {status: 0, url, type: '', html: '', failed: String(e && e.name || e)} }
@@ -349,7 +355,7 @@ class Tab:
                     return {status: r.status, url: r.url, type, b64: btoa(bin)}
                 }
                 return {status: r.status, url: r.url, type, html: await r.text()}
-            }""", urljoin(self.page.url, url))
+            }""", [urljoin(self.page.url, url), FETCH_ABORT * 1000])
 
 
 def _js(value: str) -> str:

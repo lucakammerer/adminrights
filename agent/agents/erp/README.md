@@ -37,7 +37,7 @@ match exactly, and keep every page holding its facts. If there is none, report t
 - `agent.py` `run` `check`, no-match proof (rules 3, 8): a `no_match` finish is refused (`unproven`) when no page was
   kept, no candidate is listed, or a listed candidate is on no kept page; the mission says an empty or over-broad
   search is not "no match". At most `NO_MATCH_REFUSALS` (2) refusals, so it never loops; after that the second agent
-  in `main` `erp_search` still confirms it. `tests/test_erp_no_match.py` plays it with a fake model.
+  in `main` `erp_search` still confirms it, and `calc.facts` treats a no_match without kept pages as unfinished. `tests/test_erp_no_match.py` plays it with a fake model.
 - `agent.py` `run` `check`: after `extract`, `validate.material_mismatch` compares bore, stroke, pressure, mounting and
   certification with the requirement (rule 3). A difference refuses `finish` once per material with the exact
   difference; finishing again with the same material is accepted, so a misread page never loops to the deadline.
