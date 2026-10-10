@@ -163,7 +163,9 @@ Every browser agent is the same loop; agents differ only in mission, result sche
   check that fails or runs out of time lets the result through unchecked.
 - **Model:** `AGENT_MODEL`, default the hosted Qwen; a `<provider>/<model>` id runs on OpenRouter through the run's
   proxy with the team secret `OPENROUTER_API_KEY` (Anthropic models with a moving cache breakpoint); its last three
-  attempts at a call go to the hosted Qwen (`llm.FALLBACK`), which `agent.json` keeps warm at no cost in time. Browser steps run
+  attempts at a call go to the hosted Qwen (`llm.FALLBACK`), which `agent.json` keeps warm at no cost in time; a call
+  without an answer after `HEDGE` (15 s) gets a twin and the first answer wins (about one OpenRouter call in six never
+  came back); `ask_json` (resolvers, ERP extract) always runs on the hosted Qwen, where it is measured. Browser steps run
   with low reasoning effort (`STEP_EFFORT`): without thinking a step took a fifth of the time, but a webmail agent kept
   its only record after 12 steps and then searched on to its step limit of 60 (it never judged itself done);
   `chat` tries up to 6 times, each attempt at most `CALL_TIMEOUT` (180 s; no SDK-internal retries) and all of them

@@ -40,6 +40,9 @@ TOOL_TIMEOUT = 60  # one browser tool; a fetch that hung 109 s held the tender a
 # stuck call never reaches the model (none of the 6 in run_76abdc35df9c092b shows in the platform's calls) and held
 # its stage to the cap: three of the four ERP searches lost their whole two minutes to their first call.
 SILENCE = 30
+# An OpenRouter call without an answer after HEDGE seconds gets a twin, and the first answer wins: about one call in six
+# never came back (one held a tender agent's first step for 240 s), while answered calls took 3-13 s.
+HEDGE = 15
 
 # The time by which every model call in this task must be over (set by agent.safe for each stage) and the longest
 # one call may take. chat enforces both on the wall clock: the HTTP timeout only bounds the silence between bytes, and
@@ -113,25 +116,41 @@ async def reply(messages: list, tools: list | None, silence: float, fallback: bo
     return state.current_completion_snapshot
 
 
-async def chat(messages: list, tools: list | None = None, **kwargs):
+async def chat(messages: list, tools: list | None = None, hosted: bool = False, **kwargs):
     """One model reply, each attempt bounded by CAP and all of them by UNTIL; raises TimeoutError when time is up. An
-    attempt silent for SILENCE seconds (twice that on a retry) is dropped and asked again."""
+    attempt silent for SILENCE seconds (twice that on a retry) is dropped and asked again. hosted: the hosted Qwen
+    answers even when MODEL is an OpenRouter model."""
     for attempt in range(6):
         left = UNTIL.get() - time.time() - 1
         if left < 3:
             raise TimeoutError("no time left for a model call")
         limit = min(CAP.get(), left)
         began = time.time()
-        fallback = OPENROUTER and attempt >= 3 and "QWEN_BASE_URL" in os.environ
-        call = asyncio.ensure_future(reply(messages, tools, min(SILENCE * (2 if attempt else 1), limit), fallback,
-                                           **kwargs))
-        call.add_done_callback(lambda c: c.cancelled() or c.exception())  # a dropped call's failure stays quiet
+        fallback = OPENROUTER and (hosted or attempt >= 3) and "QWEN_BASE_URL" in os.environ
+        hedge = OPENROUTER and not fallback
+
+        def ask() -> asyncio.Future:
+            call = asyncio.ensure_future(reply(messages, tools, min(SILENCE * (2 if attempt else 1), limit), fallback,
+                                               **kwargs))
+            call.add_done_callback(lambda c: c.cancelled() or c.exception())  # a dropped call's failure stays quiet
+            return call
+        calls = [ask()]
         try:
             # asyncio.wait, not wait_for: wait_for waits until the cancelled call has stopped, a cut never does
-            await asyncio.wait({call}, timeout=limit)
-            if not call.done():
-                raise TimeoutError(f"model call over {limit:.0f} s")
-            return call.result()
+            await asyncio.wait(calls, timeout=min(HEDGE, limit) if hedge else limit)
+            if hedge and not calls[0].done():
+                calls.append(ask())
+            while True:
+                answered = [c for c in calls if c.done() and not c.cancelled() and c.exception() is None]
+                if answered:
+                    return answered[0].result()
+                waiting = [c for c in calls if not c.done()]
+                if not waiting:
+                    raise calls[-1].exception()
+                rest = limit - (time.time() - began)
+                if rest <= 0:
+                    raise TimeoutError(f"model call over {limit:.0f} s")
+                await asyncio.wait(waiting, timeout=rest, return_when=asyncio.FIRST_COMPLETED)
         except Exception as error:  # noqa: BLE001  the hosted model may hiccup: retry like any provider
             if attempt == 5:
                 raise
@@ -139,7 +158,8 @@ async def chat(messages: list, tools: list | None = None, **kwargs):
                   flush=True)
             await asyncio.sleep(min(2 + 3 * attempt, max(0.0, UNTIL.get() - time.time() - 5)))
         finally:
-            call.cancel()  # no-op once done; frees the connection of a call over its time or of a cut stage
+            for call in calls:
+                call.cancel()  # no-op once done; frees the connection of a call over its time or of a cut stage
 
 
 def parse_object(text: str) -> dict | None:
@@ -153,11 +173,12 @@ def parse_object(text: str) -> dict | None:
 
 async def ask_json(system: str, user: str, effort: str | None = None) -> dict:
     """One reasoning call that must answer with a JSON object. effort="low" suits copying values out of pages: several
-    times faster, while switching thinking off entirely made the model rewrite number formats."""
+    times faster, while switching thinking off entirely made the model rewrite number formats. Always on the hosted
+    Qwen: the resolvers and the ERP extract are measured on it (tools/resolver_eval.py)."""
     messages = [{"role": "system", "content": system}, {"role": "user", "content": user}]
     extra = {"reasoning_effort": effort} if effort else {}
     for _ in range(3):
-        reply = await chat(messages, response_format={"type": "json_object"}, **extra)
+        reply = await chat(messages, response_format={"type": "json_object"}, hosted=True, **extra)
         text = reply.choices[0].message.content or ""
         value = parse_object(text)
         if value is not None:
