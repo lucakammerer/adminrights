@@ -24,7 +24,7 @@ SUBMISSION_ENDED = {"complete", "failed", "rejected", "disqualified"}
 
 
 def sh(*cmd, cwd=ROOT, check=True) -> str:
-    done = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True)
+    done = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, stdin=subprocess.DEVNULL, timeout=300)
     if check and done.returncode:
         raise RuntimeError(f"{' '.join(cmd)}: {done.stderr.strip() or done.stdout.strip()}")
     return done.stdout.strip()
