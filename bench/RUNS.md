@@ -5,6 +5,8 @@ logged answer scored by `eval/compare.py` (what the bid would have scored if sig
 
 | Date (UTC) | Run | Commit | Platform | Eval | Time | Cost | Outcome and top problem (owner) |
 | --- | --- | --- | --- | --- | --- | --- | --- |
+| 2026-10-10 17:45 | run_7c8e518250acf788 | base@6345945 | 100, eligible | 100.00 | 16 min | $0.179 | Second 100 on the same package as run_acc211d89c011277 (PR #28): submission gate met. |
+| 2026-10-10 17:28 | run_546683ad6ca0d354 | (teammate, unlabeled) | 100, eligible | – | 15 min | $0.182 | Signed 100. |
 | 2026-10-10 17:26 | run_acc211d89c011277 | luca/submit-unpriced-positions@41e9cec | 100, eligible | 100.00 | 13 min | $0.181 | Main 08b39c5 plus the quality fixes: 100 in 13:17, the best cost × time so far (144 $·s). |
 | 2026-10-10 17:04 | run_f00b4d8899ffb9ad | (teammate, unlabeled) | 51.2, eligible | 51.20 | 18 min | $0.215 | Every ERP agent finished after its time warning; 01.02/01.03 had their material but no prices and were omitted. The same facts through 6ef046c score 82.0. |
 | 2026-10-10 16:45 | run_f5c08d1c29b7cb39 | (teammate, unlabeled) | 38.2, eligible | 38.20 | 17 min | $0.189 | Positions with a material but no prices omitted; the same facts through 6ef046c score 59.0. |
