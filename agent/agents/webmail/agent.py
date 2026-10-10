@@ -3,7 +3,7 @@ import llm
 from agents.common import ALSO_KEEP, STR, login_line, mail_records, obj, system
 
 
-RESULT = obj(kept=STR, own_address=STR, other_relevant_facts=STR)
+RESULT = obj(kept=STR, own_address=STR, search_url=STR, other_relevant_facts=STR)
 
 
 def wanted(brief: str) -> str:
@@ -35,6 +35,7 @@ record without a subject is recognised by its sender and its meaning (e.g. an ap
 search URL's shape is known, fetch independent searches and result pages in one turn. Stop searching once every record
 above is kept or its searches came back empty. Keep superseded and conditional records too (they are judged later);
 skip messages for other, merely similar references and the signing-TAN mails. {ALSO_KEEP} Finish with a one-line list
-of what you kept and the mailbox's own e-mail address (own_address) as shown on the site."""
+of what you kept, the mailbox's own e-mail address (own_address) as shown on the site, and the URL of one search you
+ran (search_url; the signing-TAN look-up later searches the same way)."""
     return await llm.investigate(tab, system(task), mission, RESULT, deadline, "webmail", max_steps=60,
                                  effort=llm.NAV_EFFORT)

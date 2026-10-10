@@ -73,8 +73,17 @@ class ResolverRouting(unittest.TestCase):
         llm.ask_json = asked = Asked({})
         asyncio.run(resolvers.commercials(TASK, TENDER, MAIL, [{"evidence": ["### sheet\nbore 40"]}]))
         asyncio.run(resolvers.commercials(TASK, TENDER, MAIL))
-        self.assertEqual(asked.questions[0], asked.questions[1])
-        self.assertNotIn("other websites", asked.questions[1])
+        parts = len(asked.questions) // 2  # commercials asks its parts at once
+        self.assertEqual(asked.questions[:parts], asked.questions[parts:])
+        self.assertNotIn("other websites", asked.questions[parts])
+
+    def test_commercials_parts_merge_by_position(self):
+        merged = resolvers.merge_parts([
+            {"discount": {"percent": 5}, "positions": [{"position": "01.01", "discount_applies_to": "none"}]},
+            {"positions": [{"position": " 01.01", "carton_price": 2}, {"position": "01.02", "carton_price": 3}]}])
+        self.assertEqual(merged["positions"], [{"position": "01.01", "discount_applies_to": "none", "carton_price": 2},
+                                               {"position": "01.02", "carton_price": 3}])
+        self.assertEqual(merged["discount"], {"percent": 5})
 
 
 class ErpExtract(unittest.TestCase):

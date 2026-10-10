@@ -1,4 +1,5 @@
 """Submit agent: enters and signs the bid, with a TAN sub-agent in the mailbox. See README.md."""
+import asyncio
 import json
 import time
 
@@ -12,14 +13,39 @@ def german(value: float) -> str:
     return f"{value:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
 
-async def run(task, tab, mail_tab, answer: dict, omitted: list, specs: dict, contact: str, deadline):
+def values(answer: dict, omitted: list, specs: dict) -> str:
+    """The calculated bid as the submit agent enters it."""
+    optional = (("base_unit_price", "base price"), ("surcharge_per_unit", "surcharge per piece"),
+                ("packaging_per_unit", "packaging per piece"), ("rebate_total", "project bonus for the position"))
+    rows = "\n".join(
+        f"- position {p['position']}: material {p['material_number']} ({specs.get(p['position'], '')}), "
+        f"quantity {p['quantity']} pieces, unit price {german(p['unit_price'])} EUR, lead time {p['lead_time_weeks']} weeks, "
+        + ", ".join(f"{label} {german(p[key])}" if key in p else f"{label} left blank (unknown)"
+                    for key, label in optional) for p in answer["positions"])
+    return f"""Bid ({answer['decision']}), tender {answer['tender_reference']}, discount {german(answer['discount_percent'])} %,
+total net {german(answer['total_net'])} EUR (net; a displayed gross amount with VAT is not it):
+{rows or '(no positions: no bid)'}
+{f"Unfinished positions to omit with the form's omit option (partial submission): {', '.join(omitted)}" if omitted else ''}"""
+
+
+async def run(task, tab, mail_tab, bid: asyncio.Future, contact: str, deadline, mail_search: str = ""):
+    """Starts before the bid is calculated: the agent enters what doesn't depend on it (bidder data, offer kind) and
+    then waits in `bid_values`, which returns once `bid` holds (answer, omitted, specs)."""
+    async def bid_values(_args):
+        answer, omitted, specs = await bid
+        llm.log("submit", "bid values handed over")
+        return llm.PINNED + values(answer, omitted, specs)
+
     async def fetch_tan(args):
+        answer, _, _ = await bid
+        search = (f"\nA search this mailbox ran earlier, as a URL (change its query to search for the TAN message): "
+                  f"{mail_search}" if mail_search else "")
         mission = f"""{login_line(mail_tab.site)}
 In this mailbox (you may already be logged in), find the newest signing-TAN message for tender
 {answer['tender_reference']}. The tender portal just said: "{args.get('portal_message', '')}". Search for it
 yourself: a list on the page may be left from an earlier search, and its newest message is not necessarily a TAN
 message. Pick only a message that gives a signing TAN for this tender, the one for that request (highest request
-number / newest), open it and finish with found true and the TAN exactly as written."""
+number / newest), open it and finish with found true and the TAN exactly as written.{search}"""
 
         async def check(result, _evidence):
             """A look-up that found no TAN keeps searching instead of handing the portal a non-TAN."""
@@ -40,6 +66,7 @@ number / newest), open it and finish with found true and the TAN exactly as writ
 
     async def verify_summary(_args):
         """Read-back before signing (I6b): every unit price and the total as calculated must be on the summary."""
+        answer, _, _ = await bid
         page = await tab.read() + await tab.read(14000)
         expected = {f"position {p['position']} unit price": german(p["unit_price"]) for p in answer["positions"]}
         expected["total net"] = german(answer["total_net"])
@@ -49,20 +76,13 @@ number / newest), open it and finish with found true and the TAN exactly as writ
         return ("Not on this page as calculated: " + "; ".join(wrong) + ". Where the page shows a different value, "
                 "correct that entry and verify again; a value this summary doesn't show at all is fine.")
 
-    optional = (("base_unit_price", "base price"), ("surcharge_per_unit", "surcharge per piece"),
-                ("packaging_per_unit", "packaging per piece"), ("rebate_total", "project bonus for the position"))
-    rows = "\n".join(
-        f"- position {p['position']}: material {p['material_number']} ({specs.get(p['position'], '')}), "
-        f"quantity {p['quantity']} pieces, unit price {german(p['unit_price'])} EUR, lead time {p['lead_time_weeks']} weeks, "
-        + ", ".join(f"{label} {german(p[key])}" if key in p else f"{label} left blank (unknown)"
-                    for key, label in optional) for p in answer["positions"])
     mission = f"""{login_line(tab.site)}
-The bid is calculated. Your part: enter and sign it on this tender portal, following the brief's Submission section.
-The bidder's own mailbox address, if a contact e-mail is asked for: {contact or 'unknown'}.
-Bid ({answer['decision']}), tender {answer['tender_reference']}, discount {german(answer['discount_percent'])} %,
-total net {german(answer['total_net'])} EUR (net; a displayed gross amount with VAT is not it):
-{rows or '(no positions: no bid)'}
-{f"Unfinished positions to omit with the form's omit option (partial submission): {', '.join(omitted)}" if omitted else ''}
+Your part: enter and sign the bid on this tender portal, following the brief's Submission section.
+The bid is still being calculated. Start now: open this tender's bid submission and enter everything that doesn't
+depend on the bid's values (the bidder's data from the brief, the kind of offer). The bidder's own mailbox address, if
+a contact e-mail is asked for: {contact or 'unknown'}. On the first page that needs a value of the bid (a position,
+material, price, discount or total), call bid_values: it returns the bid once it is calculated (this can take
+minutes; wait for it, don't leave the page).
 Enter every value exactly (German number format, two decimals), one entry per position; positions may come in any
 order, so check which position each page is for. Each model step costs time: enter a whole position, or any other
 page, with one form call and end it with the page's next-step button. A configurator's dependent choices go into that
@@ -72,19 +92,22 @@ alone is enough where an option shows more after it. Once you know the labels of
 latest after the first position), enter every position in one call. Name each choice by its field label: refs are
 lost when a choice is applied, so a step by ref only works before the first apply of a call. A step that finds no
 matching option stops the call and lists the options the page offers (the page may word a value differently than the
-specification above): send the rest of that page again in one form call, with that step in the page's wording.
+specification bid_values gives): send the rest of that page again in one form call, with that step in the page's wording.
 Fields in collapsed sections are opened by the form tool. Never add extra positions, never skip a
 position unless it is listed to omit, never tick an option to add our own general terms and conditions. Before you request the signing
 TAN, call verify_summary on the summary page and correct what it reports. When the form asks for the signing TAN,
 request it once, then call get_tan with the portal's message (the newest request wins; a new request invalidates the
 old TAN; a TAN is valid for five minutes). Review the summary, then submit bindingly; the run ends when the bid is accepted.
 If a value is rejected, read the message and fix it. Finish with what the portal confirmed."""
-    tools = [llm._fn("get_tan", "After requesting a TAN: look up the newest signing TAN in the bidder's mailbox.",
+    tools = [llm._fn("bid_values", "The calculated bid: positions, materials, quantities, prices, discount, total. "
+                     "Waits until the bid is calculated."),
+             llm._fn("get_tan", "After requesting a TAN: look up the newest signing TAN in the bidder's mailbox.",
                      {"portal_message": {"type": "string", "description": "what the portal said about the request"}}),
              llm._fn("verify_summary", "On the summary page before the TAN: compare it with the calculated bid.")]
     hurry = ("Time is almost up and an unsigned bid scores nothing. Stop entering values: omit every position not "
              "completely entered yet with the form's omit option, go to the summary, request the TAN unless you already "
              "did, get it with get_tan, and submit the bid bindingly now. Call finish only after the portal accepted it.")
     return await llm.investigate(tab, system(task), mission, obj(confirmation=STR), deadline, "submit",
-                                 extra_tools=tools, handlers={"get_tan": fetch_tan, "verify_summary": verify_summary}, max_steps=70,
+                                 extra_tools=tools, handlers={"bid_values": bid_values, "get_tan": fetch_tan,
+                                           "verify_summary": verify_summary}, max_steps=70,
                                  warn_at=SIGN_BY, warning=hurry)

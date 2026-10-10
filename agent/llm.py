@@ -212,6 +212,7 @@ FINISH = _fn("finish", "Return your findings when the mission is done (or when t
 HTTP_STATUS = re.compile(r"Fetched \S+ \(HTTP (\d+)\)")
 FINISH_NOW = "Time is almost up: call finish now with your best findings."
 KEPT_PREFIX = "Kept as evidence #"
+PINNED = "[stays in full] "  # a tool result the model needs until the end (the bid to enter) is never shortened
 SHORTENED = "\n[older page read shortened: what you noted is kept; read it again if you need a value you did not note]"
 # a kept page reaches the analyst in full: reopening it to copy values only costs steps (one agent fetched the same
 # six Q&A pages 35 times)
@@ -410,7 +411,7 @@ async def investigate(tab, system: str, mission: str, finish_schema: dict, deadl
         stale = [entry for results in steps[trimmed:-KEEP_STEPS] for entry in results]
         if len(steps) - KEEP_STEPS - trimmed >= TRIM_EVERY or sum(len(e["content"]) for e in stale) >= TRIM_CHARS:
             for old in stale:
-                if len(old["content"]) > 400:
+                if len(old["content"]) > 400 and not old["content"].startswith(PINNED):
                     old["content"] = old["content"][:300] + (SHORTENED_KEPT if old["content"].startswith(KEPT_PREFIX)
                                                              else SHORTENED)
             for old in said[trimmed:-KEEP_STEPS]:

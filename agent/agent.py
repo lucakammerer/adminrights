@@ -226,6 +226,20 @@ async def main() -> int:
             safe("webmail", webmail.run(task, tabs["webmail"], phase1), phase1 + 30),
             safe("erp-login", erp_agent.login(task, tabs["erp"], phase1), phase1 + 30)))
 
+        # The submission starts once the mailbox is done (contact address and TAN tab known), in a tab of its own, while
+        # the bid is still worked out: it enters what doesn't depend on the bid and waits for its values (I6). It took
+        # 240-330 s after the answer when it started there.
+        bid_ready: asyncio.Future = asyncio.get_running_loop().create_future()
+        early_submit = not os.environ.get("DRY_RUN") and (task.get("submission") or {}).get("kind") != "api"
+
+        async def submission():
+            mail = await mail_job
+            portal = await fresh(tabs["tender_portal"])
+            mailbox = await fresh(tabs["webmail"]) if "webmail" in CUT else tabs["webmail"]
+            return await submit_agent.run(task, portal, mailbox, bid_ready, mail.get("own_address", ""), end - 20,
+                                          mail.get("search_url", ""))
+        submitting = start(submission(), end) if early_submit else None
+
         erp_end = end - 6 * 60  # leaves the submission six minutes
         erp_search_end = erp_end - 30 - erp_agent.FINISH_GRACE  # where each ERP agent's own search must end
         erp_tab = tabs["erp"]
@@ -327,11 +341,11 @@ async def main() -> int:
             return 0
 
         specs = {r["position"]: ", ".join(f"{k} {r.get(k)}" for k in SPEC_KEYS) for r in requirements["positions"]}
-        # a phase-1 agent that was cut may still be acting on its tab: the submission then works in a tab of its own
-        portal = await fresh(tabs["tender_portal"]) if "tender-portal" in CUT else tabs["tender_portal"]
-        mailbox = await fresh(tabs["webmail"]) if "webmail" in CUT else tabs["webmail"]
-        outcome = await safe("submit", submit_agent.run(task, portal, mailbox, result["answer"], result["omitted"],
-                                                        specs, mail.get("own_address", ""), end - 20), end)
+        bid_ready.set_result((result["answer"], result["omitted"], specs))
+        if submitting.done():  # the early submission ended before it had the bid (a crash): it starts over
+            llm.log("submit", "the early submission ended before the bid: starting it again")
+            submitting = start(submission(), end)
+        outcome = await safe("submit", submitting, end)
         llm.log("submit", json.dumps(outcome, ensure_ascii=False))
     return 0
 
