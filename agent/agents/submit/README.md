@@ -11,7 +11,7 @@ bindingly. Without a submission the run scores 0.
 
 ## Input / output
 
-- Input: answer from `calc.compute`, specification per position (for the configurator choices), own mailbox address
+- Input: answer and `omitted` positions from `calc.compute`, specification per position (for the configurator choices), own mailbox address
   from the mail agent (contact field), portal login, the mail tab for the TAN.
 - Output `{confirmation}`: what the portal confirmed.
 
@@ -21,7 +21,7 @@ bindingly. Without a submission the run scores 0.
   Values in German format with two decimals (`german`). Whole form pages in one `form` call.
 - Extra tool `get_tan`: starts its own `investigate` in the mail tab, tag `tan`, at most 12 steps, at most 2 min.
   Finds the newest TAN mail for the request just made.
-- Fixed guardrails in the mission: no extra positions, none skipped, never tick our own terms, request the TAN exactly
+- Fixed guardrails in the mission: no extra positions, none skipped except the `omitted` ones (omit option in the form), never tick our own terms, request the TAN exactly
   once (a new request invalidates the old one, valid 5 min), net not gross.
 
 ## Pitfalls
@@ -31,7 +31,7 @@ bindingly. Without a submission the run scores 0.
 
 ## Open
 
-- No partial submission (rule 9). When time is short or a position is missing, nothing is omitted and signed. Needed:
-  a watchdog that submits the current state by end − 3 min at the latest.
+- Unfinished positions are omitted, but there is no watchdog yet: if the submit agent itself runs short of time, it
+  doesn't sign what it has entered so far.
 - Locally the submission alone takes about 275 s. In the first full local run it started around end − 6 min, ran out
   of time after 32 steps and submitted nothing.

@@ -7,13 +7,13 @@ This only says who implements them. **Gather** = which agent collects the eviden
 | --- | --- | --- | --- | --- |
 | 1 | Quantity: tender, overridden by the latest clarification | tender | resolvers.requirements | ✅ |
 | 2 | Requirement from the revision marked current | spec | resolvers.requirements | ✅ |
-| 3 | Material: active, all 5 attributes equal; otherwise no bid | erp | erp.run, calc | ⚠️ see [calc](calc.md#open) |
+| 3 | Material: active, all 5 attributes equal; otherwise no bid | erp | erp.run, calc | ✅ |
 | 4 | Price: condition valid on the scenario date, highest scale reached, discount, HALF_UP | erp | erp.extract, calc | ✅ |
 | 5 | Discount: latest sales director approval for this exact reference, else 0 % | mail | resolvers.commercials | ✅ |
 | 6 | Lead time: from stock if stock covers it, else production | erp | calc | ✅ |
 | 7 | Total: Σ quantity × unit price, HALF_UP | – | calc | ✅ |
 | 8 | Decision: bid with every position, or no bid | – | calc | ✅ |
-| 9 | Partial submission: omit unfinished positions, still sign | – | submit | ❌ missing |
+| 9 | Partial submission: omit unfinished positions, still sign | erp | calc, submit | ⚠️ unfinished positions omitted; no watchdog |
 | 10 | Finding records: ERP by catalogue group, mail by reference + topic | erp, mail | missions | ✅ |
 | 11 | A model chooses navigation, searches, documents | all | architecture | ✅ |
 | 12 | Condition group from Q&A, meaning from the condition-rules mail | tender, mail | resolvers.commercials | ✅ |

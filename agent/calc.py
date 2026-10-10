@@ -48,19 +48,22 @@ def bonus_credit(total: Decimal, bands: list[dict]) -> Decimal:
 
 
 def compute(facts: dict) -> dict:
-    """facts: see FACTS_SCHEMA in agent.py. Returns the answer in the challenge's format plus a calculation trace."""
+    """facts: from `facts` below. Returns the answer in the challenge's format, the positions left unfinished (to omit
+    in the form, rule 9) and a calculation trace."""
     positions = facts["positions"]
     reference = facts["tender_reference"]
     approval = facts.get("discount") or {}
     percent = d(approval.get("percent"))
     threshold = approval.get("min_order_value")
 
-    if any(not p.get("material_number") for p in positions):
+    if any(p.get("no_match") for p in positions):
         if threshold not in (None, ""):
             percent = Decimal(0)
         return {"answer": {"tender_reference": reference, "decision": "no_bid", "currency": "EUR",
                            "discount_percent": float(percent), "positions": [], "total_net": 0},
-                "trace": "a position has no matching active material: no_bid"}
+                "omitted": [], "trace": "a position has no matching active material: no_bid"}
+    omitted = [p["position"] for p in positions if not p.get("material_number") or not p.get("scales")]
+    positions = [p for p in positions if p["position"] not in omitted]
 
     rows = {}
     for p in positions:
@@ -116,7 +119,7 @@ def compute(facts: dict) -> dict:
                      f"cartons {cartons} packaging {packaging} rebate {rebate} -> {unit_price} x {qty}, {weeks} weeks")
     return {"answer": {"tender_reference": reference, "decision": "bid", "currency": "EUR",
                        "discount_percent": float(percent), "positions": answer_rows, "total_net": float(cents(total))},
-            "trace": "\n".join(trace)}
+            "omitted": omitted, "trace": "\n".join(trace + [f"omitted (unfinished): {omitted}"] * bool(omitted))}
 
 
 def number(text, fmt: str = "") -> float:
@@ -161,7 +164,7 @@ def facts(tender, requirements, commercials, erp: dict) -> dict:
             index = next(iter(commercials["metal_indices"].values()))
         positions.append({
             "position": key, "quantity_pieces": int(req["final_quantity_pieces"]),
-            "material_number": e.get("material_number") or None,
+            "material_number": e.get("material_number") or None, "no_match": e.get("no_match") is True,
             "scales": [{"min_quantity": s["from_quantity"], "price": number(s["price_as_shown"], fmt)}
                        for s in pc.get("scales") or []],
             "price_unit": pc.get("price_unit_pieces") or 1, "currency": currency,

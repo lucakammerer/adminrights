@@ -62,8 +62,8 @@ async def run(task, tab, requirement: dict, deadline):
 Your part: find the material for one requirement in this ERP. Requirement: {json.dumps(requirement, ensure_ascii=False)}
 1. Search the catalogue group (Kataloggruppe) and read every result page.
 2. Compare each candidate's bore, stroke, pressure, mounting and certification with the requirement: all must be
-   exactly equal. The material must be active/released (not blocked/gesperrt). If none qualifies, finish with
-   material_number empty and say why.
+   exactly equal. The material must be active/released (not blocked/gesperrt). If you checked every candidate
+   and none qualifies, finish with material_number empty, no_match true and say why.
 3. For the chosen material, keep with save_evidence every page that shows its facts: its description (pieces per
    carton, allocation mass, surcharge mass, price index key), technical data, status and lead times (from stock and
    production), the stock detail by storage location / stock type, and the price condition valid on the scenario
@@ -75,7 +75,7 @@ Finish with material_number and why; the facts are read from the pages you kept.
         pages[:] = evidence
         return await extract(task, requirement, result, evidence)
 
-    result = await llm.investigate(tab, SYSTEM, mission, obj(material_number=STR, why=STR), deadline,
+    result = await llm.investigate(tab, SYSTEM, mission, obj(material_number=STR, no_match=BOOL, why=STR), deadline,
                                    f"erp:{requirement.get('catalogue_group')}", max_steps=40, check=check)
     if result.get("material_number") and not result.get("price_condition"):
         result, _ = await extract(task, requirement, result, result.get("evidence", []))

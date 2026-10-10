@@ -21,6 +21,15 @@ from agents.tender import agent as tender_agent
 from browser import Tab
 
 
+async def safe(tag: str, job, fallback=None):
+    """One agent's crash must not end the run: log it and carry on with what the others found."""
+    try:
+        return await job
+    except Exception as error:  # noqa: BLE001
+        llm.log(tag, f"failed: {type(error).__name__}: {str(error)[:300]}")
+        return {} if fallback is None else fallback
+
+
 async def main() -> int:
     started = time.time()
     task, token = contract.load_run()
@@ -44,8 +53,10 @@ async def main() -> int:
 
         phase1 = end - 9 * 60
         tender, spec, mail, _ = await asyncio.gather(
-            tender_agent.run(task, tabs["tender-portal"], phase1), spec_agent.run(task, tabs["customer-portal"], phase1),
-            mail_agent.run(task, tabs["mail"], phase1), erp_agent.login(task, tabs["erp"], phase1))
+            safe("tender", tender_agent.run(task, tabs["tender-portal"], phase1)),
+            safe("spec", spec_agent.run(task, tabs["customer-portal"], phase1)),
+            safe("mail", mail_agent.run(task, tabs["mail"], phase1)),
+            safe("erp-login", erp_agent.login(task, tabs["erp"], phase1)))
         llm.log("tender", json.dumps(tender, ensure_ascii=False)[:3000])
         llm.log("spec", json.dumps(spec, ensure_ascii=False)[:3000])
         llm.log("mail", json.dumps(mail, ensure_ascii=False)[:4000])
@@ -67,12 +78,12 @@ async def main() -> int:
                 page = await erp_tab.page.context.new_page()
                 await page.goto(erp_tab.site["url"], wait_until="domcontentloaded")
                 tab = Tab(page, erp_tab.site)
-            return key, await erp_agent.run(task, tab, req, end - 6 * 60)
+            return key, await safe(f"erp:{req.get('catalogue_group')}", erp_agent.run(task, tab, req, end - 6 * 60))
 
         found = dict(await asyncio.gather(*(erp_for(k, r, i == 0) for i, (k, r) in enumerate(distinct.items()))))
         erp = {r["position"]: found[tuple(str(r.get(k)) for k in spec_keys)] for r in requirements["positions"]}
         llm.log("erp", json.dumps(erp, ensure_ascii=False)[:4000])
-        commercials = await commercials_job
+        commercials = await safe("commercials", commercials_job)
         llm.log("commercials", json.dumps(commercials, ensure_ascii=False))
 
         facts = calc.facts(tender, requirements, commercials, erp)
@@ -82,7 +93,7 @@ async def main() -> int:
         llm.log("answer", json.dumps(result["answer"], ensure_ascii=False))
 
         specs = {r["position"]: ", ".join(f"{k} {r.get(k)}" for k in spec_keys) for r in requirements["positions"]}
-        outcome = await submit_agent.run(task, tabs["tender-portal"], tabs["mail"], result["answer"], specs,
+        outcome = await submit_agent.run(task, tabs["tender-portal"], tabs["mail"], result["answer"], result["omitted"], specs,
                                    mail.get("own_address", ""), end - 20)
         llm.log("submit", json.dumps(outcome, ensure_ascii=False))
     return 0

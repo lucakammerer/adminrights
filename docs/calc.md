@@ -15,7 +15,9 @@ membership, allocation mass. Plus reference, discount, pool fee, bonus bands.
 
 ## compute
 
-1. Any position without a material: `no_bid`, no positions, total 0; a conditional approval → 0 %.
+1. Any position the ERP agent reported as `no_match`: `no_bid`, no positions, total 0; a conditional approval → 0 %.
+   Positions without material or prices otherwise are unfinished: left out of the answer and returned as `omitted`,
+   so the submit agent omits them in the form (rule 9).
 2. Base price = scale price (highest scale reached, `scale_price`) / price unit × rate, to the cent.
 3. Order value before discount = Σ quantity × base. Below `min_order_value` → 0 %.
 4. Sum demand per material across positions (shared stock, delivery commitment).
@@ -28,8 +30,3 @@ membership, allocation mass. Plus reference, discount, pool fee, bonus bands.
 8. Total = Σ quantity × final price, to the cent. Plus a calculation trace (`trace`) for the logs.
 
 Reported fields: base, surcharge per piece (mass + setup, before discount), packaging per piece, bonus per position.
-
-## Open
-
-- Step 1 doesn't distinguish "no material" from "ERP agent failed" (see [ERP agent](../agent/agents/erp/README.md#open)). In the second case
-  the position should be omitted instead of `no_bid`; a no bid in a bid scenario loses almost all position points.
