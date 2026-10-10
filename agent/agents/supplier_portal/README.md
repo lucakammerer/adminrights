@@ -1,4 +1,4 @@
-# Spec agent
+# Supplier portal agent
 
 ## Mission
 
@@ -18,7 +18,7 @@ Gathers for 2, 3, 17, 20 (current revision, attributes for material matching, pi
 
 ## Implementation
 
-`agent.py` `run` → `llm.investigate`, tag `spec`, at most 40 steps, phase 1 deadline.
+`agent.py` `run` → `llm.investigate`, tag `supplier-portal`, at most 40 steps, phase 1 deadline.
 `original_wording` stays verbatim because it may state a usable stroke with a reserve key, or pieces per set.
 
 ## Pitfalls

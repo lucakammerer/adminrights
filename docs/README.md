@@ -18,9 +18,9 @@ Each agent documents itself next to its code, in `agent/agents/<name>/README.md`
 
 | Agent | Contents |
 | --- | --- |
-| [tender](../agent/agents/tender/README.md) | Tender portal: positions and Q&A |
-| [spec](../agent/agents/spec/README.md) | Supplier portal: current revision and requirements |
-| [mail](../agent/agents/mail/README.md) | Mailbox: approvals and condition mails |
+| [tender_portal](../agent/agents/tender_portal/README.md) | Tender portal: positions and Q&A |
+| [supplier_portal](../agent/agents/supplier_portal/README.md) | Supplier portal: current revision and requirements |
+| [webmail](../agent/agents/webmail/README.md) | Webmail: approvals and condition mails |
 | [erp](../agent/agents/erp/README.md) | ERP: login, material per requirement, fact extraction |
 | [resolvers](../agent/agents/resolvers/README.md) | Requirements and commercial terms from the evidence |
 | [submit](../agent/agents/submit/README.md) | Configurator, TAN, signing |

@@ -26,7 +26,7 @@ match exactly, and keep every page holding its facts. If there is none, report t
 - `agent.py` `login`: tag `erp-login`, at most 20 steps, phase 1. Only warms up the session.
 - `agent.py` `run`: tag `erp:<catalogue group>`, at most 40 steps, deadline end − 6 min.
   `main` dedupes requirements and runs each in its own tab of the same browser.
-- `agent.py` `extract`: runs as `check` on `finish`. One `ask_json` reads the facts **only from the kept
+- `agent.py` `extract`: runs as `check` on `finish`. One `ask_json` (effort low: 13 s instead of 56 s; thinking off rewrote number formats) reads the facts **only from the kept
   pages**. If required fields or scale prices are missing, `finish` is refused with a list of what is missing.
 
 ## Pitfalls
