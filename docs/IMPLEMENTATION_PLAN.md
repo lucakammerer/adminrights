@@ -161,7 +161,7 @@ Every browser agent is the same loop; agents differ only in mission, result sche
   and keeps a page with the same content only once.
 - **`check` bounds:** its model calls take at most `CHECK_TIMEOUT` (60 s) each and end at the agent's deadline; a
   check that fails or runs out of time lets the result through unchecked.
-- **Model:** `AGENT_MODEL`, default the hosted Qwen; a `<provider>/<model>` id runs on OpenRouter through the run's
+- **Model:** `AGENT_MODEL`, default Claude Haiku; a `<provider>/<model>` id runs on OpenRouter through the run's
   proxy with the team secret `OPENROUTER_API_KEY` (Anthropic models with a moving cache breakpoint); its last three
   attempts at a call go to the hosted Qwen (`llm.FALLBACK`), which `agent.json` keeps warm at no cost in time; a call
   without an answer after `HEDGE` (15 s) gets a twin and the first answer wins (about one OpenRouter call in six never
@@ -343,7 +343,7 @@ on disagreement it logs both, re-asks once, then the rule wins.
 
 | Use | Model | How |
 | --- | --- | --- |
-| Navigation and reading (tool loop) | hosted Qwen | native tool calls; parallel tool calls allowed |
+| Navigation and reading (tool loop) | Claude Haiku via OpenRouter (team secret) | native tool calls, unstreamed, hedged after 15 s, prompt cache; the hosted Qwen for a call's last three attempts |
 | Resolvers and ERP fact extraction | hosted Qwen | JSON mode, up to 3 attempts |
 | Prose → class (condition rules) | hosted Qwen | majority of 3 only if tests show errors (E4) |
 | Cheap yes/no checks | Clef | not used; only if measurably faster (E5) |

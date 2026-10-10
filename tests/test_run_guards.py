@@ -98,18 +98,42 @@ def ask(serve, silence: float = 30, **limits):
     """llm.chat against a local server; returns the reply and the seconds it took."""
     async def scenario():
         server = await asyncio.start_server(serve, "127.0.0.1", 0)
-        real, real_silence = llm._client, llm.SILENCE
+        real, real_silence, real_openrouter = llm._client, llm.SILENCE, llm.OPENROUTER
         llm._client = AsyncOpenAI(base_url=f"http://127.0.0.1:{server.sockets[0].getsockname()[1]}/v1",
                                   api_key="k", max_retries=0)
-        llm.SILENCE = silence
+        llm.SILENCE, llm.OPENROUTER = silence, False  # the streamed path, as on the hosted Qwen
         began = time.time()
         try:
             with llm.limits(time.time() + limits.get("within", 30)):
                 return await llm.chat([{"role": "user", "content": "x"}]), time.time() - began
         finally:
-            llm._client, llm.SILENCE = real, real_silence
+            llm._client, llm.SILENCE, llm.OPENROUTER = real, real_silence, real_openrouter
             server.close()
     return asyncio.run(scenario())
+
+
+class HedgedCall(unittest.TestCase):
+    def test_an_unanswered_openrouter_call_gets_a_twin(self):
+        asked = []
+
+        async def reply(*_args, **_kwargs):
+            asked.append(time.time())
+            if len(asked) == 1:
+                await asyncio.sleep(30)  # the call that never comes back
+            return "twin"
+
+        async def scenario():
+            real = llm.reply, llm.OPENROUTER, llm.HEDGE
+            llm.reply, llm.OPENROUTER, llm.HEDGE = reply, True, 0.2
+            began = time.time()
+            try:
+                with llm.limits(time.time() + 10):
+                    return await llm.chat([{"role": "user", "content": "x"}]), time.time() - began
+            finally:
+                llm.reply, llm.OPENROUTER, llm.HEDGE = real
+        answer, seconds = asyncio.run(scenario())
+        self.assertEqual((answer, len(asked)), ("twin", 2))
+        self.assertLess(seconds, 2)
 
 
 class StuckCallAskedAgain(unittest.TestCase):

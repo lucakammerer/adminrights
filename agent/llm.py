@@ -13,9 +13,10 @@ from openai.lib.streaming.chat import ChatCompletionStreamState
 
 import paging
 
-MODEL = os.environ.get("AGENT_MODEL", "qwen3.8-flash-next")
+MODEL = os.environ.get("AGENT_MODEL", "anthropic/claude-haiku-5.5")
 # "<provider>/<model>" runs on OpenRouter with the team secret OPENROUTER_API_KEY, through the run's proxy: no shared
-# queue (35-47 % of the hosted model's call time was queue wait) and published prices
+# queue (35-47 % of the hosted Qwen's call time was queue wait). Haiku signed 100 in 580-598 s for $0.11 (81 % of its
+# input cached); the hosted Qwen took 13-18 min for $0.18 and found no answer at all under load on 2026-10-10.
 OPENROUTER = "/" in MODEL
 # Anthropic models cache only behind a breakpoint; this top-level one moves with the conversation
 CACHE = {"cache_control": {"type": "ephemeral"}} if MODEL.startswith("anthropic/") else {}
