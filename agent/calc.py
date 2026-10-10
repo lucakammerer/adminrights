@@ -121,7 +121,8 @@ def compute(facts: dict) -> dict:
                             "base_unit_price": float(base), "surcharge_per_unit": float(cents(mass + setup / qty)),
                             "packaging_per_unit": float(cents(packaging / qty)), "rebate_total": float(rebate)})
         trace.append(f"{key}: {qty} pcs {material} base {base} mass {mass} rule {rule} setup {setup} "
-                     f"cartons {cartons} packaging {packaging} rebate {rebate} -> {unit_price} x {qty}, {weeks} weeks")
+                     f"cartons {cartons} packaging {packaging} rebate {rebate} -> {unit_price} x {qty}, {weeks} weeks"
+                     + "".join(f" MISSING {gap}" for gap in p.get("gaps") or []))
     return {"answer": {"tender_reference": reference, "decision": "bid", "currency": "EUR",
                        "discount_percent": float(percent), "positions": answer_rows, "total_net": float(cents(total))},
             "omitted": omitted, "trace": "\n".join(trace + [f"omitted (unfinished): {omitted}"] * bool(omitted))}
@@ -203,6 +204,8 @@ def facts(tender, requirements, commercials, erp: dict) -> dict:
             "setup_pool_member": bool(c.get("setup_pool_member")),
             "allocation_mass": grams_to_kg(e.get("allocation_mass") or 0) * 1000,
             "project_bonus_member": bool(c.get("project_bonus_member")),
+            "gaps": [gap for gap, missing in (("FX rate", currency != "EUR" and fx is None),
+                                              ("metal index", e.get("surcharge_mass") and index is None)) if missing],
         })
     reference = commercials.get("tender_reference") or tender.get("tender_reference") or ""
     return {"tender_reference": reference, "discount": commercials.get("discount") or {},

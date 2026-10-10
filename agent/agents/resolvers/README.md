@@ -58,5 +58,5 @@ JSON mode, up to 3 attempts.
 
 - Both depend on a single model call. A mistake here hits many fields at once. The `*_reasoning` fields in the logs
   are the first place to debug.
-- A foreign-currency price whose FX key matches no rate is priced 1:1 (`calc.lookup` returns nothing). The key
-  match itself is tolerant (case, spaces, dashes, one key containing the other).
+- A foreign-currency price whose FX key matches no rate is priced 1:1, a mass without an index adds no surcharge;
+  both show as `MISSING` in the calc trace. The key match itself is tolerant (`calc.lookup`).
