@@ -269,8 +269,8 @@ on disagreement it logs both, re-asks once, then the rule wins.
 | # | Rule | Status |
 | --- | --- | --- |
 | 1 | Visibility truth: drop `display:none`, `visibility:hidden`, zero opacity or font size, `hidden`, `aria-hidden` | ✅ |
-| 1b | Also drop off-screen, zero-size and clipped content; count what was dropped | ⏳ I17 |
-| 2 | Reveal real values: image and canvas labels, tooltips, collapsed `<details>`, select options, input values | ✅ |
+| 1b | Off-screen and screen-reader-only (clipped) text kept but marked `(off-screen text: …)` and counted: recorded pages showed no such hiding, and real values can live there (decided on the recordings) | ✅ I17 |
+| 2 | Reveal real values: image and canvas labels, tooltips (also `title` of plain elements), CSS-generated text (`::before`/`::after`), collapsed `<details>`, select options, input values; a canvas without text is marked; names, labels and tooltips skip hidden descendants (decoys inside them) | ✅ I17 |
 | 3 | Normalize text: remove invisible characters; keep number-format hints verbatim | ✅ |
 | 4 | Controls as `[n:kind "label"]` refs the tools act on; links show their href | ✅ |
 | 5 | Same-origin iframes inlined, nested ones too | ✅ |
@@ -284,16 +284,16 @@ on disagreement it logs both, re-asks once, then the rule wins.
 
 | Obstacle | Today | Change |
 | --- | --- | --- |
-| Cookie walls, login | the model | auto re-login when a login form appears mid-run (I13) |
+| Cookie walls, login | the model; an expired session is logged in again by code when the very form the model typed the site's password into reappears after the tab got past it (`Tab.recover`, `Tab.credential`), never on a TAN or other form; a username or password the model typed one or two characters off is entered exactly as the site's login gives it (`Tab.credential`) | ✅ I13 |
 | Modal dialogs | closed in code on every read | — |
-| Transient error pages | the model retries | code-side retry before the model sees the page (I13) |
+| Transient error pages | code reloads a 5xx page (GET only) twice and `fetch` retries twice before the model sees it; a `fetch` without an answer for 40 s returns as HTTP 504 (never kept as evidence), all inside `llm.TOOL_TIMEOUT`; the model is told | ✅ I13 |
 | Unlock gates | the model (`fill` on a slider, `check`) | — |
 | Look-alike controls | the model, guided by hrefs | — |
-| Fixed 1.4 s settle on every read | — | adaptive settle (I13) |
+| Settle on every read | waits while the page has short timers pending (delayed popups) or its DOM changed in the last 300 ms, at most 1.5 s; untracked pages keep the fixed wait | ✅ I13 |
 
 ### 5.3 Documents, numbers and dates
 
-- `fetch` and downloads: ZIP (recursive), CSV, TXT, HTML ✅; PDF needs the `pypdf` dependency (I17).
+- `fetch` and downloads: ZIP (recursive), CSV, TXT, HTML, PDF (`pypdf`) ✅. A fetched page is laid out in a hidden script-free frame, so its own style rules decide what is hidden (I17).
 - Numbers are parsed by code with the stated format; ambiguous forms are refused, never guessed (I10, RULES 4.1).
 - Dates are compared in UTC; models report them as written, with their timezone and format hints (I18).
 
@@ -327,13 +327,13 @@ Same jobs and rules, different software, look, navigation, site names and data, 
 | --- | --- |
 | Other site ids or names | roles and submission target from the run (I3) |
 | Other navigation and labels | model navigation over page text; generic prompts ✅ |
-| Information on other sites | gap sweep for missing facts and unresolved keys (I16) |
-| Other mail subjects | topics and senders from the brief (I12) |
-| Other document formats | ZIP, CSV, TXT, HTML ✅; PDF (I17) |
+| Information on other sites | gap sweep for missing facts and unresolved keys: agent ✅ (`agents/sweep`), stage in `main` open (I16) |
+| Other mail subjects | topics and senders from the brief ✅ (I12) |
+| Other document formats | ZIP, CSV, TXT, HTML, PDF ✅ (I17) |
 | Other number and date conventions | strict parsing with hints (I10); UTC comparison |
 | A no-bid scenario | unfinished ≠ no match (I1); no-bid gate (I11); mutation test with a blocked match |
 | More positions, other units | nothing assumes a count or a unit ✅ |
-| Known traps in a new skin | trap catalogue (RULES §8); mutation tests (I20) |
+| Known traps in a new skin | trap catalogue (RULES §8); mutation tests ✅ (I20); live S2 (I24) |
 
 ## 8. Staying compliant
 
@@ -351,9 +351,9 @@ Same jobs and rules, different software, look, navigation, site names and data, 
 | Level | What | Increments |
 | --- | --- | --- |
 | Unit tests | calc golden test with facts as the pages show them, allocation ties, band edges, inclusive ceilings and thresholds; number parser; validators; selection | I10, I11, I14, I18 |
-| Recorded pages | pages saved from dry runs; reader tests for every trap category | I17 |
+| Recorded pages | pages recorded by `tools/stress/run_agents.py`, a few kept in `eval/fixtures/pages/`; reader tests for every trap category on synthetic pages (`tests/test_reader.py`) ✅ | I17 |
 | Dry run + score | `tools/score.sh`: a local run with `DRY_RUN=1` stops after the answer, `eval/compare.py` scores the logged answer with the official weights | I7 |
-| Mutation tests | recorded pages relabelled, locale-swapped, nested in iframes, with injected decoys and shuffled rows: extraction must not change | I20 |
+| Mutation tests | recorded pages relabelled, locale-swapped, with hidden decoys and shuffled menus: extraction must not change ✅ (`tests/test_mutations.py`); extra iframes and shuffled rows not yet | I20 |
 | Chaos runs *(stretch)* | local runs with random 503s, a forced session expiry, slow responses: the run must still sign | — |
 | Mirror world *(stretch)* | a small local re-skin of the four jobs with information split differently and a synthetic scenario with a known answer | — |
 | Sandbox test runs | the official per-field breakdown; paste each result in its PR | I9 |
@@ -417,23 +417,23 @@ Every item has exactly one owner. When it touches a file someone else owns (§14
 | ID | Change | Where | Acceptance | Rules | Owner |
 | --- | --- | --- | --- | --- | --- |
 | I10 | Strict numbers: a number's own format beats the hint ✅, thousands separators in grams ✅, text values ✅ (`tests/test_calc.py`); remaining: ambiguous forms refused (the agent re-reads); `Decimal` end to end | `numbers.py`, `calc.py` | parser tests incl. the probes in PLAN_COMPARISON §2.3 | 4, 22 | L |
-| I11 | ERP match check in code ✅ (`validate.material_mismatch` in the ERP `check`, `tests/test_validate.py`); no-bid gate ✅ (`main` `erp_search`: a `no_match` with ≥ 150 s left gets a second agent in a fresh tab; a material it finds wins); remaining: answer schema validated before signing | `agents/erp`, `validate.py`, `agents/submit` | tests with look-alike and blocked candidates | T1.6, 3, 7, 8 | L |
-| I12 | Mail topics and senders parsed from the brief; generic wording for the approval search | `agents/webmail` | no public mail subject in prompts | T0.11, 5, 10, 21 | Y |
-| I13 | Code-side retry of transient error pages; auto re-login; adaptive settle | `browser.py` | fewer model turns on the ERP in the dry-run log | T3.2 | Y |
+| I11 | ERP no-match needs proof on kept pages ✅ (`erp.unproven`: result pages kept, every candidate listed with its difference, `tests/test_erp_no_match.py`); ERP match check in code ✅ (`validate.material_mismatch` in the ERP `check`, `tests/test_validate.py`); no-bid gate ✅ (`main` `erp_search`: a `no_match` with ≥ 150 s left gets a second agent in a fresh tab; a material it finds wins); remaining: answer schema validated before signing | `agents/erp`, `validate.py`, `agents/submit` | tests with look-alike and blocked candidates | T1.6, 3, 7, 8 | L |
+| I12 | ✅ Mail topics and senders parsed from the brief (`common.mail_records`, `tests/test_brief.py`); approval found by sender and meaning; technical release for `requirements` from the brief | `agents/webmail`, `agents/common.py`, `agents/resolvers` | no public mail subject in prompts | T0.11, 5, 10, 21 | Y |
+| I13 | ✅ Code-side retry of transient error pages; auto re-login; adaptive settle; `form` ref click falls back to a DOM click, a null value is never typed (`tests/test_browser.py`) | `browser.py` | fewer model turns on the ERP in the dry-run log | T3.2 | Y |
 | I14 | ✅ Calculator tests (`tests/test_calc.py`): golden test, values written as text, allocation ties, band edges, inclusive ceilings and thresholds, shared stock | `tests/` | green | 4–9, 12, 15–18, 22–27 | L |
 | I15 | Loud failures instead of silent fallbacks (FX, metal index): tolerant key match and `MISSING` in the trace ✅; omitted positions per rule 9 ✅ (also when all are omitted); a material without prices is submitted with its other fields ✅ | `calc.py` | tests | 9, 22, 28 | L |
 | I23 | Cost: cache-friendly loop (append-only history; when it grows too long, restart from the notes and kept evidence); measure Clef against Qwen for yes/no and pick decisions, then use it or drop it | `llm.py` | cached share of input up; cost per run ≤ $0.10 | T3.4 | F |
-| I24 | Stress harness for levels S1–S3 (§14.1) | `tools/stress/` | S1 and S3 pass; S2 time-boxed to 2 h | T1.12, 3, 19 | Y |
+| I24 | Stress harness for levels S1–S4 (§14.1): S1 ✅ (`s1_sites.py`); single-agent runner and recorder ✅ (`run_agents.py`: results, kept evidence, raw HTML, step summary, timing, gather score against `eval/public-1/gather-facts.json`); S3 `s3_nobid.py` (live: blocked → no_bid 2/2, unchanged → bid, starved → no false no-bid); S2 `--mutate` (`mutations.js`) and S4 `--s4` built, not yet passed live | `tools/stress/` | S1 and S3 pass; S2 time-boxed to 2 h | T1.12, 3, 19 | Y |
 
 ### P2: private-dataset readiness
 
 | ID | Change | Where | Acceptance | Rules | Owner |
 | --- | --- | --- | --- | --- | --- |
-| I16 | Gap sweep: after the first pass, code lists missing facts and unresolved keys; short model missions to the other sites | `agent.py`, `agents/common.py` | a fake run with Q&A on another site still finds them (S4) | 10, 19 | Y |
-| I17 | Reader hardening (§5.1 rows 1b, 8); `pypdf` dependency | `reader.js`, `pyproject.toml` | recorded-page tests; a PDF is read | traps 8, 9 | Y |
+| I16 | Gap sweep: `agents/sweep` ✅ (`gaps` in code, one mission per open fact and website, `tests/test_sweep.py`); remaining: a stage in `main` and a second resolver call with the swept pages (I4) | `agent.py`, `agents/sweep` | a fake run with Q&A on another site still finds them (S4) | 10, 19 | Y |
+| I17 | ✅ Reader hardening (§5.1 rows 1b, 2; row 8 open, optional); `pypdf` dependency (`tests/test_reader.py`) | `reader.js`, `pyproject.toml` | recorded-page tests; a PDF is read | traps 8, 9 | Y |
 | I18 | Code-side selection cross-check (§4.4) | `agents/resolvers`, `select.py` | synthetic-record tests per trap category | 1, 2, 5, 12–14, 16, 17, 20–26, 28 | L |
 | I19 | Extraction while browsing: each kept page read into records right away (small parallel calls), so resolvers only select | `llm.py`, `agents/*` | resolvers finish in seconds after the last agent | T3.2, T4.2 | F |
-| I20 | Mutation tests on recorded pages | `tests/` | extraction stable | 19 | Y |
+| I20 | ✅ Mutation tests on recorded pages (`tests/test_mutations.py`, pages in `eval/fixtures/pages/`, mutations shared with S2 in `tools/stress/mutations.js`) | `tests/` | extraction stable | 19 | Y |
 
 ### P3: polish
 
@@ -470,7 +470,7 @@ Every item has exactly one owner. When it touches a file someone else owns (§14
 | | **Efficiency** · Finn | **Generalization** · Yazan | **Quality & Release** · Luca |
 | --- | --- | --- | --- |
 | KPI | cost × time per run | stress levels S1–S3 pass (S4 stretch) | dry runs and test runs score 100; every run signs; audit clean |
-| Today → target | ~15 min × $0.23 ≈ 207 $·s → < 8 min × ~$0.10 ≈ 48 $·s | none built yet → S1–S3 green | no complete test run yet → 100 on every run |
+| Today → target | ~15 min × $0.23 ≈ 207 $·s → < 8 min × ~$0.10 ≈ 48 $·s | S1 green, S3 2/2 + controls, S2/S4 built → S1–S3 green | no complete test run yet → 100 on every run |
 | Measured by | `atira run_profile`, `get_run`, I21 summary | `tools/stress/` (I24) | `tools/score.sh` (I7), test-run breakdown, `bench/RUNS.md` |
 | Must not break | the score | the time budget | — (owns the PR gate) |
 | Run-killer owned | always sign: watchdog (I6) | — | never a false no-bid (I1, I11) |
@@ -480,7 +480,7 @@ Every item has exactly one owner. When it touches a file someone else owns (§14
 Stress levels:
 
 - **S1:** renamed and reordered site ids. Pass: no crash, same answer.
-- **S2:** live scouting pages rewritten during local runs (relabelled UI text, swapped number formats, extra iframes,
+- **S2:** live scouting pages rewritten during local runs (relabelled UI text, swapped number formats, extra iframes (not yet),
   injected decoys, shuffled lists). Pass: signs and scores ≥ 95. Time-boxed to 2 h.
 - **S3:** a no-bid variant where the matching material shows as blocked. Pass: answers no_bid.
 - **S4 (stretch):** information moved between sites. Pass: the gap sweep (I16) finds it.
@@ -494,7 +494,7 @@ One owner per file, written into [`.github/CODEOWNERS`](../.github/CODEOWNERS):
 | Owner | Files |
 | --- | --- |
 | Finn | `agent/agent.py`, `agent/budget.py`, `agent/llm.py`, `agent/agents/submit/`, `agent/agent.json` |
-| Yazan | `agent/browser.py`, `agent/reader.js`, `agent/agents/common.py`, `agent/agents/tender_portal/`, `agent/agents/supplier_portal/`, `agent/agents/webmail/`, `agent/agents/erp/`, `tools/stress/` |
+| Yazan | `agent/browser.py`, `agent/reader.js`, `agent/agents/common.py`, `agent/agents/tender_portal/`, `agent/agents/supplier_portal/`, `agent/agents/webmail/`, `agent/agents/erp/`, `agent/agents/sweep/` (CODEOWNERS entry pending), `tools/stress/` |
 | Luca | `agent/calc.py`, `agent/numbers.py`, `agent/validate.py`, `agent/select.py`, `agent/agents/resolvers/`, `tests/`, `eval/`, `tools/`, `bench/`, `docs/` |
 
 An item may change a file it doesn't own (I1 marks forced finishes in `llm.py`, I5 trims missions, I6b reads back
@@ -514,8 +514,9 @@ in `agents/submit`); the file's owner reviews that PR.
   `agents/common.py` split by owner, and `investigate` marks forced finishes. After that, everyone works in their own
   files.
 - **Saved fixtures:** one full run's stage outputs and kept evidence, so resolvers, calculator and validators are
-  tested offline in seconds.
-- **Single-agent runner:** run one gathering agent alone against the scouting site.
+  tested offline in seconds. ✅ `tools/stress/run_agents.py` writes them (results, kept evidence, raw HTML); a few
+  recorded pages are kept in `eval/fixtures/pages/`.
+- **Single-agent runner:** run one gathering agent alone against the scouting site. ✅ `tools/stress/run_agents.py`.
 - **Fake agents:** test the scheduling and the watchdog without sites or models.
 - Small PRs, merged into `main` at least every 2 hours.
 

@@ -24,6 +24,7 @@ Each agent documents itself next to its code, in `agent/agents/<name>/README.md`
 | [webmail](../agent/agents/webmail/README.md) | Webmail: approvals and condition mails |
 | [erp](../agent/agents/erp/README.md) | ERP: login, material per requirement, fact extraction |
 | [resolvers](../agent/agents/resolvers/README.md) | Requirements and commercial terms from the evidence |
+| [sweep](../agent/agents/sweep/README.md) | Gap sweep: facts the first pass left open, looked for on the other sites |
 | [submit](../agent/agents/submit/README.md) | Configurator, TAN, signing |
 
 ## Every agent README has the same sections

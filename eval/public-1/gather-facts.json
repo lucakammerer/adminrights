@@ -1,0 +1,42 @@
+{
+  "_about": "Intermediate facts of public-1 that the gathering agents and resolvers must establish (from eval/oracle.py, eval/derivation.md and eval/public-1/scouting-notes.md). Local test data only: never copy into agent/.",
+  "tender_reference": "VG-2027-7093",
+  "requirements": {
+    "01.01": {"final_quantity_pieces": 25, "bore_mm": 80, "stroke_mm": 200, "pressure_bar": 210, "catalogue_group": "GR-8923"},
+    "01.02": {"final_quantity_pieces": 29, "bore_mm": 63, "stroke_mm": 500, "pressure_bar": 250, "catalogue_group": "GR-5152"},
+    "01.03": {"final_quantity_pieces": 16, "bore_mm": 63, "stroke_mm": 500, "pressure_bar": 250, "catalogue_group": "GR-5152"},
+    "01.04": {"final_quantity_pieces": 21, "bore_mm": 50, "stroke_mm": 600, "pressure_bar": 210, "catalogue_group": "GR-6617"},
+    "01.05": {"final_quantity_pieces": 130, "bore_mm": 125, "stroke_mm": 300, "pressure_bar": 250, "catalogue_group": "GR-4287"}
+  },
+  "commercials": {
+    "discount_percent": 5,
+    "discount_min_order_value": 1.00,
+    "setup_pool_fee": 517.25,
+    "fx_rate": 1.0873,
+    "metal_index": 3.15,
+    "positions": {
+      "01.01": {"discount_applies_to": "base", "carton_price": 13.25, "setup_pool_member": false, "project_bonus_member": false, "setup_fee": 0, "commitment_max_pieces": 24},
+      "01.02": {"discount_applies_to": "base", "carton_price": 13.25, "setup_pool_member": false, "project_bonus_member": false, "setup_fee": 0, "commitment_max_pieces": 45},
+      "01.03": {"discount_applies_to": "none", "carton_price": 13.25, "setup_pool_member": true, "project_bonus_member": true, "setup_fee": 85.00, "commitment_max_pieces": 44},
+      "01.04": {"discount_applies_to": "base", "carton_price": 13.25, "setup_pool_member": true, "project_bonus_member": true, "setup_fee": 0, "commitment_max_pieces": 21},
+      "01.05": {"discount_applies_to": "base_and_surcharge", "carton_price": 13.25, "setup_pool_member": true, "project_bonus_member": true, "setup_fee": 57.50, "commitment_max_pieces": 160}
+    }
+  },
+  "mail": {
+    "director_sender": "leitung@",
+    "director_approvals_min": 3,
+    "records": [
+      {"sender": "kalkulation@", "subject": "Konditionsregeln"},
+      {"sender": "kalkulation@", "subject": "Preisindizes"},
+      {"sender": "kalkulation@", "subject": "Rüstpools"},
+      {"sender": "technik@", "subject": "Technikfreigabe"},
+      {"sender": "logistik@", "subject": "Verpackungstarife"},
+      {"sender": "logistik@", "subject": "Terminfreigabe"},
+      {"sender": "finanzen@", "subject": "Devisenfixing"},
+      {"sender": "finanzen@", "subject": "Projektbonus"}
+    ]
+  },
+  "erp": {
+    "01.01": "HZ-1609", "01.02": "HZ-2170", "01.03": "HZ-2170", "01.04": "HZ-3916", "01.05": "HZ-6932"
+  }
+}
