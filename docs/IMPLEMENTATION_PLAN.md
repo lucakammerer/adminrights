@@ -125,8 +125,9 @@ Every browser agent is the same loop; agents differ only in mission, result sche
   (`agents.common.system`), and the same tools: the browser tools and one `finish` whose result schema is in the
   mission (`llm.FINISH`); submit's own tools come after them. The provider caches a prompt prefix only for the same
   tool list (measured: same system text, another finish schema, no cache hit), so now all agents of a run share their
-  first ~4,500 tokens and every model replica soon serves them from its cache. The model's reasoning stays while its
-  step is in the `KEEP_STEPS` window and goes in the same batches as the older page reads (the API reads reasoning
+  first ~4,500 tokens and every model replica soon serves them from its cache. On Claude a cache breakpoint ends the
+  system message, so every agent reads it from the cache, also right after a batch. The model's reasoning stays while
+  its step is in the `KEEP_STEPS` window and goes in the same batches as the older page reads (the API reads reasoning
   sent back as input on every later step).
 - **`finish`:** a result that isn't a JSON object is refused while more than 30 s remain; fields sent without the
   `result` wrapper are taken as the result.
