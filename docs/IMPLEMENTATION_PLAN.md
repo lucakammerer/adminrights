@@ -335,6 +335,7 @@ stage, model turns and tool calls per agent, resolver reasoning for decisive val
 ```
 AdminRights/
 ├── AGENTS.md, CLAUDE.md, README.md
+├── .github/CODEOWNERS     # who reviews which files (§14.2)
 ├── agent/                 # THE PACKAGE (only this is uploaded)
 │   ├── agent.json, pyproject.toml, uv.lock, README.md
 │   ├── agent.py, llm.py, browser.py, reader.js, calc.py, run.py, browsers.py
@@ -345,85 +346,155 @@ AdminRights/
 ├── eval/                  # local: references, scorer, public-1 data
 │   ├── expected.json, derivation.md, compare.py, oracle.py
 │   └── public-1/          # scouting notes, brief, Q&A extract, scouting JSON, challenge and start pages (logins)
-└── tools/                 # local: dev-env.sh; later the audit, release check and score script
+├── tests/                 # local: calculator, parser and validator tests
+├── bench/                 # local: RUNS.md, one row per test run and submission
+└── tools/                 # local: dev-env.sh; later the audit, release check, score script and stress/ harness
 ```
 
 ---
 
 ## 12. Backlog
 
-Owner letters: **L** = Luca, **Y** = Yazan, **F** = Finn (proposal, §14).
+Owner letters: **L** = Luca (Efficiency), **Y** = Yazan (Quality & Release), **F** = Finn (Generalization); see §14.
+Every item has exactly one owner. When it touches a file someone else owns (§14.2), that person reviews the PR.
+
+Already on `main` since this plan was written: a model assigns the site roles (`resolvers.sites`, most of I3);
+`investigate` refuses a `finish` that is not a JSON object (part of I5); low reasoning effort per browser step and hard
+phase deadlines (a first step toward I2 and I4). Still open: a forced `finish` is not marked, so a starved ERP agent
+can still report `no_match` (I1).
 
 ### P0: a correct signed bid in time
 
 | ID | Change | Where | Acceptance | Rules | Owner |
 | --- | --- | --- | --- | --- | --- |
-| I1 | Unfinished ≠ no match (§4.4) | `agents/erp`, `validate.py`, `calc.compute` | a run with a starved ERP stage never answers no_bid | 3, 8, 9 | Y |
-| I2 | Model calls bounded by the caller's deadline; concurrency cap | `llm.py` | test with a fake slow client | T1.3 | F |
-| I3 | Site roles and submission target from the run; unknown ids classified once (URL + landing page) | `agent.py`, `agents/common.py` | a run with renamed site ids doesn't crash | T1.12 | L |
+| I1 | Unfinished ≠ no match (§4.4). **First slice, before I9:** `investigate` marks a forced `finish`, and a forced result never counts as `no_match` | `llm.py` (the mark), `agents/erp`, `validate.py`, `calc.compute` | a run with a starved ERP stage never answers no_bid | 3, 8, 9 | Y |
+| I2 | Model calls bounded by the caller's deadline; concurrency cap | `llm.py` | test with a fake slow client | T1.3 | L |
+| I3 | Site roles and submission target from the run (mostly on `main`); left: exact-id fast path, unknown ids classified once (URL + landing page) | `agent.py`, `agents/common.py`, `agents/resolvers` | stress level S1 passes (§14.1) | T1.12 | F |
 | I4 | Dependency graph + per-stage budgets (§4.1, §4.2) | `agent.py`, `budget.py`, `agents/erp` | dry run: ERP starts during the first stage; answer < 8 min | T1.3, T3.2 | L |
-| I5 | Slimmer missions and inputs: no word-for-word copies in `finish` schemas when the evidence holds them; "every needed page kept → finish"; resolvers get only the evidence they need; reliable object `finish` | `agents/tender`, `agents/spec`, `agents/resolvers`, `llm.py` | no page fetched twice without reason; commercials resolver much faster | T3.2, T4.2 | F |
-| I6 | Submit in two stages + watchdog: stage 1 at start, stage 2 with the answer, read-back of the review page before the TAN, watchdog at end − 3 min | `agents/submit` | a short-budget run still signs | T1.3, T1.9, 9 | L |
+| I5 | Slimmer missions and inputs: no word-for-word copies in `finish` schemas when the evidence holds them; "every needed page kept → finish"; resolvers get only the evidence they need | `agents/tender_portal`, `agents/supplier_portal`, `agents/resolvers`, `llm.py` | no page fetched twice without reason; commercials resolver much faster | T3.2, T4.2 | L |
+| I6 | Submit in two stages + watchdog: stage 1 at start, stage 2 with the answer, watchdog at end − 3 min | `agents/submit` | a short-budget run still signs | T1.3, 9 | L |
+| I6b | Read-back of the review page before the TAN: every entered value matches the answer | `agents/submit`, `validate.py` | a mistyped value is corrected before signing | T1.9, 7 | Y |
 | I7 | Dry-run mode + `tools/score.sh` (run + `eval/compare.py`) | `agents/submit`, `tools/` | one command → a score | T4.3 | Y |
-| I8 | Release tools: `tools/audit_package.py` + `tools/check_release.sh` (audit, tests, `agent.json`) | `tools/` | green on `main` | T0.1, T0.2, T0.6, T1.1 | Y |
-| I9 | First sandbox test run, then the first scored submission as a safety net | — | eligible and signed | D2, D3 | L |
+| I8 | Release tools: `tools/audit_package.py` + `tools/check_release.sh` (audit, tests, `agent.json`). The audit also runs on the uploaded package (`atira run_package`), not only on the repo | `tools/` | green on `main` and on the last uploaded package | T0.1, T0.2, T0.6, T1.1 | Y |
+| I9 | Right after I1's first slice: a sandbox test run of `main`, then the first scored submission as a safety net (we have none yet) | — | eligible, signed, on the leaderboard | D2, D3 | Y |
 
 ### P1: correctness under pressure
 
 | ID | Change | Where | Acceptance | Rules | Owner |
 | --- | --- | --- | --- | --- | --- |
 | I10 | Strict numbers: inline format hints used; ambiguous forms refused (the agent re-reads); thousands separators in grams; `Decimal` end to end | `numbers.py`, `calc.py` | parser tests incl. the probes in PLAN_COMPARISON §2.3 | 4, 22 | Y |
-| I11 | ERP match check in code + no-bid gate (§4.4); answer schema and arithmetic validated before signing | `agents/erp`, `validate.py`, `agents/submit` | tests with look-alike and blocked candidates | T1.6, 3, 7, 8 | Y + L |
-| I12 | Mail topics and senders parsed from the brief; generic wording for the approval search | `agents/mail` | no public mail subject in prompts | T0.11, 5, 10, 21 | F |
+| I11 | ERP match check in code + no-bid gate (§4.4); answer schema and arithmetic validated before signing | `agents/erp`, `validate.py`, `agents/submit` | tests with look-alike and blocked candidates | T1.6, 3, 7, 8 | Y |
+| I12 | Mail topics and senders parsed from the brief; generic wording for the approval search | `agents/webmail` | no public mail subject in prompts | T0.11, 5, 10, 21 | F |
 | I13 | Code-side retry of transient error pages; auto re-login; adaptive settle | `browser.py` | fewer model turns on the ERP in the dry-run log | T3.2 | F |
 | I14 | Calculator tests: golden test, allocation ties, band edges, inclusive ceilings and thresholds | `tests/` | green | 4–9, 12, 15–18, 22–27 | Y |
 | I15 | Loud failures instead of silent fallbacks (FX, metal index); omitted positions per rule 9 | `calc.py` | tests | 9, 22, 28 | Y |
+| I23 | Cost: cache-friendly loop (append-only history; when it grows too long, restart from the notes and kept evidence); measure Clef against Qwen for yes/no and pick decisions, then use it or drop it | `llm.py` | cached share of input up; cost per run ≤ $0.10 | T3.4 | L |
+| I24 | Stress harness for levels S1–S3 (§14.1) | `tools/stress/` | S1 and S3 pass; S2 time-boxed to 2 h | T1.12, 3, 19 | F |
 
 ### P2: private-dataset readiness
 
 | ID | Change | Where | Acceptance | Rules | Owner |
 | --- | --- | --- | --- | --- | --- |
-| I16 | Gap sweep: after the first pass, code lists missing facts and unresolved keys; short model missions to the other sites | `agent.py`, `agents/common.py` | a fake run with Q&A on another site still finds them | 10, 19 | F |
+| I16 | Gap sweep: after the first pass, code lists missing facts and unresolved keys; short model missions to the other sites | `agent.py`, `agents/common.py` | a fake run with Q&A on another site still finds them (S4) | 10, 19 | F |
 | I17 | Reader hardening (§5.1 rows 1b, 8); `pypdf` dependency | `reader.js`, `pyproject.toml` | recorded-page tests; a PDF is read | traps 8, 9 | F |
 | I18 | Code-side selection cross-check (§4.4) | `agents/resolvers`, `select.py` | synthetic-record tests per trap category | 1, 2, 5, 12–14, 16, 17, 20–26, 28 | Y |
-| I19 | Extraction while browsing: each kept page read into records right away (small parallel calls), so resolvers only select | `llm.py`, `agents/*` | resolvers finish in seconds after the last agent | T3.2, T4.2 | Y + F |
-| I20 | Mutation tests on recorded pages | `tests/` | extraction stable | 19 | F + Y |
+| I19 | Extraction while browsing: each kept page read into records right away (small parallel calls), so resolvers only select | `llm.py`, `agents/*` | resolvers finish in seconds after the last agent | T3.2, T4.2 | L |
+| I20 | Mutation tests on recorded pages | `tests/` | extraction stable | 19 | F |
 
 ### P3: polish
 
 | ID | Change | Owner |
 | --- | --- | --- |
-| I21 | End-of-run summary (§10) | L |
-| I22 | Cosmetics (PLAN_COMPARISON F15); agent READMEs and this file describe the final system | all |
+| I21 | End-of-run summary (§10): per-stage time, tokens, cost, queue wait | L |
+| I22 | Elegance: cosmetics (PLAN_COMPARISON F15); agent READMEs and this file describe the final system | Y |
 
 ---
 
 ## 13. Process
 
-- **Before every `atira submit`:** the Definition of Done in [RULES.md](RULES.md) §9.
-- **Releases:** submissions only from `main`, tagged `sub-NN` with their test-run score (T4.4).
+- **PR gate:** every PR names its increment and rule IDs and reports three numbers from a dry run: score, run time,
+  cost. A PR may not lower the score (T3.1), break signing, or answer a false no-bid.
+- **`main` is always submittable:** a merged PR that breaks the gate is reverted, not patched forward.
+- **Before every `atira submit`:** the Definition of Done in [RULES.md](RULES.md) §9, including the audit (I8).
+- **Releases:** submissions only from `main`, tagged `sub-NN` with their test-run score (T4.4). Yazan proposes,
+  Luca approves.
+- **Shared capacity:** one run uses at most about 5 of the team's 32 concurrent model calls. Nothing else runs while a
+  scored submission runs, and timing measurements run alone; ordinary local dry runs may overlap. Only Yazan starts
+  sandbox test runs, at most 2 at once. Test run 2 waited 15 min in the model queue in total: Luca finds out why
+  before budgets are calibrated.
+- **Times:** hackathon end `<fill in>`; freeze from end − 3 h `<fill in>`; sync every 3 h at `<fill in>`
+  (demo a scored dry run, re-plan).
 - **Freeze:** no experimental submissions in the last 3 hours; the last one must be at least as good as the release
   candidate (T4.5).
-- **Final:** opt in to best of 3 (`atira final --best-of 3`) before the final run starts.
-- **Shared capacity:** no local runs while a test run is going; one test run at a time.
-- **PRs:** small, one increment each; name the increment and rule IDs; paste the dry-run score.
+- **Final:** opt in to best of 3 (`atira final --best-of 3`) before the final run starts; link the GitHub repository
+  on the team page.
 
 ## 14. Work split and timeline
 
-| Person | Owns | P0 | then |
-| --- | --- | --- | --- |
-| **Luca** (repo owner, knows the code) | orchestration, submission, releases | I3, I4, I6, I9 | I11 with Yazan, I21 |
-| **Yazan** | correctness and tooling | I1, I7, I8 | I10, I11, I14, I15, I18 |
-| **Finn** | model loop, missions, browser, generalization | I2, I5 | I12, I13, I16, I17, I19, I20 |
+### 14.1 Owners and KPIs
 
-`H+0` = this plan on `main`. Sync every 3 hours (demo a scored dry run, re-plan).
+| | **Efficiency** · Luca | **Generalization** · Finn | **Quality & Release** · Yazan |
+| --- | --- | --- | --- |
+| KPI | cost × time per run | stress levels S1–S3 pass (S4 stretch) | dry runs and test runs score 100; every run signs; audit clean |
+| Today → target | ~15 min × $0.23 ≈ 207 $·s → < 8 min × ~$0.10 ≈ 48 $·s | none built yet → S1–S3 green | no complete test run yet → 100 on every run |
+| Measured by | `atira run_profile`, `get_run`, I21 summary | `tools/stress/` (I24) | `tools/score.sh` (I7), test-run breakdown, `bench/RUNS.md` |
+| Must not break | the score | the time budget | — (owns the PR gate) |
+| Run-killer owned | always sign: watchdog (I6) | — | never a false no-bid (I1, I11) |
+| Backlog | I2, I4, I5, I6, I19, I21, I23 | I3, I12, I13, I16, I17, I20, I24 | I1, I6b, I7, I8, I9, I10, I11, I14, I15, I18, I22 |
+| First task | seams PR (§14.4), then per-stage timing and token logging | stress harness S1–S3 | I1 first slice, then I9 |
+
+Stress levels:
+
+- **S1:** renamed and reordered site ids. Pass: no crash, same answer.
+- **S2:** live scouting pages rewritten during local runs (relabelled UI text, swapped number formats, extra iframes,
+  injected decoys, shuffled lists). Pass: signs and scores ≥ 95. Time-boxed to 2 h.
+- **S3:** a no-bid variant where the matching material shows as blocked. Pass: answers no_bid.
+- **S4 (stretch):** information moved between sites. Pass: the gap sweep (I16) finds it.
+
+Luca approves every submission (AGENTS.md).
+
+### 14.2 Code ownership
+
+One owner per file, written into [`.github/CODEOWNERS`](../.github/CODEOWNERS):
+
+| Owner | Files |
+| --- | --- |
+| Luca | `agent/agent.py`, `agent/budget.py`, `agent/llm.py`, `agent/agents/submit/`, `agent/agent.json` |
+| Finn | `agent/browser.py`, `agent/reader.js`, `agent/agents/common.py`, `agent/agents/tender_portal/`, `agent/agents/supplier_portal/`, `agent/agents/webmail/`, `agent/agents/erp/`, `tools/stress/` |
+| Yazan | `agent/calc.py`, `agent/numbers.py`, `agent/validate.py`, `agent/select.py`, `agent/agents/resolvers/`, `tests/`, `eval/`, `tools/`, `bench/`, `docs/` |
+
+An item may change a file it doesn't own (I1 marks forced finishes in `llm.py`, I5 trims missions, I6b reads back
+in `agents/submit`); the file's owner reviews that PR.
+
+### 14.3 Triage of test-run results
+
+| Symptom | Goes to |
+| --- | --- |
+| A value is missing from the kept evidence | Generalization |
+| The evidence is there, but a value, selection or arithmetic is wrong | Quality |
+| Ran out of time, ran in the wrong order, or waited in the queue | Efficiency |
+
+### 14.4 Working without waiting on each other
+
+- **Seams PR first (~45 min, Luca):** placeholder modules (`budget.py`, `validate.py`, `numbers.py`),
+  `agents/common.py` split by owner, and `investigate` marks forced finishes. After that, everyone works in their own
+  files.
+- **Saved fixtures:** one full run's stage outputs and kept evidence, so resolvers, calculator and validators are
+  tested offline in seconds.
+- **Single-agent runner:** run one gathering agent alone against the scouting site.
+- **Fake agents:** test the scheduling and the watchdog without sites or models.
+- Small PRs, merged into `main` at least every 2 hours.
+
+### 14.5 Timeline
+
+`H+0` = this plan on `main`.
 
 | Window | Goal | Exit criterion |
 | --- | --- | --- |
-| H+0 – H+3 | P0 | a dry run signs in < 8 min with the right decision |
-| ~H+3 | first sandbox test run, then the first scored submission (I9) | eligible, on the leaderboard |
-| H+3 – H+9 | P1 | dry-run score ≥ 95 |
-| H+9 – H+15 | P2 | mutation tests green; gap sweep proven |
+| H+0 – H+1 | seams PR; I1 first slice; test run of `main`; first scored submission (I9) | eligible, on the leaderboard |
+| H+1 – H+3 | rest of P0 | a dry run signs in < 8 min with the right decision |
+| H+3 – H+9 | P1 | dry-run score ≥ 95; S1 and S3 pass; cost per run ≤ $0.10 |
+| H+9 – H+15 | P2 | S2 passes; mutation tests green; gap sweep proven (S4) |
 | until 3 h before the end | tuning: time, cost, test-run breakdowns | release candidate tagged |
 | last 3 h | freeze; final submission ≥ release candidate; best of 3 | final submission passed review |
 
@@ -445,3 +516,4 @@ Owner letters: **L** = Luca, **Y** = Yazan, **F** = Finn (proposal, §14).
 | The gap sweep could look like crawling | each sweep mission is a model decision about one named missing fact |
 | Code-side selection disagrees with the model | log both; the rule wins after one re-ask (I18) |
 | Our latest submission is worse than our best | freeze and Definition of Done (T4.5) |
+| Two people change the same file | one owner per item and per file, CODEOWNERS review (§14.2) |
