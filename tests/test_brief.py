@@ -11,7 +11,7 @@ sys.path.insert(0, str(ROOT / "agent"))
 
 from agents.common import (commercial_records, mail_records, mentions, names_position, reference, routed,  # noqa: E402
                            technical_records)
-from agents.webmail.agent import wanted  # noqa: E402
+from agents.webmail.agent import groups, wanted  # noqa: E402
 
 PUBLIC_BRIEF = (ROOT / "eval/public-1/run-brief.md").read_text()
 
@@ -114,8 +114,13 @@ class NeverRaises(unittest.TestCase):
         self.assertEqual(mail_records("")["records"], [])
 
     def test_mission_falls_back_to_the_rules(self):
-        self.assertIn("derive", wanted("no records named"))
-        self.assertIn("Hubfreigabe", wanted(SYNTHETIC))
+        self.assertIn("derive", wanted(mail_records("no records named")["records"]))
+        self.assertIn("Hubfreigabe", wanted(mail_records(SYNTHETIC)["records"]))
+
+    def test_mail_agents_share_every_record_the_technical_release_first(self):
+        shares = groups(SYNTHETIC)
+        self.assertEqual(shares[0], technical_records(SYNTHETIC))
+        self.assertCountEqual([r for share in shares for r in share], mail_records(SYNTHETIC)["records"])
 
 
 class TechnicalMailSelection(unittest.TestCase):

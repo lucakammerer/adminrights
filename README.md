@@ -15,7 +15,7 @@ flowchart LR
   subgraph P1["1 · Gather · ⏱ −10 min"]
     tender["🏛️ Tender portal<br/>positions · Q#amp;A"]
     supplier["📐 Supplier portal<br/>current spec"]
-    mail["✉️ Webmail<br/>approvals · terms"]
+    mail["✉️ Webmail ×3<br/>approvals · terms"]
     login["🔑 ERP login"]
   end
 

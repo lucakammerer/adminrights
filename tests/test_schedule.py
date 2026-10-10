@@ -97,7 +97,7 @@ class Schedule(unittest.TestCase):
             mock.patch.object(agent, "async_playwright", FakePlaywright),
             mock.patch.object(agent.browsers, "cdp_urls", lambda: ["cdp"] * 4),
             mock.patch.object(agent.browsers, "connect", connect),
-            mock.patch.object(agent.contract, "load_run", lambda: ({"run_id": "test"}, None)),
+            mock.patch.object(agent.contract, "load_run", lambda: ({"run_id": "test", "brief": ""}, None)),
             mock.patch.object(agent.contract, "seconds_left", lambda task: 1140),
             mock.patch.object(agent.resolvers, "sites", sites),
             mock.patch.object(agent.resolvers, "specs", specs),

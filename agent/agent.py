@@ -220,10 +220,23 @@ async def main() -> int:
             tabs[role] = Tab(page, entry)
 
         phase1 = end - 10 * 60  # agents wrap up here; hard cut 30 s later
+        # several webmail agents at once, each with its share of the brief's records; the first (the technical release)
+        # works the mailbox's own tab, the others fresh ones. The specification resolver needs only the first.
+        shares = webmail.groups(task["brief"])
+
+        async def mail_share(i: int, records: list[dict]):
+            tag = "webmail" if i == 0 else f"webmail-{i + 1}"
+            tab = tabs["webmail"] if i == 0 else await fresh(tabs["webmail"])
+            return await safe(tag, webmail.run(task, tab, phase1, records, len(shares) == 1, tag), phase1 + 30)
+        mail_jobs = [asyncio.create_task(mail_share(i, records)) for i, records in enumerate(shares)]
+
+        async def merged_mail():
+            return webmail.merge(list(await asyncio.gather(*mail_jobs)))
+
         tender_job, spec_job, mail_job, login_job = (asyncio.create_task(job) for job in (
             safe("tender-portal", tender_portal.run(task, tabs["tender_portal"], phase1), phase1 + 30),
             safe("supplier-portal", supplier_portal.run(task, tabs["supplier_portal"], phase1), phase1 + 30),
-            safe("webmail", webmail.run(task, tabs["webmail"], phase1), phase1 + 30),
+            merged_mail(),
             safe("erp-login", erp_agent.login(task, tabs["erp"], phase1), phase1 + 30)))
 
         # The submission starts once the mailbox is done (contact address and TAN tab known), in a tab of its own, while
@@ -266,7 +279,7 @@ async def main() -> int:
         async def search_early():
             """The ERP searches need the governing requirements, not the quantities: they start once the
             specification, the mail and the ERP login are in, while the tender agent may still be working."""
-            spec, mail = await asyncio.gather(spec_job, mail_job)
+            spec, mail = await asyncio.gather(spec_job, mail_jobs[0])
             if not spec.get("evidence"):  # nothing to decide from: the searches wait for the requirements
                 llm.log("specs", "no specification kept: no early ERP searches")
                 return
