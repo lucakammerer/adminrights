@@ -1,4 +1,4 @@
-"""Spec agent: the current specification revision from the supplier portal. See README.md."""
+"""Customer portal agent: the current specification revision from the supplier portal. See README.md."""
 import llm
 from agents.common import NUM, STR, SYSTEM, arr, context, login_line, obj, site
 
@@ -20,4 +20,4 @@ revision (all pages) with bore, stroke, pressure, mounting, certification, catal
 full original wording (it may say the stroke is a usable stroke / nutzbarer Weg with an end-reserve key, or give
 pieces per set). Also list all revisions with date and status. Keep the revision list and every requirement page of
 the current revision with save_evidence. Finish with the result."""
-    return await llm.investigate(tab, SYSTEM, mission, RESULT, deadline, "spec", max_steps=40)
+    return await llm.investigate(tab, SYSTEM, mission, RESULT, deadline, "customer-portal", max_steps=40)

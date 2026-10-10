@@ -7,7 +7,7 @@ and its documentation (`README.md`); `agent/agents/common.py` holds what they sh
 ```
 main (budget = min(time left, 19 min), end = start + budget)
  ├─ Phase 1, parallel, one browser each, deadline end − 9 min
- │   tender.run · spec.run · mail.run · erp.login
+ │   tender_portal.run · customer_portal.run · mail.run · erp.login
  ├─ Phase 2, no browser
  │   resolvers.requirements (resolvers.commercials starts too, runs alongside phase 3)
  ├─ Phase 3, parallel in ERP tabs, deadline end − 6 min
@@ -49,11 +49,11 @@ evidence; output is a fixed JSON schema stated in the prompt.
 ## Logs
 
 Every line goes through `llm.log` as `[tag  123s] ...` with the seconds since start. `main` prints one line per phase
-(`tender`, `spec`, `mail`, `requirements`, `commercials`, `erp`, `facts`, `calc`, `answer`, `submit`); every agent
+(`tender-portal`, `customer-portal`, `mail`, `requirements`, `commercials`, `erp`, `facts`, `calc`, `answer`, `submit`); every agent
 step appears as `[tag  123s] n: tool {args}`.
 
 ## Timing
 
 The first full local run took 1088 s and never submitted: phase 1 ran to its deadline, the ERP phase to end − 6 min,
 and the submit agent (about 275 s on its own) ran out of time. Phases wait for each other although the ERP search only
-needs the spec result.
+needs the customer portal result.

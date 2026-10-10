@@ -1,4 +1,4 @@
-"""Tender agent: positions and every Q&A from the tender portal. See README.md."""
+"""Tender portal agent: positions and every Q&A from the tender portal. See README.md."""
 import re
 
 import llm
@@ -26,4 +26,4 @@ If its documents need an expression of interest ("Teilnahme bekunden"), give it.
 3. anything else the brief's rules need that you find here (documents, ZIPs).
 Keep the bill of quantities and every Q&A page with save_evidence as you read them.
 Do not start the bid submission (Angebotsabgabe) yet. Finish with the result."""
-    return await llm.investigate(tab, SYSTEM, mission, RESULT, deadline, "tender", max_steps=45)
+    return await llm.investigate(tab, SYSTEM, mission, RESULT, deadline, "tender-portal", max_steps=45)

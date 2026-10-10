@@ -7,7 +7,7 @@ typed facts for `calc`. This is where interpretation happens: which record is va
 
 **Rules:** 1, 2, 13, 14, 17, 20.
 
-**Input:** brief, evidence from tender and spec, and only the kept mail pages that mention a technical release
+**Input:** brief, evidence from the tender and customer portal agents, and only the kept mail pages that mention a technical release
 ("technik"), to keep the call small. It is on the critical path: the ERP agents wait for it.
 
 **Output per position:** `final_quantity_pieces` (+ `quantity_reasoning`), `requirement`, `bore_mm`, `stroke_mm`,
@@ -25,7 +25,7 @@ Runs alongside the ERP phase; only `calc.facts` waits for it.
 
 **Rules:** 5, 12, 16, 21, 22, 23, 24, 25, 26, 28.
 
-**Input:** brief, evidence from tender and mail.
+**Input:** brief, evidence from the tender portal and mail agents.
 
 **Output:**
 - `discount`: `percent`, `min_order_value` (or null), `source`

@@ -12,12 +12,12 @@ import calc
 import llm
 import run as contract
 from agents.common import site
+from agents.customer_portal import agent as customer_portal
 from agents.erp import agent as erp_agent
 from agents.mail import agent as mail_agent
 from agents.resolvers import agent as resolvers
-from agents.spec import agent as spec_agent
 from agents.submit import agent as submit_agent
-from agents.tender import agent as tender_agent
+from agents.tender_portal import agent as tender_portal
 from browser import Tab
 
 
@@ -53,12 +53,12 @@ async def main() -> int:
 
         phase1 = end - 9 * 60
         tender, spec, mail, _ = await asyncio.gather(
-            safe("tender", tender_agent.run(task, tabs["tender-portal"], phase1)),
-            safe("spec", spec_agent.run(task, tabs["customer-portal"], phase1)),
+            safe("tender-portal", tender_portal.run(task, tabs["tender-portal"], phase1)),
+            safe("customer-portal", customer_portal.run(task, tabs["customer-portal"], phase1)),
             safe("mail", mail_agent.run(task, tabs["mail"], phase1)),
             safe("erp-login", erp_agent.login(task, tabs["erp"], phase1)))
-        llm.log("tender", json.dumps(tender, ensure_ascii=False)[:3000])
-        llm.log("spec", json.dumps(spec, ensure_ascii=False)[:3000])
+        llm.log("tender-portal", json.dumps(tender, ensure_ascii=False)[:3000])
+        llm.log("customer-portal", json.dumps(spec, ensure_ascii=False)[:3000])
         llm.log("mail", json.dumps(mail, ensure_ascii=False)[:4000])
 
         commercials_job = asyncio.create_task(resolvers.commercials(task, tender, mail))  # only calc needs it
