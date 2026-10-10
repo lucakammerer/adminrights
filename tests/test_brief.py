@@ -9,7 +9,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "agent"))
 
-from agents.common import mail_records, mentions, reference, technical_records  # noqa: E402
+from agents.common import (commercial_records, mail_records, mentions, names_position, reference, routed,  # noqa: E402
+                           technical_records)
 from agents.webmail.agent import wanted  # noqa: E402
 
 PUBLIC_BRIEF = (ROOT / "eval/public-1/run-brief.md").read_text()
@@ -71,6 +72,37 @@ class SyntheticBrief(unittest.TestCase):
         self.assertEqual(reference(SYNTHETIC), "TX-0001-0042")
         self.assertEqual(reference("Framework (2030) for pumps (TX-0001-0042)."), "TX-0001-0042")  # a year is no reference
         self.assertEqual(reference("Order (4711)."), "4711")  # a bare number when there is nothing else
+
+
+# The same rules in other list shapes a private brief may use.
+VARIANTS = """## Additional rules
+
+- Authority: records come from these senders: Preisblatt (pricing), Lieferplan (logistics@<domain>); Kursliste from treasury@.
+- Approvals: Rabattvorlage by board@<domain> and Abnahme from quality@.
+- Stroke derivation: add twice the reserve of the Lieferplan record.
+"""
+
+
+class OtherListShapes(unittest.TestCase):
+    def test_parenthesised_and_from_forms(self):
+        self.assertEqual(pairs(mail_records(VARIANTS)), {("Preisblatt", "pricing"), ("Lieferplan", "logistics"),
+                                                        ("Kursliste", "treasury"), ("Rabattvorlage", "board"),
+                                                        ("Abnahme", "quality")})
+
+    def test_commercial_records_leave_out_the_technical_one(self):
+        self.assertEqual([(r["subject"], r["sender"]) for r in technical_records(VARIANTS)], [("Lieferplan", "logistics")])
+        self.assertNotIn("Lieferplan", {r["subject"] for r in commercial_records(VARIANTS)})
+
+
+class Routing(unittest.TestCase):
+    def test_names_position(self):
+        self.assertTrue(names_position("Quantity for position 01.05 is now 30", ["01.05"]))
+        self.assertFalse(names_position("Quantity for position 01.050", ["01.05"]))
+        self.assertFalse(names_position("Item 1 of the list", ["1"]))  # too short to tell apart from any number
+
+    def test_routed_pages_of_other_websites(self):
+        others = [{"evidence": ["### a\nPreisblatt for TX-1", "### b\nrequirement sheet"]}, {}, "not a result"]
+        self.assertEqual(routed(others, lambda page: "Preisblatt" in page), ["### a\nPreisblatt for TX-1"])
 
 
 class NeverRaises(unittest.TestCase):

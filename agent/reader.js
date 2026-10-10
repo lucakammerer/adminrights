@@ -17,11 +17,15 @@
   let marked = 0
   const out = []
 
+  // A checkbox or radio made transparent under a styled label is still the control people tick: only display and
+  // visibility hide it. Everything else with zero opacity or font size is hidden text (decoys).
+  const toggle = (el) => el.tagName === "INPUT" && (el.type === "checkbox" || el.type === "radio")
   const hidden = (el) => {
     if (el.hidden || el.getAttribute("aria-hidden") === "true") return true
     if (!styled) return /display\s*:\s*none|visibility\s*:\s*hidden/i.test(el.getAttribute("style") || "")
     const st = el.ownerDocument.defaultView.getComputedStyle(el)
-    return st.display === "none" || st.visibility === "hidden" || st.opacity === "0" || parseFloat(st.fontSize) === 0
+    if (st.display === "none" || st.visibility === "hidden") return true
+    return !toggle(el) && (st.opacity === "0" || parseFloat(st.fontSize) === 0)
   }
   // Positioned outside the page or clipped to (almost) nothing: not on screen, yet read by assistive technology.
   const offscreen = (el) => {

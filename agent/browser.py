@@ -245,6 +245,22 @@ class Tab:
                 pass
         return value
 
+    async def click(self, loc):
+        """Click a control: a checkbox or radio is ticked directly (custom-styled ones never pass Playwright's
+        actionability wait); anything else gets a short real click, then a DOM click if it is covered or inert."""
+        try:
+            kind = await loc.evaluate("e => e.tagName === 'INPUT' ? e.type : ''")
+        except Exception:  # noqa: BLE001
+            kind = ""
+        if kind in ("checkbox", "radio"):
+            await loc.set_checked(True, timeout=3000, force=True)
+            return
+        try:
+            await loc.scroll_into_view_if_needed(timeout=1000)
+            await loc.click(timeout=2000)
+        except Exception:  # noqa: BLE001  covered, off-screen in a scroll box, inert: click it in the DOM
+            await loc.evaluate("e => e.click()")
+
     async def locate(self, ref: int):
         for frame in self.page.frames:
             loc = frame.locator(f'[data-aref="{ref}"]')
@@ -268,11 +284,7 @@ class Tab:
         else:
             loc = await self.locate(int(args["ref"]))
             if action == "click":
-                try:
-                    await loc.scroll_into_view_if_needed(timeout=3000)
-                    await loc.click(timeout=5000)
-                except Exception:  # noqa: BLE001  covered, off-screen in a scroll box, inert: click it in the DOM
-                    await loc.evaluate("e => e.click()")
+                await self.click(loc)
             elif action == "fill":
                 await loc.evaluate(OPEN_DETAILS)
                 kind = await loc.evaluate("e => e.type")
@@ -302,11 +314,7 @@ class Tab:
                 if step.get("ref") is not None and step.get("value") is None:
                     loc = await self.locate(int(step["ref"]))
                     await loc.evaluate(OPEN_DETAILS)
-                    try:
-                        await loc.scroll_into_view_if_needed(timeout=3000)
-                        await loc.click(timeout=5000)
-                    except Exception:  # noqa: BLE001  covered or inert: click it in the DOM, as act does
-                        await loc.evaluate("e => e.click()")
+                    await self.click(loc)
                     await self.settle()
                     log.append(f"clicked ref {step['ref']}")
                     continue

@@ -5,6 +5,12 @@ logged answer scored by `eval/compare.py` (what the bid would have scored if sig
 
 | Date (UTC) | Run | Commit | Platform | Eval | Time | Cost | Outcome and top problem (owner) |
 | --- | --- | --- | --- | --- | --- | --- | --- |
+| 2026-10-10 21:14 | run_0bf3628e04112a0c | luca/haiku-openrouter@6f9adc4 | 100, eligible | – | 6 min | $0.215 | Claude Haiku 5.5 on OpenRouter: 100 in 5:55 (76 $·s); sites done at 68 s, answer at 156 s; no call lost. Only 48 % of the input cached: the trimming of old reads breaks the prefix (Finn). |
+| 2026-10-10 21:00 | run_cd3f96f25f803950 | luca/haiku-openrouter@6f9adc4 | 0, no answer | – | 12 min | $0.116 | The tender portal never loaded: its agent hung on the first read until its cut, then `fresh` crashed the run (on main since aecee8a). |
+| 2026-10-10 20:58 | run_cd888fae0ebef8da | luca/hedged-calls@3679759 | 100, eligible | – | 14 min | $0.194 | Qwen with hedged calls and the breakdown summary check: 100 in 14:02 (163 $·s); 6 twins sent, no call held 180 s. |
+| 2026-10-10 20:32 | run_834abcf85968c21b | luca/haiku-openrouter@ba32c35 | 0, not signed | – | 19 min | $0.118 | About one in six OpenRouter calls through the run proxy never came back; each held 120 s (45 s since 6f9adc4), 01.02/01.03 omitted, submit ran out. |
+| 2026-10-10 20:26 | run_c086c4a6429b3bd9 | luca/hedged-calls@6136ad2 | 98.7, eligible | – | 15 min | $0.231 | Hedged calls: 4 twins, no 180 s timeout, ERP done at 8:30. 01.04 project bonus typed as 0 although calc had 2131.11; `verify_summary` checked only unit prices and total (Luca: 939e2d0). |
+| 2026-10-10 19:37 | run_4a6271273ed9b949 | main 9ad5476 | 15, eligible | – | 18 min | $0.140 | Five Qwen calls hung 180 s each; one before the submission form left no time, so the warning omitted every position (Luca: hedged calls). |
 | 2026-10-10 18:43 | run_cce8dd95d7f6edd0 | p2/yazan@1163d99 | 100, eligible | – | 18 min | $0.187 | Signed 100 on PR #28 plus Yazan's latest head. |
 | 2026-10-10 18:35 | run_c339fb4e72ccffd4 | main 0686ab0 (agent tree 6d47406) | 100, eligible | – | 17 min | $0.193 | Main after PR #28, Finn's TAN look-up and label configurator, Yazan's p2: the package submitted as sub_03756a1e6bfd23a7 (files identical, audit clean). |
 | 2026-10-10 18:23 | run_35eaa0de2b7a81df | base@3328aab | 0, not eligible | – | 11 min | $0.084 | Cancelled by hand at 11:18. |

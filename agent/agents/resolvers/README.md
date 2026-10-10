@@ -18,15 +18,19 @@ means. The output is typed facts for `calc`, which does all the arithmetic.
 
 - `sites`: brief and the run's websites (id and URL, no logins) → one website per role: `tender_portal`,
   `supplier_portal`, `erp`, `webmail`.
-- `specs`: brief, evidence from the supplier portal agent and the technical mail (as for `requirements`) → per
+- `specs`: brief, evidence from the supplier portal agent and the technical release mail (as for `requirements`,
+  without mail naming a position: it has no tender) → per
   requirement of the current revision `requirement`, `bore_mm`, `stroke_mm`, `pressure_bar`, `mounting`,
   `certification`, `catalogue_group`, `requirement_reasoning`.
 - `requirements`: brief, evidence from the tender and supplier portal agents, and the kept mail pages of the technical
-  release: the records `common.technical_records` finds in the brief's technical rule, matched by subject or sender
-  (`common.mentions`); all kept mail if the brief names none or no page matches → per
+  release (the records `common.technical_records` finds in the brief's technical rule, matched by subject or sender,
+  `common.mentions`) and mail naming a tender position (`common.names_position`: a clarification kept in the mailbox);
+  all kept mail if none matches → per
   position `final_quantity_pieces`, `requirement`, `bore_mm`, `stroke_mm`, `pressure_bar`, `mounting`,
   `certification`, `catalogue_group`, plus `quantity_reasoning` and `requirement_reasoning`.
-- `commercials`: brief, evidence from the tender portal and mail agents →
+- `commercials`: brief, evidence from the tender portal and mail agents, plus the pages other websites kept that name
+  one of the brief's commercial records (`common.commercial_records`, `common.routed`: an approval or rate message on
+  an unexpected site; on public-1 none) →
   - `discount`: `percent`, `min_order_value` (or null), `source`
   - per position: `discount_applies_to` (`base` | `base_and_surcharge` | `none`), `carton_price`,
     `delivery_commitment` (`material_number`, `max_pieces`, `weeks`) or null, `setup_pool_member`,
@@ -56,7 +60,8 @@ means. The output is typed facts for `calc`, which does all the arithmetic.
   answer as if never given (an older change it replaced applies again), sets into pieces; decided from the kept
   pages, not the agents' summaries; the current revision's requirement plus only the amendments naming exactly that
   revision and requirement; a usable stroke plus 2 × the reserve from the latest technical release.
-- `commercials` starts with `requirements` and runs alongside the ERP phase, effort medium; only `calc.facts` waits
+- `commercials` starts with `requirements` and runs alongside the ERP phase (through `sweep.commercials_with_sweep`,
+  which looks for facts it left open), effort medium; only `calc.facts` waits
   for it. Prompt: exact reference, authorized sender, latest record up to the scenario date, newer replaces older,
   future-dated records never apply; without a condition group, `base` applies. Every amount is a plain JSON number.
 

@@ -165,8 +165,8 @@ Check: calc tests, short-budget dry run
 candidates' attributes. Empty or over-broad searches list nothing: narrow to ≤ 20 hits. Mail search ANDs its words:
 use the reference plus one subject or topic; read inbox **and** archive, every result page. Helpers may extract opened
 pages and page through chosen result sets; sites and positions may be investigated in parallel.
-Gather erp, webmail · Decide missions · ⚠️ each agent looks only on "its" site (I16: the sweep agent exists, its
-stage in `main` is open); mail records parsed from the
+Gather erp, webmail · Decide missions · ✅ records found on an unexpected site are kept (`common.ALSO_KEEP`) and
+routed to the resolver by content; open commercial facts are swept during the ERP stage (I16); mail records parsed from the
 brief ✅ (I12) · Check: gap-sweep test (I16), `tests/test_brief.py`
 
 **11 · Agent requirement.** See T0.3 and T0.4.
@@ -274,9 +274,9 @@ Gather erp, webmail · Decide `resolvers.commercials` · ⚠️ an unmatched ind
 | --- | --- | --- |
 | T3.1 | Quality first: never trade a quality point for cost or time. | — |
 | T3.2 | Time runs from the start of the run command to the accepted answer: work the sites in parallel; start the submission early. | answer < 8 min, then toward 5 |
-| T3.3 | Cost is metered model usage. Default to the hosted Qwen; other models only behind a flag and only where they buy quality. The team shares 32 concurrent Qwen calls across all runs. | ≤ $0.25 per run |
+| T3.3 | Cost is metered model usage. Claude Haiku 5.5 through OpenRouter (team secret `OPENROUTER_API_KEY`), prompt-cached: in a local A/B it alone held 100, while the hosted Qwen, shared by every team, timed out under load. `AGENT_MODEL=qwen3.8-flash-next` switches back. | ≤ $0.25 per run |
 | T3.4 | Keep model inputs small: page text, not HTML; older reads trimmed; static prompt parts first (cached input is cheaper). | — |
-| T3.5 | `agent.json` `"models"` lists only the models we call. | `["qwen"]` |
+| T3.5 | `agent.json` `"models"` lists only the hosted models we call. | `[]` |
 
 ## 6. T4: Craft
 

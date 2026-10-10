@@ -3,7 +3,8 @@ import asyncio
 import json
 
 import llm
-from agents.common import RESOLVE, context, evidence, mentions, technical_records
+from agents.common import (RESOLVE, commercial_records, context, evidence, mentions, names_position, routed,
+                           technical_records)
 
 ROLES = {
     "tender_portal": "the public tender, its bill of quantities, the bidder Q&A and the bid submission",
@@ -80,12 +81,16 @@ SPEC_JSON = ('"bore_mm": 0, "stroke_mm": 0, "pressure_bar": 0, "mounting": "..."
              '"catalogue_group": "..."')
 
 
-def technical(task, mail) -> dict:
-    """Only the technical release matters for the requirements; every other mail would slow the call. Which record
-    that is comes from this run's brief (its subject and sender); a brief that names none gets all kept mail."""
+def technical(task, mail, tender=None) -> dict:
+    """Only the technical release and messages about the tender's positions (a clarification kept in the mailbox on a
+    dataset that splits its information differently) matter for the requirements; every other mail would slow the
+    call. The technical release is known from this run's brief (subject, sender); a brief that names none gets all
+    mail. Without the tender (`specs`) only the technical release is selected."""
     pages = mail.get("evidence", [])
     records = technical_records(task["brief"])
-    return {"evidence": [page for page in pages if mentions(page, records)] or pages}
+    ids = [str(p.get("position")) for p in (tender or {}).get("positions") or []
+           if isinstance(p, dict) and p.get("position")]
+    return {"evidence": [page for page in pages if mentions(page, records) or names_position(page, ids)] or pages}
 
 
 async def specs(task, spec, mail, effort: str = "medium") -> dict:
@@ -115,8 +120,8 @@ Evidence from the tender portal:
 Evidence from the supplier portal:
 {evidence(spec)}
 
-Technical releases from the mailbox:
-{evidence(technical(task, mail))}
+Technical releases and messages about the positions from the mailbox:
+{evidence(technical(task, mail, tender))}
 
 Decide from the pages kept as evidence: the agents' own summaries above them can be incomplete or wrong.
 For every tender position, work out:
@@ -132,7 +137,12 @@ JSON: {{"positions": [{{"position": "...", "final_quantity_pieces": 0, "quantity
     return await first(llm.ask_json(RESOLVE, question, effort=effort), llm.ask_json(RESOLVE, question, effort=effort))
 
 
-async def commercials(task, tender, mail) -> dict:
+async def commercials(task, tender, mail, others: list[dict] | None = None) -> dict:
+    """others: other websites' results; their kept pages that name a commercial record of the brief (an approval or
+    rate message on an unexpected site) are added. On a dataset that keeps them in the mailbox nothing is added."""
+    records = commercial_records(task["brief"])
+    elsewhere = routed(others or [], lambda page: mentions(page, records))
+    extra = f"\nPages from other websites that name these records:\n" + "\n\n".join(elsewhere) + "\n" if elsewhere else ""
     question = f"""{context(task)}
 
 Evidence from the tender portal:
@@ -140,7 +150,7 @@ Evidence from the tender portal:
 
 Messages from the sales mailbox:
 {evidence(mail)}
-
+{extra}
 Decide from the pages kept as evidence: the agents' own summaries above them can be incomplete or wrong.
 Resolve, by the brief's rules (exact reference, authorized sender, latest record no later than the scenario date,
 newer replaces older, future-dated records never apply):

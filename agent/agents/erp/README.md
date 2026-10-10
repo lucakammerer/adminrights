@@ -27,8 +27,12 @@ match exactly, and keep every page holding its facts. If there is none, report t
 - `agent.py` `login`: tag `erp-login`, at most 20 steps, phase 1. Only warms up the session.
 - `agent.py` `run`: tag `erp:<catalogue group>`, at most 40 steps, deadline end − 6 min.
   `main` dedupes requirements and runs each in its own tab of the same browser.
+- `agent.py` `run`: at most `PARALLEL` (6) searches at once (`slots`), so a scenario with many requirements doesn't
+  crowd the shared model calls; a waiting search keeps its own deadline.
 - `agent.py` `extract`: runs as `check` on `finish`. One `ask_json` (effort low: 13 s instead of 56 s; thinking off rewrote number formats) reads the facts **only from the kept
-  pages**. If required fields or scale prices are missing, `finish` is refused with a list of what is missing.
+  pages**. If `REQUIRED` facts or scale prices are missing, `finish` is refused with a list of what is missing; the `WANTED`
+  facts only some rules use (carton size, allocation and surcharge mass) are asked for once, since a material may
+  have none.
 - `agent.py` `run`: the search steps end `FINISH_GRACE` (30 s) before the deadline and a forced finish by the deadline,
   so a search cut at its deadline still gets its kept pages read by `extract` before the stage cut (end − 6 min). If
   that read fails, the material and its kept pages still count.
