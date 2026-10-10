@@ -27,7 +27,8 @@ Status: ✅ in the code · ⚠️ in the code with a known gap · ❌ missing. "
 
 **Last full dry run (2026-10-10, `main` `3accb38`):** the resolver outputs matched the reference for every rule they
 decide (1, 2, 5, 12–14, 16, 17, 20–26, 28); the run still failed on time (T1.3) and on rule 3 (a timed-out search
-became a no-bid).
+became a no-bid). PR #5 has since added site roles from the brief and hard phase cuts; the statuses below
+include it.
 
 ---
 
@@ -65,7 +66,7 @@ became a no-bid).
 | --- | --- | --- |
 | T1.1 | `agent.json` valid: `setup`, `run`, `models` ⊆ hosted ids, `browsers` an integer 1–4. | ✅ |
 | T1.2 | `setup` finishes in < 5 min; it has network but no credentials. | ✅ (`uv sync`) |
-| T1.3 | **Always answer before `expires_at`.** No answer = 0 and ineligible. Every stage gets its own budget when it starts (never negative), model calls are bounded by it, and a watchdog signs what is entered. | ❌ dry run: answer only at 1029 s, the submission would not have fit (F3, F4, F5, F19 → I2, I4, I6) |
+| T1.3 | **Always answer before `expires_at`.** No answer = 0 and ineligible. Every stage gets its own budget when it starts (never negative), model calls are bounded by it, and a watchdog signs what is entered. | ⚠️ hard phase cuts since PR #5 bound every stage; no start-time budgets or watchdog yet; before the cuts, the dry run answered only at 1029 s (F3, F4, F5, F19 → I2, I4, I6) |
 | T1.4 | **Eligibility = the exact tender reference:** from the brief, confirmed on the portal, invisible characters removed; never a look-alike (suffix or other number). | ✅ |
 | T1.5 | Exactly one binding submission; it ends the run. | ✅ |
 | T1.6 | The answer matches the run's `answer_schema` (read from the run, not copied). | ⚠️ not validated before signing (→ I11) |
@@ -74,7 +75,7 @@ became a no-bid).
 | T1.9 | Saving is not submitting: sign and submit, also when positions are omitted. | ⚠️ no watchdog (F5 → I6) |
 | T1.10 | Read the run from `GET /v1/runs/current` with `x-api-key` and our own User-Agent (Python's default is refused). | ✅ `run.py` |
 | T1.11 | Wizards: going back clears later steps; an expired session loses unsaved entries. Move forward step by step, saving each. | ✅ in the mission |
-| T1.12 | Site roles and the submission target come from the run (`access`, `submission`), never from assumed ids; an unknown id must not crash the run. | ❌ F1, F2 → I3 |
+| T1.12 | Site roles and the submission target come from the run (`access`, `submission`), never from assumed ids; an unknown id must not crash the run. | ⚠️ roles assigned by a model from the brief since PR #5; the run's `submission` target is still not read, and an unclear assignment crashes the run (F2, F21 → I3) |
 
 ---
 
@@ -110,12 +111,12 @@ The points table is in [challenge.md](challenge.md); it leads to four rules for 
 **1 · Quantity.** The position's tender quantity, replaced by the latest dated clarification (≤ `S`) that changes
 **that** position; withdrawn answers don't count (13); then converted to pieces (17).
 Traps: clarification numbers aren't in date order; times in site-local zones; values drawn as images.
-Gather tender · Decide `resolvers.requirements` · ✅ · Check: dry-run score; select tests (I18)
+Gather tender_portal · Decide `resolvers.requirements` · ✅ · Check: dry-run score; select tests (I18)
 
 **2 · Requirement.** The position's requirement in the specification revision **marked current** by its status: not
 the one that opens first, not the newest date, not the highest number. Superseded revisions never apply.
 Traps: the oldest revision opens first; the status is only in a tooltip; dates in mixed formats.
-Gather spec · Decide `resolvers.requirements` · ✅ · Check: dry-run score (material and quantity fields)
+Gather supplier_portal · Decide `resolvers.requirements` · ✅ · Check: dry-run score (material and quantity fields)
 
 **3 · Material.** An **active** material whose bore, stroke, pressure, mounting and certification all **exactly**
 equal the governing requirement (after amendments, 14, and derivation, 20). Blocked materials never qualify. If any
@@ -123,8 +124,8 @@ position has none, the decision is **no_bid** for the whole tender. Proof both w
 per position, checked in code; `no_bid` needs a completed search (the group's result list in the evidence, every
 candidate compared) and an independent confirmation. An unfinished search is never "no match" (4.1).
 Traps: look-alike materials that differ in one attribute or only in status.
-Gather erp · Decide `erp.run`, `calc` · ⚠️ dry run: timed-out searches counted as no match → false no-bid (F9, F16 →
-I1, I11) · Check: validate tests with look-alike, blocked and unfinished candidates
+Gather erp · Decide `erp.run`, `calc` · ⚠️ a search cut by its hard deadline is omitted (PR #5), but one forced to
+finish just before the cut can still report no match → false no-bid (F9, F16 → I1, I11) · Check: validate tests with look-alike, blocked and unfinished candidates
 
 **4 · Unit price.** Take the price condition **valid at `S`** (both validity endpoints inclusive), normalize it by its
 **price unit** (per 1 or per n pieces), and choose the scale with the **highest minimum quantity ≤ the position's
@@ -137,7 +138,7 @@ calc tests (I10, I14)
 **5 · Discount.** `LATEST(discount approval, sales director)` for exactly `T`; none → 0 %. Conditions: 16.
 Traps: approvals for look-alike references; requests from our own mailbox; reviews that are explicitly no approval;
 superseded approvals; draft blocks inside messages; inbox and archive.
-Gather mail · Decide `resolvers.commercials` · ⚠️ search wording taken from a public mail subject (F10 → I12) · Check:
+Gather webmail · Decide `resolvers.commercials` · ⚠️ search wording taken from a public mail subject (F10 → I12) · Check:
 dry-run score; select tests (I18)
 
 **6 · Lead time.** The from-stock lead time when **available** (unrestricted) stock covers the pooled demand (15);
@@ -159,14 +160,15 @@ keep their credit), and the bid must still be signed. Our policy: **omit a posit
 configured**; with a known material, submit it with every field we have, optional fields we don't know left blank,
 and keep rule 7. A missing active material is no_bid (3), never an omission; an unfinished search is an omission (or a
 retry), never no_bid.
-Gather erp · Decide `calc`, `submit` · ⚠️ positions without prices are omitted; no watchdog (F5, F14 → I6, I15) ·
+Gather erp · Decide `calc`, `submit` · ⚠️ positions without prices or with a cut search are omitted; no watchdog (F5,
+F14 → I6, I15) ·
 Check: calc tests, short-budget dry run
 
 **10 · Finding records.** The spec names a catalogue group per requirement: search the ERP for it and compare the
 candidates' attributes. Empty or over-broad searches list nothing: narrow to ≤ 20 hits. Mail search ANDs its words:
 use the reference plus one subject or topic; read inbox **and** archive, every result page. Helpers may extract opened
 pages and page through chosen result sets; sites and positions may be investigated in parallel.
-Gather erp, mail · Decide missions · ⚠️ each agent looks only on "its" site (F11 → I16); fixed mail topics (F10 → I12)
+Gather erp, webmail · Decide missions · ⚠️ each agent looks only on "its" site (F11 → I16); fixed mail topics (F10 → I12)
 · Check: gap-sweep test (I16)
 
 **11 · Agent requirement.** See T0.3 and T0.4.
@@ -176,16 +178,16 @@ Gather erp, mail · Decide missions · ⚠️ each agent looks only on "its" sit
 mass surcharge**, **neither**. Setup fees are never discounted. A group overrides the default even when two positions
 select the same material; positions without a group are **base only**. The order-level percentage and its threshold
 (16) don't change.
-Gather tender, mail · Decide `resolvers.commercials` · ✅ · Check: dry-run score; prose → class tests (I18)
+Gather tender_portal, webmail · Decide `resolvers.commercials` · ✅ · Check: dry-run score; prose → class tests (I18)
 
 **13 · Withdrawn answers.** A Q&A answer may withdraw an earlier one by its number: ignore the withdrawn answer's
 quantity change; the latest remaining change applies, else the tender quantity.
-Gather tender · Decide `resolvers.requirements` · ✅ · Check: dry-run score; select tests (I18)
+Gather tender_portal · Decide `resolvers.requirements` · ✅ · Check: dry-run score; select tests (I18)
 
 **14 · Scoped amendments.** After choosing the governing revision (2), apply the Q&A technical amendments that name
 **that revision and that requirement**: only the named attributes, the latest dated (≤ `S`) per attribute.
 Amendments to other revisions never apply.
-Gather tender · Decide `resolvers.requirements` · ✅ · Check: dry-run score; select tests (I18)
+Gather tender_portal · Decide `resolvers.requirements` · ✅ · Check: dry-run score; select tests (I18)
 
 **15 · Shared stock.** Sum the final quantities of all positions that select the same material. Stock must cover the
 whole sum for those positions to deliver from stock; otherwise all of them use production. No partial allocation.
@@ -196,12 +198,12 @@ Gather erp · Decide `calc` · ✅ · Check: calc tests (I14)
 `V = r2(Σ final quantity × base_unit_price)` (valid per-position scale prices in EUR, before discount, without mass
 surcharges, setup fees or packaging). `V ≥ threshold` (inclusive) → its percentage, else **0 %**, with **no fallback**
 to older approvals. For no_bid, a conditional approval yields 0 %.
-Gather mail · Decide `resolvers.commercials`, `calc` · ✅ · Check: calc tests (I14)
+Gather webmail · Decide `resolvers.commercials`, `calc` · ✅ · Check: calc tests (I14)
 
 **17 · Units.** Tender and Q&A quantities are in the position's stated unit. Sets convert to pieces with the
 governing spec's pieces per set. Price scales, stock, allocation weights and bid quantities are all in final pieces.
 Carton rounding affects packaging cost only, never the quantity.
-Gather tender, spec · Decide `resolvers.requirements` · ✅ · Check: dry-run score; select tests (I18)
+Gather tender_portal, supplier_portal · Decide `resolvers.requirements` · ✅ · Check: dry-run score; select tests (I18)
 
 **18 · Pricing breakdown.** Optional fields with independent credit, all net EUR: `base_unit_price` (rule 4, per
 piece); `surcharge_per_unit = r2(metal surcharge + (ordinary setup + allocated pool share) / q)` per piece, **before
@@ -215,43 +217,43 @@ calculation fields lose only their own points (9). Nothing may depend on what pu
 **20 · Technical derivation.** For a requirement whose stroke is a usable stroke (*nutzbarer Weg*): apply its scoped
 amendments (14), then add **2 ×** the per-end reserve of its key from `LATEST(Technikfreigabe, technik)` **for that
 revision**. Match the resulting nominal stroke in the ERP; other attributes stay unchanged.
-Gather spec, mail · Decide `resolvers.requirements` · ✅ · Check: dry-run score; select tests (I18)
+Gather supplier_portal, webmail · Decide `resolvers.requirements` · ✅ · Check: dry-run score; select tests (I18)
 
 **21 · Authority and time.** Every key is resolved with `LATEST` (4.1). Authorized subject/sender pairs (local part +
 `@D`), as the brief states them: Technikfreigabe/technik, Verpackungstarife/logistik, Terminfreigabe/logistik,
 Devisenfixing/finanzen, Rüstpools/kalkulation, Projektbonus/finanzen; plus the director's approval (5),
 Konditionsregeln (12) and Preisindizes (28), both from kalkulation. Read them from each run's brief (T0.11).
-Gather mail · Decide `resolvers.commercials` · ⚠️ correct in the dry run, but nothing checks the model's selection
+Gather webmail · Decide `resolvers.commercials` · ⚠️ correct in the dry run, but nothing checks the model's selection
 (F6 → I18) · Check: select tests per trap category (§8)
 
 **22 · Currency.** The valid condition names its currency and FX key. Normalize the price unit, choose the
 per-position scale (4), convert with EUR per currency unit from `LATEST(Devisenfixing, finanzen, key)`, and `r2`. This
 EUR value is `base_unit_price`, used in every later step (16, 26, 27).
-Gather erp, mail · Decide `erp.extract`, `resolvers.commercials`, `calc` · ⚠️ an unmatched FX key silently takes the
+Gather erp, webmail · Decide `erp.extract`, `resolvers.commercials`, `calc` · ⚠️ an unmatched FX key silently takes the
 only rate (F8 → I15) · Check: calc tests (I14)
 
 **23 · Packaging.** The Q&A assigns the tariff key; `LATEST(Verpackungstarife, logistik, key)` gives the price per
 started carton; the ERP gives pieces per carton. `cartons = ceil(final pieces / carton size)` **per position**, never
 pooled, never discounted; the quantity is not increased. `packaging_per_unit = r2(cartons × tariff / q)`.
-Gather tender, erp, mail · Decide `resolvers.commercials`, `calc` · ✅ · Check: calc tests (I14)
+Gather tender_portal, erp, webmail · Decide `resolvers.commercials`, `calc` · ✅ · Check: calc tests (I14)
 
 **24 · Delivery.** The Q&A assigns a commitment key; `LATEST(Terminfreigabe, logistik, key)` names a material, weeks
 and a ceiling. Apply it only if its material is the selected one **and** the pooled demand for that material ≤ the
 ceiling (inclusive); otherwise shared-stock delivery (6, 15). Commitments may differ by position for the same material.
-Gather tender, mail · Decide `resolvers.commercials`, `calc` · ✅ · Check: calc tests (I14)
+Gather tender_portal, webmail · Decide `resolvers.commercials`, `calc` · ✅ · Check: calc tests (I14)
 
 **25 · Shared setup.** The Q&A names the pool members; the ERP gives each material's **allocation mass** (not the
 surcharge mass); `LATEST(Rüstpools, kalkulation)` gives the one pool fee and the cent rule: weights = final pieces ×
 allocation mass; floor to cents, leftover cents to the largest remainders, ties by ascending position id. Each share
 adds to the position's ordinary setup fee (from the Q&A); reported in the surcharge (18).
-Gather tender, erp, mail · Decide `resolvers.commercials`, `calc` · ✅ · Check: allocation tests (I14)
+Gather tender_portal, erp, webmail · Decide `resolvers.commercials`, `calc` · ✅ · Check: allocation tests (I14)
 
 **26 · Project bonus.** `LATEST(Projektbonus, finanzen)` gives marginal bands. Eligible base `B = Σ final pieces ×
 base_unit_price` over member positions (EUR, before discount, without surcharges and packaging). Credit = Σ over
 bands of rate × the part of `B` inside the band, `r2` once; allocated to members in proportion to their goods value by
 largest remainder in cents (ties ascending position id). `rebate_total` = the position's allocation; `0.00` for
 non-members. Independent of discount clauses; never discounted again.
-Gather mail · Decide `resolvers.commercials`, `calc` · ✅ · Check: band and allocation tests (I14)
+Gather webmail · Decide `resolvers.commercials`, `calc` · ✅ · Check: band and allocation tests (I14)
 
 **27 · Final price.**
 `unit = r2( base·(1 − d·[clause covers base]) + mass surcharge·(1 − d·[clause covers surcharge]) + (ordinary setup + pool share + carton cost − bonus share) / q )`
@@ -261,7 +263,7 @@ Gather – · Decide `calc` · ✅ · Check: calc golden test (I14)
 **28 · Metal indices.** `LATEST(Preisindizes, kalkulation)` for exactly `T`; if it lists validity windows, use the
 rate whose inclusive window contains `S`, not the last one listed. Mass surcharge per piece = surcharge mass (kg) ×
 that rate (the material's index key selects the index).
-Gather erp, mail · Decide `resolvers.commercials` · ⚠️ an unmatched index key silently takes the only index (F8 →
+Gather erp, webmail · Decide `resolvers.commercials` · ⚠️ an unmatched index key silently takes the only index (F8 →
 I15) · Check: dry-run score; select tests (I18)
 
 **29 · Scoring.** The points per part and per position field: [challenge.md](challenge.md); what they imply: 4.2.

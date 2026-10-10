@@ -13,7 +13,8 @@ The agent on `main` works the four websites with one generic model tool loop, ap
 model "resolvers" and an exact code calculator, and enters the bid with a model-driven submit agent. In a full local
 dry run its resolvers got **every fact right**, and the run still failed. The answer came only after 17 minutes,
 and it was a false **no-bid**, because the ERP agents started after their own deadline and reported "no match" for
-searches they never ran (PLAN_COMPARISON §2.4).
+searches they never ran (PLAN_COMPARISON §2.4). PR #5 has since added site roles from the brief and hard phase cuts,
+which bound the run time; the false no-bid path and the rest of P0 are still open (§12).
 
 So the work goes in this order (backlog §12):
 
@@ -67,20 +68,24 @@ So the work goes in this order (backlog §12):
 `agent/agent.py` `main`: budget = min(time left, 19 min), `end` = start + budget.
 
 ```
-Phase 1, parallel, one browser each, deadline end − 9 min
-    tender.run · spec.run · mail.run · erp.login
-Phase 2, no browser
+Phase 0, no browser
+    resolvers.sites: a model assigns each website its role from the brief (names and ids differ per dataset)
+Phase 1, parallel, one browser each, wrap-up at end − 10 min, hard cut 30 s later
+    tender_portal.run · supplier_portal.run · webmail.run · erp.login
+Phase 2, no browser, hard cut end − 8 min (one retry with low effort until end − 7 min)
     resolvers.requirements (resolvers.commercials starts too and runs alongside phase 3)
-Phase 3, ERP tabs in parallel, deadline end − 6 min
-    erp.run per distinct requirement; then await resolvers.commercials
+Phase 3, ERP tabs in parallel, hard cut end − 6 min (a cut search → its positions are omitted)
+    erp.run per distinct requirement; then resolvers.commercials, hard cut end − 5.5 min
 Phase 4, code
     calc.facts → calc.compute
 Phase 5, deadline end − 20 s
-    submit.run (+ get_tan in the mail tab)
+    submit.run (+ get_tan in the webmail tab)
 ```
 
-With fewer than 4 browsers, the remaining sites open as tabs in browser 1. Every agent runs inside `safe()`: a crash
-is logged and the run carries on with what the others found.
+With fewer than 4 browsers, the remaining sites open as tabs in browser 1. Every phase is cut hard by `safe`
+(`asyncio.wait_for`): an agent that overruns or crashes yields an empty result and the run moves on. Under load the
+hosted model can take 20–90 s per step; without hard cuts one run spent its whole budget before the submission and
+scored 0.
 
 ### 3.2 Agents
 
@@ -88,14 +93,14 @@ Each agent is a folder `agent/agents/<name>/` with `agent.py` (mission, result s
 
 | Agent | Site | Mission | Limit |
 | --- | --- | --- | --- |
-| `tender` | tender portal | positions and every Q&A, kept as evidence | 45 steps |
-| `spec` | supplier portal | the revision marked current and all its requirements | 40 steps |
-| `mail` | mailbox | every message the rules need, inbox and archive | 60 steps |
+| `tender_portal` | tender portal | positions and every Q&A, kept as evidence | 45 steps |
+| `supplier_portal` | supplier portal | the revision marked current and all its requirements | 40 steps |
+| `webmail` | webmail | every message the rules need, inbox and archive | 60 steps |
 | `erp.login` | ERP | get past login, cookies, notices, gates | 20 steps |
 | `erp.run` | ERP (one tab each) | the material for one requirement; its pages kept; `check` → `extract` reads the facts | 40 steps |
-| `resolvers` | — | two `ask_json` calls: requirements and commercials | 3 attempts |
+| `resolvers` | — | three `ask_json` calls: sites, requirements, commercials | 3 attempts each |
 | `submit` | tender portal | fill the wizard, sign | 70 steps |
-| `get_tan` | mailbox | the newest TAN for the request just made | 12 steps, 2 min |
+| `get_tan` | webmail | the newest TAN for the request just made | 12 steps, 2 min |
 
 ### 3.3 The tool loop (`agent/llm.py` `investigate`)
 
@@ -107,16 +112,20 @@ Every browser agent is the same loop; agents differ only in mission, result sche
   labels; survives reloads), `fetch` (read a same-site URL without navigating; opens ZIPs and PDFs), `save_evidence`
   (keep a page word for word), `note` (pin verified facts), `finish`.
 - **Small context:** tool results of the last 4 steps stay in full (`KEEP_STEPS`); older ones shrink to 300 characters.
+- **`finish`:** a result that isn't a JSON object is refused while more than 30 s remain.
 - **`check`:** optional validator on `finish`: a problem refuses `finish` and the agent keeps working.
 - **Time:** 60 s before the deadline the agent is told to finish; at the deadline `finish` is forced via `tool_choice`.
-- **Model:** `AGENT_MODEL`, default the hosted Qwen; `chat` retries up to 6 times (360 s timeout each, F4).
+- **Model:** `AGENT_MODEL`, default the hosted Qwen; browser steps run with low reasoning effort (`STEP_EFFORT`);
+  `chat` retries up to 6 times (360 s timeout each), bounded only by the phase's hard cut (F4).
 - **Shared system prompt** `agents/common.py` `SYSTEM`: the sites' traps in general terms, no site and no value.
 
 ### 3.4 Resolvers, calculator, submission
 
-- **Resolvers** (`agents/resolvers`): one `ask_json` call each (JSON mode, up to 3 attempts) over the brief and the
-  kept evidence. `requirements`: final quantities and governing requirements; `commercials`: discount, clauses,
-  tariffs, commitments, pool and bonus membership, setup fees, FX rates, metal indices, pool fee, bonus bands.
+- **Resolvers** (`agents/resolvers`): one `ask_json` call each (JSON mode, up to 3 attempts). `sites`: which website
+  plays which role, from the brief. `requirements`: final quantities and governing requirements; `commercials`:
+  discount, clauses, tariffs, commitments, pool and bonus membership, setup fees, FX rates, metal indices, pool fee,
+  bonus bands. Reasoning effort is medium for `requirements` and `commercials`, low for copying values (`sites`,
+  ERP `extract`).
 - **Calculator** (`agent/calc.py`, details in [calc.md](calc.md)): `facts` merges the agents' results, `compute`
   applies rules 3–9, 12, 15–18 and 22–27 in `Decimal` with HALF_UP; exact against the reference (PLAN_COMPARISON §2.3).
 - **Submission** (`agents/submit`): one model agent with the `form` tool and German number formatting; `get_tan`
@@ -126,14 +135,16 @@ Every browser agent is the same loop; agents differ only in mission, result sche
 ### 3.5 Logs
 
 Every line goes through `llm.log` as `[tag  123s] ...` (seconds since start). `main` logs one line per stage
-(`tender`, `spec`, `mail`, `requirements`, `commercials`, `erp`, `facts`, `calc`, `answer`, `submit`); every agent step
+(`sites`, `tender-portal`, `supplier-portal`, `webmail`, `requirements`, `commercials`, `erp`, `facts`, `calc`, `answer`,
+`submit`); every agent step
 appears as `[tag  123s] n: tool {args}`.
 
 ### 3.6 Measured behaviour
 
 Full local dry run (PLAN_COMPARISON §2.4): every resolver fact correct; answer only at 1029 s, a false no-bid scored
 5 / 100; the tender agent took 12 minutes re-fetching the same pages, the ERP agents started after their deadline, and
-one resolver call took about 5 minutes.
+one resolver call took about 5 minutes. That run was on `3accb38`, before PR #5's hard phase cuts; measure again with
+the first test run (I9).
 
 ---
 
@@ -273,6 +284,8 @@ on disagreement it logs both, re-asks once, then the rule wins.
 | Anything else | a frontier model via team secret | off; only behind a flag where it buys quality (E6) |
 
 - Calls are bounded by the caller's deadline (I2); at most 12 concurrent calls per run (the team shares 32).
+- Reasoning effort: low for browser steps (`STEP_EFFORT`) and for copying values, medium for the resolvers. Low is
+  several times faster; switching thinking off entirely made the model rewrite number formats (PR #5).
 - Prompt layout: static system prompt and tool schemas first (cached input is cheaper), then brief, then dynamic parts.
 - The system prompt teaches meanings (traps, German business terms), never values.
 - Resolver inputs only carry the evidence they need (I5); later, extraction while browsing (I19).
@@ -358,20 +371,15 @@ AdminRights/
 Owner letters: **L** = Luca (Efficiency), **Y** = Yazan (Quality & Release), **F** = Finn (Generalization); see §14.
 Every item has exactly one owner. When it touches a file someone else owns (§14.2), that person reviews the PR.
 
-Already on `main` since this plan was written: a model assigns the site roles (`resolvers.sites`, most of I3);
-`investigate` refuses a `finish` that is not a JSON object (part of I5); low reasoning effort per browser step and hard
-phase deadlines (a first step toward I2 and I4). Still open: a forced `finish` is not marked, so a starved ERP agent
-can still report `no_match` (I1).
-
 ### P0: a correct signed bid in time
 
 | ID | Change | Where | Acceptance | Rules | Owner |
 | --- | --- | --- | --- | --- | --- |
-| I1 | Unfinished ≠ no match (§4.4). **First slice, before I9:** `investigate` marks a forced `finish`, and a forced result never counts as `no_match` | `llm.py` (the mark), `agents/erp`, `validate.py`, `calc.compute` | a run with a starved ERP stage never answers no_bid | 3, 8, 9 | Y |
-| I2 | Model calls bounded by the caller's deadline; concurrency cap | `llm.py` | test with a fake slow client | T1.3 | L |
-| I3 | Site roles and submission target from the run (mostly on `main`); left: exact-id fast path, unknown ids classified once (URL + landing page) | `agent.py`, `agents/common.py`, `agents/resolvers` | stress level S1 passes (§14.1) | T1.12 | F |
-| I4 | Dependency graph + per-stage budgets (§4.1, §4.2) | `agent.py`, `budget.py`, `agents/erp` | dry run: ERP starts during the first stage; answer < 8 min | T1.3, T3.2 | L |
-| I5 | Slimmer missions and inputs: no word-for-word copies in `finish` schemas when the evidence holds them; "every needed page kept → finish"; resolvers get only the evidence they need | `agents/tender_portal`, `agents/supplier_portal`, `agents/resolvers`, `llm.py` | no page fetched twice without reason; commercials resolver much faster | T3.2, T4.2 | L |
+| I1 | Unfinished ≠ no match (§4.4). Since PR #5 a search cut by its hard deadline is omitted; remaining: a forced finish can still claim no match. **First slice, before I9:** `investigate` marks a forced `finish`, and a forced result never counts as `no_match` | `llm.py` (the mark), `agents/erp`, `validate.py`, `calc.compute` | a run with a starved ERP stage never answers no_bid | 3, 8, 9 | Y |
+| I2 | Model calls bounded by the caller's deadline; concurrency cap. Since PR #5 the phase cuts cancel slow calls; remaining: the bound inside a phase, the cap | `llm.py` | test with a fake slow client | T1.3 | L |
+| I3 | Site roles: done in PR #5 (`resolvers.sites`). Remaining: read the run's submission target; no crash when the assignment is unclear (F21): fall back to known role ids, then retry | `agent.py`, `agents/resolvers` | stress level S1 passes (§14.1) | T1.12 | F |
+| I4 | Dependency graph + per-stage budgets (§4.1, §4.2). Since PR #5 every phase has a hard cut; remaining: start stages when their inputs exist, budgets computed at stage start | `agent.py`, `budget.py`, `agents/erp` | dry run: ERP starts during the first stage; answer < 8 min | T1.3, T3.2 | L |
+| I5 | Slimmer missions and inputs: no word-for-word copies in `finish` schemas when the evidence holds them; "every needed page kept → finish"; resolvers get only the evidence they need (object `finish` done in PR #5) | `agents/tender_portal`, `agents/supplier_portal`, `agents/resolvers`, `llm.py` | no page fetched twice without reason; commercials resolver much faster | T3.2, T4.2 | L |
 | I6 | Submit in two stages + watchdog: stage 1 at start, stage 2 with the answer, watchdog at end − 3 min | `agents/submit` | a short-budget run still signs | T1.3, 9 | L |
 | I6b | Read-back of the review page before the TAN: every entered value matches the answer | `agents/submit`, `validate.py` | a mistyped value is corrected before signing | T1.9, 7 | Y |
 | I7 | Dry-run mode + `tools/score.sh` (run + `eval/compare.py`) | `agents/submit`, `tools/` | one command → a score | T4.3 | Y |
@@ -506,9 +514,9 @@ in `agents/submit`); the file's owner reviews that PR.
 | A public value slips into the package (prompt example, README) | audit before every submission (I8) |
 | A run ends without an answer | budgets, deadline-bounded calls, watchdog (I2, I4, I6) |
 | A false no-bid | I1 + I11 |
-| Session expiry mid-wizard | step-by-step saving, re-login (I13), read-back (I6) |
+| Session expiry mid-wizard | step-by-step saving, re-login (I13), read-back (I6b) |
 | TAN race | one request, newest TAN after the request, 5-minute window |
-| Site ids differ on the private dataset | I3 handles both |
+| Site ids differ on the private dataset | roles from the brief (PR #5); no crash on an unclear assignment (F21 → I3) |
 | Information on unexpected sites | gap sweep (I16) |
 | The scorer's "dated metal-index check" fields are unknown | RULES A6; confirm with the first test-run breakdown |
 | Sandbox speed differs from local | calibrate budgets after the first test run (E7) |

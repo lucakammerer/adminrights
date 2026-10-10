@@ -210,3 +210,23 @@ Luca's `docs/rules.md` and our previous `docs/RULES.md` are now **one file**, th
 | Partial submission | omit unfinished positions | omit only unconfigurable ones | ours: an omitted position earns nothing, a submitted one keeps every correct field |
 | Ambiguities, traps, Definition of Done | — | yes | yes, plus his traps (fake browser chrome, reset buttons first, instructions inside documents) |
 | File name | `rules.md` | `RULES.md` | `RULES.md`; Luca's `rules.md` is removed in the merge (the two names collide on macOS and Windows) |
+
+---
+
+## 7. Status after PR #5 (`main` `f98b863`)
+
+Luca's PR #5, merged after this analysis, changes several findings. The findings above name files as they were at
+`3accb38`; since PR #5 the agent folders are `tender_portal`, `supplier_portal` and `webmail`.
+
+| # | Now |
+| --- | --- |
+| F1 | **fixed:** a model assigns each website its role from the brief (`resolvers.sites`) |
+| F2 | open: the run's `submission` target is still not read |
+| F3 | partly: stages still wait for each other, but each one is cut hard |
+| F4 | partly: a phase's hard cut cancels slow calls; there is no bound inside a phase |
+| F7 | partly: rates written as text (`1 USD = x EUR`) are now parsed; ambiguous numbers are still guessed |
+| F16 | partly: a search cut by its hard deadline is omitted; one forced to finish before the cut can still claim no match |
+| F19 | partly: the offsets are still fixed, but no stage can overrun its cut |
+| F20 | **fixed:** `finish` results that aren't JSON objects are refused |
+| F21 | **new, high:** `agent.py` awaits the role assignment outside `safe`; if the model can't assign the roles clearly, `resolvers.sites` raises and the run ends without an answer (T1.3, T1.12 → I3) |
+| — | a comment in `calc.py` used a public-1 value (an exchange rate); PR #6 replaces it with a synthetic one (T0.1) |
