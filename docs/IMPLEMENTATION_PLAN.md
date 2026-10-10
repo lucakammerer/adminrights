@@ -154,10 +154,10 @@ appears as `[tag  123s] n: tool {args}`.
 
 ### 3.6 Measured behaviour
 
-Full local dry run (PLAN_COMPARISON §2.4): every resolver fact correct; answer only at 1029 s, a false no-bid scored
-5 / 100; the tender agent took 12 minutes re-fetching the same pages, the ERP agents started after their deadline, and
-one resolver call took about 5 minutes. That run was on `3accb38`, before PR #5's hard phase cuts; measure again with
-the first test run (I9).
+Every test run is a row in [`bench/RUNS.md`](../bench/RUNS.md). Up to `3accb38` plus PR #5: the resolvers got every
+fact right in every run, and `calc` scores 100 on complete facts (`tests/test_calc.py`), but no run signed: ERP
+agents ran into the end − 6 min cut and the submit agent ran out of time (one model call hung 371 s). PR #9 bounds
+both; its first test run is the next row.
 
 ---
 

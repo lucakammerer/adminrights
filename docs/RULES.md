@@ -48,7 +48,7 @@ include it.
 
 | ID | Rule | Check |
 | --- | --- | --- |
-| T0.1 | MUST NOT put values from the public scenario or its websites into the package: references, material numbers, keys of any kind, prices, quantities, totals, discounts, dates, logins, TANs, receipt numbers. Applies to code, config, prompts, few-shot examples, notes, defaults and fallbacks, **and to the agent READMEs, which are uploaded with the package**. | `tools/audit_package.py` (I8); 0 hits on `main` `3accb38` |
+| T0.1 | MUST NOT put values from the public scenario or its websites into the package: references, material numbers, keys of any kind, prices, quantities, totals, discounts, dates, logins, TANs, receipt numbers. Applies to code, config, prompts, few-shot examples, notes, defaults and fallbacks, **and to the agent READMEs, which are uploaded with the package**. | `tools/audit_package.py` (I8), also on the uploaded package with `--package`; runs before every test run (`tools/ci.py`) |
 | T0.2 | MUST NOT ship site-specific navigation: no site URLs, paths, element ids or click sequences. Generic heuristics are fine. | audit; review |
 | T0.3 | A model MUST choose navigation targets, searches and relevant documents from what it observes at run time, and make the important decisions. | every navigation step is a model tool call in the log |
 | T0.4 | Helpers MAY extract a page the model chose, parse a document it chose, page through a result set it chose, calculate, validate, retry and fill forms. They MUST NOT discover and traverse the sites on their own to assemble the evidence (no crawler, no fixed script with the model as a fallback). | review |
