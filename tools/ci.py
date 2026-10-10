@@ -80,7 +80,8 @@ def gates(path: Path) -> list[str]:
     if subprocess.run([sys.executable, str(ROOT / "tools/audit_package.py"), "--agent", str(path / "agent"), *logs],
                       capture_output=True).returncode:
         failed.append("audit")
-    tests = subprocess.run(["uv", "run", "--project", str(ROOT / "agent"), "python", "-m", "unittest",
+    # the candidate's own environment: a branch may add a dependency (uv's cache makes the sync quick)
+    tests = subprocess.run(["uv", "run", "--project", str(path / "agent"), "python", "-m", "unittest",
                             "discover", "-s", "tests"], cwd=path, capture_output=True, text=True)
     if tests.returncode:
         failed.append("tests: " + (re.findall(r"^(?:FAIL|ERROR): (\S+)", tests.stderr, re.M) or ["see unittest"])[0])
