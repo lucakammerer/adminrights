@@ -1,5 +1,6 @@
 """Audit the package before it is uploaded (I8): no public-1 value anywhere in it (every string and larger number in
-eval/expected.json, plus ids, hosts and addresses from run logs), and no browser of its own outside browsers.py.
+eval/expected.json, plus ids, hosts, site-specific path segments and addresses from run logs), no browser of its own
+outside browsers.py, no API key.
 
 usage: python tools/audit_package.py [--agent DIR | --package <run_|reh_|sub_ id>] [run.log ...]
 """
@@ -36,6 +37,8 @@ def public_values(logs: list[str]) -> set[str]:
         found |= set(re.findall(IDS, text))
         found |= {host for host in re.findall(r"https?://([\w.-]+)", text) if "." in host}
         found |= set(re.findall(r"[\w.+-]+@[\w-]+\.[\w.]+", text))
+        paths = re.findall(r"https?://[\w.-]+(/[^\s\"'?#]*)", text)
+        found |= {seg for path in paths for seg in path.split("/") if re.search(r"\d|-", seg)}  # mm03, x-content
     return {value for value in found if len(value) >= 4}
 
 
@@ -50,6 +53,8 @@ def audit(agent: Path, logs: list[str]) -> list[str]:
         problems += [f"{name}: public-1 value {value}" for value in values if value in text]
         if path.suffix == ".py" and path.name != "browsers.py" and re.search(r"\.launch(_persistent_context)?\(", text):
             problems.append(f"{name}: launches its own browser")
+        if re.search(r"\bsk-[A-Za-z0-9_-]{20,}|api[_-]?key\s*=\s*[\"'][^\"']{12,}", text, re.I):
+            problems.append(f"{name}: looks like an API key")
     return problems
 
 

@@ -56,7 +56,7 @@ cd agent && eval "$(atira scout --env)"             # terminal 2: scouting login
 HEADLESS=1 uv run --no-sync python agent.py         # one local run, never counts
 tools/score.sh                                      # from the repo root: local dry run (DRY_RUN=1, no submission) + points per field
 uv run --project agent --no-sync python -m unittest discover -s tests   # from the repo root, in seconds
-python tools/audit_package.py                       # no public-1 value, no own browser in agent/
+tools/check_release.sh                              # before every submit: audit, tests, agent.json
 atira test-run .                                    # sandbox, points per field, not on the leaderboard
 atira submit .                                      # only after Luca approves and docs/RULES.md §9 holds
 ```
