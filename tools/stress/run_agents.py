@@ -10,7 +10,8 @@ Run from the repo root, with `atira models proxy` running and `source tools/dev-
 
 --mutate SEED runs stress level S2: every read-only page (GET, no password field, no POST form) is rewritten by
 tools/stress/mutations.js before the agent sees it (synonym labels, hidden decoys, shuffled menus, swapped number
-formats with their hints), in this tool's browser only. Pass: the gather score stays what it is unmutated.
+formats with their hints, shuffled table rows, main content in an extra frame), in this tool's browser only. Pass:
+the gather score stays what it is unmutated.
 --s4 PAGE runs stress level S4 (needs --resolve): the mail message recorded in PAGE (raw HTML from a fixture, its
 URL in that fixture's index.json) disappears from the mailbox (its list rows go, its pages answer 404) and appears
 as an attachment page linked from every tender-portal page. After the resolvers, agents.sweep looks for the open
@@ -143,7 +144,7 @@ async def mutator(playwright, seed: int):
             return await route.fulfill(response=response)
         async with lock:
             await scratch.set_content(body, wait_until="domcontentloaded")
-            stats = await scratch.evaluate(f"({MUTATIONS})({{seed: {seed}}})")
+            stats = await scratch.evaluate(f"({MUTATIONS})(opts)", {"seed": seed, "base": request.url})
             body = await scratch.content()
         MUTATED.update({k: v for k, v in stats.items()} | {"pages": 1})
         await route.fulfill(response=response, body=body)
@@ -196,8 +197,8 @@ class RecordingTab(Tab):
         super().__init__(page, site)
         self.recorder = recorder
 
-    async def read(self, offset: int = 0) -> str:
-        text = await super().read(offset)
+    async def read(self, offset: int = 0, compact: bool = False) -> str:
+        text = await super().read(offset, compact)
         await self.recorder.snapshot(self.page)
         return text
 

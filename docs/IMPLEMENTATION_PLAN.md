@@ -276,7 +276,7 @@ on disagreement it logs both, re-asks once, then the rule wins.
 | 5 | Same-origin iframes inlined, nested ones too | ✅ |
 | 6 | Tables with cell separators; page indicators stay in the text | ✅ |
 | 7 | Open dialogs marked; in-page dialogs closed on every settle; browser dialogs accepted and reported | ✅ |
-| 8 | Repeated page chrome (headers, banners) suppressed to save tokens | ⏳ optional, I17 |
+| 8 | Repeated page chrome (headers, banners) suppressed to save tokens: on the page shown after an action, lines without controls that earlier reads of the tab showed twice are left out at its top and bottom, with a note; controls, evidence and explicit reads stay complete (about 10 % less page text on the recordings) | ✅ I17 |
 | 9 | 14,000 characters per read, `offset` for the rest | ✅ |
 | 10 | Screenshot fallback when text is missing | only if a test shows the need (E2) |
 
@@ -353,7 +353,7 @@ Same jobs and rules, different software, look, navigation, site names and data, 
 | Unit tests | calc golden test with facts as the pages show them, allocation ties, band edges, inclusive ceilings and thresholds; number parser; validators; selection | I10, I11, I14, I18 |
 | Recorded pages | pages recorded by `tools/stress/run_agents.py`, a few kept in `eval/fixtures/pages/`; reader tests for every trap category on synthetic pages (`tests/test_reader.py`) ✅ | I17 |
 | Dry run + score | `tools/score.sh`: a local run with `DRY_RUN=1` stops after the answer, `eval/compare.py` scores the logged answer with the official weights | I7 |
-| Mutation tests | recorded pages relabelled, locale-swapped, with hidden decoys and shuffled menus: extraction must not change ✅ (`tests/test_mutations.py`); extra iframes and shuffled rows not yet | I20 |
+| Mutation tests | recorded pages relabelled, locale-swapped, with hidden decoys, shuffled menus and table rows, content in an extra frame: extraction must not change ✅ (`tests/test_mutations.py`) | I20 |
 | Chaos runs *(stretch)* | local runs with random 503s, a forced session expiry, slow responses: the run must still sign | — |
 | Mirror world *(stretch)* | a small local re-skin of the four jobs with information split differently and a synthetic scenario with a known answer | — |
 | Sandbox test runs | the official per-field breakdown; paste each result in its PR | I9 |
@@ -430,7 +430,7 @@ Every item has exactly one owner. When it touches a file someone else owns (§14
 | ID | Change | Where | Acceptance | Rules | Owner |
 | --- | --- | --- | --- | --- | --- |
 | I16 | Gap sweep: `agents/sweep` ✅ (`gaps` in code, one mission per open fact and website, `tests/test_sweep.py`); remaining: a stage in `main` and a second resolver call with the swept pages (I4) | `agent.py`, `agents/sweep` | a fake run with Q&A on another site still finds them (S4) | 10, 19 | Y |
-| I17 | ✅ Reader hardening (§5.1 rows 1b, 2; row 8 open, optional); `pypdf` dependency (`tests/test_reader.py`) | `reader.js`, `pyproject.toml` | recorded-page tests; a PDF is read | traps 8, 9 | Y |
+| I17 | ✅ Reader hardening (§5.1 rows 1b, 2, 8); `pypdf` dependency (`tests/test_reader.py`) | `reader.js`, `pyproject.toml` | recorded-page tests; a PDF is read | traps 8, 9 | Y |
 | I18 | Code-side selection cross-check (§4.4) | `agents/resolvers`, `select.py` | synthetic-record tests per trap category | 1, 2, 5, 12–14, 16, 17, 20–26, 28 | L |
 | I19 | Extraction while browsing: each kept page read into records right away (small parallel calls), so resolvers only select | `llm.py`, `agents/*` | resolvers finish in seconds after the last agent | T3.2, T4.2 | F |
 | I20 | ✅ Mutation tests on recorded pages (`tests/test_mutations.py`, pages in `eval/fixtures/pages/`, mutations shared with S2 in `tools/stress/mutations.js`) | `tests/` | extraction stable | 19 | Y |
@@ -480,7 +480,7 @@ Every item has exactly one owner. When it touches a file someone else owns (§14
 Stress levels:
 
 - **S1:** renamed and reordered site ids. Pass: no crash, same answer.
-- **S2:** live scouting pages rewritten during local runs (relabelled UI text, swapped number formats, extra iframes (not yet),
+- **S2:** live scouting pages rewritten during local runs (relabelled UI text, swapped number formats, extra iframes,
   injected decoys, shuffled lists). Pass: signs and scores ≥ 95. Time-boxed to 2 h.
 - **S3:** a no-bid variant where the matching material shows as blocked. Pass: answers no_bid.
 - **S4 (stretch):** information moved between sites. Pass: the gap sweep (I16) finds it.
