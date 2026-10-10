@@ -223,7 +223,7 @@ async def investigate(tab, system: str, mission: str, finish_schema: dict, deadl
                 args = {}
             log(tag, f"{step}: {name} {json.dumps(args, ensure_ascii=False)[:300]}")
             if name == "finish":
-                result = args.get("result")
+                result = args["result"] if "result" in args else args  # Qwen sometimes drops the wrapper
                 if isinstance(result, str):
                     result = parse_object(result)
                     if result is None and deadline - time.time() > 30:
