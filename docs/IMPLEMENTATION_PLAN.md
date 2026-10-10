@@ -284,7 +284,7 @@ on disagreement it logs both, re-asks once, then the rule wins.
 
 | Obstacle | Today | Change |
 | --- | --- | --- |
-| Cookie walls, login | the model; an expired session is logged in again by code when the very login form the tab got past reappears (`Tab.recover`), never on a TAN or other form; a username or password the model typed one or two characters off is entered exactly as the site's login gives it (`Tab.credential`) | ✅ I13 |
+| Cookie walls, login | the model; an expired session is logged in again by code when the very form the model typed the site's password into reappears after the tab got past it (`Tab.recover`, `Tab.credential`), never on a TAN or other form; a username or password the model typed one or two characters off is entered exactly as the site's login gives it (`Tab.credential`) | ✅ I13 |
 | Modal dialogs | closed in code on every read | — |
 | Transient error pages | code reloads a 5xx page (GET only) twice and `fetch` retries twice before the model sees it; a `fetch` without an answer for 40 s returns as HTTP 504 (never kept as evidence), all inside `llm.TOOL_TIMEOUT`; the model is told | ✅ I13 |
 | Unlock gates | the model (`fill` on a slider, `check`) | — |

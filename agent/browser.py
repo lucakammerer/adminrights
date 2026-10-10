@@ -78,8 +78,8 @@ class Tab:
         self.dialogs: list[str] = []
         self.downloads: list[str] = []
         self.events: list[str] = []  # what code did on the model's behalf (retries, logins), told with the next read
-        self.login_form = ""  # signature of the login form this tab showed; seeing it again after it was past it
-        self.past_login = False  # means the session expired (a TAN or any other form never matches it)
+        self.login_form = ""  # signature of the form the model typed this site's password into; seeing it again
+        self.past_login = False  # after the tab got past it means the session expired (a TAN form never matches it)
         self.relogins = 0
         self.method = "GET"  # of the latest main-frame navigation: only a GET may be reloaded after a server error
         self.status = 0
@@ -164,8 +164,6 @@ class Tab:
             await self.page.evaluate(LOGIN_SUBMIT, [credentials.get("username", ""), credentials["password"]])
             await self.settle()
             self.events.append("The session had expired: code logged in again with this site's credentials.")
-        else:
-            self.login_form, self.past_login = form, False
 
     async def read(self, offset: int = 0) -> str:
         await self.settle()
@@ -200,7 +198,12 @@ class Tab:
         if want and value != want and difflib.SequenceMatcher(None, value, want).ratio() >= 0.8:
             self.events.append(f"The typed {'password' if kind == 'password' else 'username'} differed from this "
                                "site's credentials by a character or two; code entered it exactly.")
-            return want
+            value = want
+        if kind == "password" and value == want:  # only the form the model logged in with is ever filled in again
+            try:
+                self.login_form = await self.page.evaluate(LOGIN_FORM) or ""
+            except Exception:  # noqa: BLE001
+                pass
         return value
 
     async def locate(self, ref: int):

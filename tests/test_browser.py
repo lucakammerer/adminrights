@@ -113,7 +113,9 @@ class TabAgainstLocalSite(unittest.TestCase):
             await tab.form([{"field": "User", "value": "agent"}, {"field": "Secret", "value": "s3cret"},
                             {"click": "Sign in"}])
             expired = await tab.act("goto", {"url": "/expire"})
-            tan = await tab.act("goto", {"url": "/tan"})
+            await tab.act("goto", {"url": "/tan"})
+            await tab.act("goto", {"url": "/home"})
+            tan = await tab.act("goto", {"url": "/tan"})  # seen before and left: still never filled in
             return first, expired, tan
         first, expired, tan = self.run_tab(steps)
         self.assertNotIn("logged in again", first)
