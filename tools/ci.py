@@ -93,7 +93,11 @@ def collect(state: dict) -> list[str]:
             continue
         log = CI / "logs" / f"{run_id}.log"
         log.parent.mkdir(parents=True, exist_ok=True)
-        log.write_text(sh("atira", "logs", run_id, check=False))
+        try:
+            log.write_text(sh("atira", "logs", run_id, check=False, timeout=120))
+        except subprocess.TimeoutExpired:
+            lines.append(f"wait: logs of {run_id} not available yet")
+            continue
         found = re.findall(r"^\[answer\s+\d+s\] (\{.*)$", log.read_text(), re.M)
         evaluated = "–"
         if found:
