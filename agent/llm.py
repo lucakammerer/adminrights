@@ -65,6 +65,10 @@ def limits(until: float, cap: float | None = None):
             var.reset(token)
 
 _client = None
+_fallback = None
+# An OpenRouter model's last three attempts at a call go to the hosted Qwen, which agent.json keeps warm (its warm-up
+# never counts toward the run's time): a provider that fails three times must not end an agent.
+FALLBACK = "qwen3.8-flash-next"
 T0 = time.time()
 
 
@@ -72,8 +76,13 @@ def log(tag: str, text: str):
     print(f"[{tag} {time.time() - T0:4.0f}s] {text}", flush=True)
 
 
-def client() -> AsyncOpenAI:
-    global _client
+def client(fallback: bool = False) -> AsyncOpenAI:
+    global _client, _fallback
+    if fallback:
+        if _fallback is None:
+            _fallback = AsyncOpenAI(base_url=os.environ["QWEN_BASE_URL"], api_key=os.environ["QWEN_API_KEY"],
+                                    timeout=CALL_TIMEOUT, max_retries=0)
+        return _fallback
     if _client is None:
         # no retries inside the SDK: they would multiply the timeout behind chat's back
         if OPENROUTER:
@@ -85,12 +94,13 @@ def client() -> AsyncOpenAI:
     return _client
 
 
-async def reply(messages: list, tools: list | None, silence: float, **kwargs):
+async def reply(messages: list, tools: list | None, silence: float, fallback: bool = False, **kwargs):
     """One streamed model reply, assembled like a non-streamed one; every read must bring a byte within `silence`. The
     snapshot, not get_final_completion: that raises on a reply cut at its length limit, which counted before."""
-    stream = await client().chat.completions.create(model=MODEL, messages=messages, tools=tools, stream=True,
-                                                    stream_options={"include_usage": True}, timeout=silence,
-                                                    **({"extra_body": CACHE} if CACHE else {}), **kwargs)
+    extra = {"extra_body": CACHE} if CACHE and not fallback else {}
+    stream = await client(fallback).chat.completions.create(model=FALLBACK if fallback else MODEL, messages=messages,
+                                                            tools=tools, stream=True, timeout=silence,
+                                                            stream_options={"include_usage": True}, **extra, **kwargs)
     state, chunks = ChatCompletionStreamState(), 0
     async with stream:
         async for chunk in stream:
@@ -110,7 +120,9 @@ async def chat(messages: list, tools: list | None = None, **kwargs):
             raise TimeoutError("no time left for a model call")
         limit = min(CAP.get(), left)
         began = time.time()
-        call = asyncio.ensure_future(reply(messages, tools, min(SILENCE * (2 if attempt else 1), limit), **kwargs))
+        fallback = OPENROUTER and attempt >= 3 and "QWEN_BASE_URL" in os.environ
+        call = asyncio.ensure_future(reply(messages, tools, min(SILENCE * (2 if attempt else 1), limit), fallback,
+                                           **kwargs))
         call.add_done_callback(lambda c: c.cancelled() or c.exception())  # a dropped call's failure stays quiet
         try:
             # asyncio.wait, not wait_for: wait_for waits until the cancelled call has stopped, a cut never does

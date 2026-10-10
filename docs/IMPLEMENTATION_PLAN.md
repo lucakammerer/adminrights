@@ -162,7 +162,8 @@ Every browser agent is the same loop; agents differ only in mission, result sche
 - **`check` bounds:** its model calls take at most `CHECK_TIMEOUT` (60 s) each and end at the agent's deadline; a
   check that fails or runs out of time lets the result through unchecked.
 - **Model:** `AGENT_MODEL`, default the hosted Qwen; a `<provider>/<model>` id runs on OpenRouter through the run's
-  proxy with the team secret `OPENROUTER_API_KEY` (Anthropic models with a moving cache breakpoint). Agents that only
+  proxy with the team secret `OPENROUTER_API_KEY` (Anthropic models with a moving cache breakpoint); its last three
+  attempts at a call go to the hosted Qwen (`llm.FALLBACK`), which `agent.json` keeps warm at no cost in time. Agents that only
   navigate and keep pages (tender portal, supplier portal, webmail, ERP login, sweep) step without thinking
   (`NAV_EFFORT` "none", about half the latency per step); ERP searches, submit and the TAN look-up copy values and
   keep low reasoning effort (`STEP_EFFORT`);
