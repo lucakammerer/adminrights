@@ -274,7 +274,7 @@ function tick() {
 
 async function load() {
   try {
-    runs = await (await fetch("api/runs")).json();
+    runs = await (await fetch(location.pathname.replace(/\/?$/, "/") + "api/runs")).json();
     document.getElementById("updated").textContent = `updated ${new Date().toLocaleTimeString()} · refreshes every 15 s`;
     render();
   } catch (error) {
