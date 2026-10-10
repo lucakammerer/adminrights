@@ -25,6 +25,9 @@ bindingly. Without a submission the run scores 0.
   option stops the call and lists the page's options. Test runs filled the configurator one choice per model call,
   which was most of the submit agent's time. Where a configurator narrows its materials by the earlier choices, a
   wrong choice shows up as a material step without a match; `verify_summary` still checks prices and total.
+  Choices are named by field label: refs are `data-aref` attributes written by `read`, so a re-render after an apply
+  removes them and a ref step later in the same call fails (one test run chained by ref and fell back to one choice
+  per call).
 - Watchdog (first slice): `SIGN_BY` = 180 s before the deadline the agent gets its own warning: omit every position
   not completely entered, request the TAN, sign. The generic "call finish now" would end the run unsigned.
 - Extra tool `get_tan`: starts its own `investigate` in the mail tab, tag `tan`, at most 12 steps, at most 2 min.

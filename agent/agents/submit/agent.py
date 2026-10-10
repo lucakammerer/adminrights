@@ -69,10 +69,11 @@ page, with one form call and end it with the page's next-step button. A configur
 same call, each followed by its apply button, without reading a choice's options first: the form tool waits for the
 page after every step and picks an option by its exact text, its beginning or any part of it, so a material number
 alone is enough where an option shows more after it. Once you know the labels of the configurator's choices (at the
-latest after the first position), enter every position in one call. A step that finds no matching option stops the
-call and lists the options the page offers (the page may word a value differently than the specification above):
-send the rest of that page again in one form call, with that step in the page's wording. Fields in collapsed sections
-are opened by the form tool. Never add extra positions, never skip a
+latest after the first position), enter every position in one call. Name each choice by its field label: refs are
+lost when a choice is applied, so a step by ref only works before the first apply of a call. A step that finds no
+matching option stops the call and lists the options the page offers (the page may word a value differently than the
+specification above): send the rest of that page again in one form call, with that step in the page's wording.
+Fields in collapsed sections are opened by the form tool. Never add extra positions, never skip a
 position unless it is listed to omit, never tick an option to add our own general terms and conditions. Before you request the signing
 TAN, call verify_summary on the summary page and correct what it reports. When the form asks for the signing TAN,
 request it once, then call get_tan with the portal's message (the newest request wins; a new request invalidates the
