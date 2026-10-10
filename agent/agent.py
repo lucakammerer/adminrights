@@ -79,7 +79,10 @@ async def main() -> int:
         roles = await roles_job
         llm.log("sites", json.dumps({role: entry["siteId"] for role, entry in roles.items()}))
         for (role, entry), page in zip(roles.items(), pages):
-            await page.goto(entry["url"], wait_until="domcontentloaded")
+            try:
+                await page.goto(entry["url"], wait_until="domcontentloaded")
+            except Exception as error:  # noqa: BLE001  a slow site must not end the run: its agent opens the URL itself
+                llm.log(role, f"first load failed: {type(error).__name__}")
             tabs[role] = Tab(page, entry)
 
         phase1 = end - 10 * 60  # agents wrap up here; hard cut 30 s later
