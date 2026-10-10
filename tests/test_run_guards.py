@@ -59,6 +59,77 @@ class HardCallBound(unittest.TestCase):
         self.assertLess(asyncio.run(scenario()), 10)  # the server would have answered after 20 s
 
 
+def chunk(delta: dict, finish: str | None = None) -> dict:
+    return {"id": "x", "object": "chat.completion.chunk", "created": 0, "model": "m",
+            "choices": [{"index": 0, "delta": delta, "finish_reason": finish}]}
+
+
+TOOL_STREAM = [chunk({"role": "assistant", "content": ""}),
+               chunk({"tool_calls": [{"index": 0, "id": "c1", "type": "function",
+                                      "function": {"name": "finish", "arguments": '{"result": {"material'}}]}),
+               chunk({"tool_calls": [{"index": 0, "function": {"arguments": '_number": "M-1"}}'}}]}),
+               chunk({}, "tool_calls")]
+
+
+def streaming(replies: list, silent_first: bool = False):
+    """A server that streams one of `replies` per request; with `silent_first`, the first request never hears back."""
+    requests = []
+
+    async def serve(reader, writer):
+        await reader.readuntil(b"\r\n\r\n")
+        requests.append(1)
+        try:
+            if silent_first and len(requests) == 1:
+                await asyncio.sleep(60)
+            body = b"".join(b"data: %s\n\n" % json.dumps(c).encode() for c in replies[len(requests) - 1]) + \
+                b"data: [DONE]\n\n"
+            writer.write(b"HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nContent-Length: %d\r\n\r\n%s"
+                         % (len(body), body))
+            await writer.drain()
+        except (ConnectionError, asyncio.CancelledError):
+            pass
+        finally:
+            writer.close()
+    return serve, requests
+
+
+def ask(serve, silence: float = 30, **limits):
+    """llm.chat against a local server; returns the reply and the seconds it took."""
+    async def scenario():
+        server = await asyncio.start_server(serve, "127.0.0.1", 0)
+        real, real_silence = llm._client, llm.SILENCE
+        llm._client = AsyncOpenAI(base_url=f"http://127.0.0.1:{server.sockets[0].getsockname()[1]}/v1",
+                                  api_key="k", max_retries=0)
+        llm.SILENCE = silence
+        began = time.time()
+        try:
+            with llm.limits(time.time() + limits.get("within", 30)):
+                return await llm.chat([{"role": "user", "content": "x"}]), time.time() - began
+        finally:
+            llm._client, llm.SILENCE = real, real_silence
+            server.close()
+    return asyncio.run(scenario())
+
+
+class StuckCallAskedAgain(unittest.TestCase):
+    def test_silent_call_is_asked_again(self):
+        serve, requests = streaming([None, TOOL_STREAM], silent_first=True)
+        reply, seconds = ask(serve, silence=1)
+        self.assertEqual(len(requests), 2)
+        self.assertLess(seconds, 10)  # the first request would have held the call for 60 s
+        call = reply.choices[0].message.tool_calls[0]
+        self.assertEqual((call.id, call.function.name), ("c1", "finish"))
+        self.assertEqual(json.loads(call.function.arguments), {"result": {"material_number": "M-1"}})
+
+    def test_streamed_reply_reads_like_a_plain_one(self):
+        serve, _ = streaming([[chunk({"role": "assistant", "content": "{\"a\""}), chunk({"content": ": 1}"}, "length")]])
+        reply, _ = ask(serve)
+        message = reply.choices[0].message
+        self.assertEqual(llm.parse_object(message.content), {"a": 1})  # a reply cut at its length limit still counts
+        self.assertEqual(message.model_dump(exclude_none=True), {"role": "assistant", "content": "{\"a\": 1}"})
+        self.assertIsNone(message.tool_calls)
+
+
 class FakeTab:
     async def read(self, offset=0):
         return "a page"
