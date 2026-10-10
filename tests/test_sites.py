@@ -30,9 +30,11 @@ class FakeModel:
         self.answers = list(answers)
         self.delay = delay
         self.calls = 0
+        self.prompts = []
 
     async def __call__(self, system, user, effort=None):
         self.calls += 1
+        self.prompts.append(user)
         await asyncio.sleep(self.delay)
         answer = self.answers[min(self.calls, len(self.answers)) - 1]
         if isinstance(answer, Exception):
@@ -85,6 +87,9 @@ class SitesTest(unittest.TestCase):
         ids = self.run_sites(model)
         self.assertEqual(ids, {"tender_portal": "a", "supplier_portal": "b", "erp": "c", "webmail": "d"})
         self.assertEqual(model.calls, 2)
+        retry = model.prompts[1]
+        self.assertIn("supplier_portal is already b", retry)
+        self.assertNotIn('"supplier_portal": "<siteId>"', retry)
 
     def test_without_a_submission_site_the_model_decides(self):
         ids = self.run_sites(FakeModel({"tender_portal": "d", "supplier_portal": "c", "erp": "b", "webmail": "a"}),
