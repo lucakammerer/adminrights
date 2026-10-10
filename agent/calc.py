@@ -70,7 +70,7 @@ def compute(facts: dict) -> dict:
 
     rows = {}
     for p in positions:
-        qty = int(p["quantity_pieces"])
+        qty = int(d(p["quantity_pieces"]))
         unit = d(p.get("price_unit") or 1)
         fx = d(p.get("fx_eur_per_currency_unit") or 1) if (p.get("currency") or "EUR") != "EUR" else Decimal(1)
         base = cents(scale_price(p["scales"], qty) / unit * fx)
@@ -100,19 +100,20 @@ def compute(facts: dict) -> dict:
         base_net = base * (1 - rate) if rule in ("base", "base_and_surcharge") else base
         mass_net = mass * (1 - rate) if rule == "base_and_surcharge" else mass
         setup = d(p.get("setup_fee")) + pool.get(key, Decimal(0))
-        cartons = ceil(qty / int(p["pieces_per_carton"])) if p.get("pieces_per_carton") else 0
+        per_carton = int(d(p.get("pieces_per_carton")))
+        cartons = ceil(qty / per_carton) if per_carton else 0
         packaging = cartons * d(p.get("carton_price"))
         rebate = bonus.get(key, Decimal(0))
         unit_price = cents(base_net + mass_net + (setup + packaging - rebate) / qty)
         commitment = p.get("delivery_commitment") or {}
         ceiling = commitment.get("max_pieces", commitment.get("max_pooled_pieces"))
         if (commitment.get("material_number") or commitment.get("material")) == material and ceiling is not None \
-                and demand[material] <= int(ceiling):
-            weeks = int(commitment["weeks"])
+                and demand[material] <= d(ceiling):
+            weeks = int(d(commitment["weeks"]))
         elif d(p.get("stock")) >= demand[material]:
-            weeks = int(p["lead_time_stock_weeks"])
+            weeks = int(d(p["lead_time_stock_weeks"]))
         else:
-            weeks = int(p["lead_time_production_weeks"])
+            weeks = int(d(p["lead_time_production_weeks"]))
         total += qty * unit_price
         answer_rows.append({"position": key, "material_number": material, "quantity": qty,
                             "unit_price": float(unit_price), "lead_time_weeks": weeks,
@@ -143,8 +144,11 @@ def number(text, fmt: str = "") -> float:
 
 
 def grams_to_kg(text) -> float:
-    value = number(text, "de-DE" if re.search(r"\d,\d", str(text)) else "en-US")
-    return value / 1000 if re.search(r"\bg\b|g/", str(text)) and "kg" not in str(text) else value
+    """A mass as shown, in g or kg. Grams carry no decimals in practice, so "2.125 g" and "2,125 g" are 2125 g."""
+    s = str(text)
+    if re.search(r"\d\s*(g|gr|gramm|grams?)\b", s, re.I) and not re.search(r"kg|kilo", s, re.I):
+        return number(re.sub(r"(?<=\d)[.,](?=\d{3}\b)", "", s)) / 1000
+    return number(s, "de-DE" if re.search(r"\d,\d", s) else "en-US")
 
 
 def facts(tender, requirements, commercials, erp: dict) -> dict:
@@ -166,7 +170,7 @@ def facts(tender, requirements, commercials, erp: dict) -> dict:
         if index is None and len(commercials.get("metal_indices") or {}) == 1:
             index = next(iter(commercials["metal_indices"].values()))
         positions.append({
-            "position": key, "quantity_pieces": int(req["final_quantity_pieces"]),
+            "position": key, "quantity_pieces": int(d(req["final_quantity_pieces"])),
             "material_number": e.get("material_number") or None, "no_match": e.get("no_match") is True,
             "scales": [{"min_quantity": s["from_quantity"], "price": number(s["price_as_shown"], fmt)}
                        for s in pc.get("scales") or []],
@@ -174,7 +178,7 @@ def facts(tender, requirements, commercials, erp: dict) -> dict:
             "fx_eur_per_currency_unit": fx,
             "surcharge_mass_kg_per_piece": grams_to_kg(e.get("surcharge_mass") or 0),
             "metal_index_eur_per_kg": index or 0,
-            "setup_fee": float(c.get("setup_fee") or 0) + number(e.get("setup_fee") or 0),
+            "setup_fee": float(d(c.get("setup_fee")) + d(e.get("setup_fee"))),
             "discount_applies_to": c.get("discount_applies_to") or "base",
             "stock": e.get("available_stock_pieces") or 0,
             "lead_time_stock_weeks": e.get("lead_time_stock_weeks") or 0,

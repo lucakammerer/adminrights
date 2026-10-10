@@ -1,6 +1,7 @@
 # Calculation
 
-No model. `agent/calc.py`: `facts` merges the agents' results, `compute` calculates.
+No model. `agent/calc.py`: `facts` merges the agents' results, `compute` calculates. Every value a model supplied is read
+through `d`/`number`, so text like "7 pieces" or "3 weeks" cannot crash the run; `compute` runs outside `safe`.
 
 ## Rules
 

@@ -13,8 +13,9 @@ because ids and names differ between datasets. Two attempts, then the run fails 
 
 **Rules:** 1, 2, 13, 14, 17, 20.
 
-**Input:** brief, evidence from the tender and customer portal agents, and only the kept mail pages that mention a technical release
-("technik"), to keep the call small. It is on the critical path: the ERP agents wait for it.
+**Input:** brief and the evidence from the tender portal, supplier portal and mail agents. All kept mail goes in, not a
+keyword filter: the technical release may be named differently per dataset. It is on the critical path: the ERP agents
+wait for it.
 
 **Output per position:** `final_quantity_pieces` (+ `quantity_reasoning`), `requirement`, `bore_mm`, `stroke_mm`,
 `pressure_bar`, `mounting`, `certification`, `catalogue_group` (+ `requirement_reasoning`).

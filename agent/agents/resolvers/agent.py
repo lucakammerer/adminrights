@@ -30,7 +30,6 @@ JSON: {{{", ".join(f'"{role}": "<siteId>"' for role in ROLES)}}}"""
 
 
 async def requirements(task, tender, spec, mail, effort: str = "medium") -> dict:
-    technical = {"evidence": [page for page in mail.get("evidence", []) if "technik" in page.lower()]}
     question = f"""{context(task)}
 
 Evidence from the tender portal:
@@ -39,8 +38,8 @@ Evidence from the tender portal:
 Evidence from the supplier portal:
 {evidence(spec)}
 
-Technical releases from the mailbox:
-{evidence(technical)}
+Evidence from the mailbox (the technical release for the stroke reserve is among it):
+{evidence(mail)}
 
 For every tender position, work out:
 - final_quantity_pieces: tender quantity, replaced by the latest dated clarification that changes it (ignore
