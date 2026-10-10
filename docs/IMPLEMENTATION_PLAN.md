@@ -170,7 +170,8 @@ Every browser agent is the same loop; agents differ only in mission, result sche
   bounded by the stage's `llm.UNTIL`, which `agent.safe`/`agent.start` set per stage; step calls end at the agent's
   deadline so the forced `finish` keeps its grace. Both limits hold on the wall clock (`asyncio.wait`, the call is
   dropped at its limit): the SDK's timeout only bounds the silence between bytes. Replies are streamed (`llm.reply`
-  assembles them like a non-streamed one), so that silence tells a stuck call from a slow one: an attempt that brings
+  assembles them like a non-streamed one; not for an OpenRouter model: streamed, Haiku never saw what its actions did
+  and typed the same login 40 times in every tab, its calls take 3-13 s and end at the silence limit unstreamed too), so that silence tells a stuck call from a slow one: an attempt that brings
   no byte for `SILENCE` (30 s; 60 s on a retry) is dropped and asked again. A healthy stream starts within seconds;
   stuck calls never reach the model and used to hold their stage to the cap (run_76abdc35df9c092b: six, among them
   three of the four ERP searches' first calls).
