@@ -5,6 +5,14 @@ logged answer scored by `eval/compare.py` (what the bid would have scored if sig
 
 | Date (UTC) | Run | Commit | Platform | Eval | Time | Cost | Outcome and top problem (owner) |
 | --- | --- | --- | --- | --- | --- | --- | --- |
+| 2026-10-10 22:10 | run_13d682417a16ab1b | luca/radical-speed@62db4d8, Haiku | 100, eligible | 100.00 | 10 min (598 s) | $0.108 | Haiku for browsing (hedged, unstreamed), resolvers on Qwen: 64.8 $·s, our best (was 144). Phase 1: tender 58 s, supplier 50 s, but webmail to 276 s: its three agents logged in at once and expired each other's form (150 s; fixed in 4c594af). Answer 413 s, signed 594 s; TAN 11 s (Luca). |
+| 2026-10-10 21:58 | run_8cbbcdcde2d35b38 | luca/radical-speed@357d88f, Haiku | 59.6, eligible | 59.65 | 9 min | $0.140 | Answer at 306 s, but the tender agent's first call hung 240 s (no hedge yet) and it kept no Q&A page: quantities, bonus, commitments and lead times wrong (Luca: hedge in 62db4d8). |
+| 2026-10-10 21:55 | run_cb0f74cefa7ea084, run_017c28e4806645b2, run_99c8592c1a882d25 | luca/radical-speed | – | – | – | – | The platform failed (503 guest_unavailable); not counted. |
+| 2026-10-10 21:47 | run_ac62aa59878278d0 | luca/radical-speed@6d302f4, Haiku | cancelled | – | – | – | Streamed replies: Haiku typed the same login 40 times in every tab (unstreamed in 9e58160). |
+| 2026-10-10 21:26 | run_9078c176887629ef, run_ef3a729897f5cfd6 | luca/radical-speed, Haiku | cancelled | – | – | – | Same login loop (streamed). |
+| 2026-10-10 21:16 | run_70849602378e62b5 | luca/radical-speed, qwen/qwen3.8-flash on OpenRouter | cancelled | – | – | – | Alibaba answered every step after the first with HTTP 400. |
+| 2026-10-10 21:16 | run_5598369bb2f3cc8d | luca/radical-speed@d2ce969, Qwen | 0, not eligible | – | 14 min | $0.186 | The tender portal never loaded in this sandbox (every goto timed out); webmail without thinking took 60 steps (thinking back in 6d302f4). |
+| 2026-10-10 21:07 | run_b83273fb70341c54 | luca/radical-speed@d58e171 (main + #37 #39 #40 #41 #44), Qwen | 0, not eligible | – | 19 min | $0.056 | No answer: Qwen overloaded (18 dropped calls), tender portal steps 75 s each. |
 | 2026-10-10 18:43 | run_cce8dd95d7f6edd0 | p2/yazan@1163d99 | 100, eligible | – | 18 min | $0.187 | Signed 100 on PR #28 plus Yazan's latest head. |
 | 2026-10-10 18:35 | run_c339fb4e72ccffd4 | main 0686ab0 (agent tree 6d47406) | 100, eligible | – | 17 min | $0.193 | Main after PR #28, Finn's TAN look-up and label configurator, Yazan's p2: the package submitted as sub_03756a1e6bfd23a7 (files identical, audit clean). |
 | 2026-10-10 18:23 | run_35eaa0de2b7a81df | base@3328aab | 0, not eligible | – | 11 min | $0.084 | Cancelled by hand at 11:18. |
