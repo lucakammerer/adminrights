@@ -269,8 +269,8 @@ on disagreement it logs both, re-asks once, then the rule wins.
 | # | Rule | Status |
 | --- | --- | --- |
 | 1 | Visibility truth: drop `display:none`, `visibility:hidden`, zero opacity or font size, `hidden`, `aria-hidden` | ✅ |
-| 1b | Also drop off-screen, zero-size and clipped content; count what was dropped | ⏳ I17 |
-| 2 | Reveal real values: image and canvas labels, tooltips, collapsed `<details>`, select options, input values | ✅ |
+| 1b | Off-screen and screen-reader-only (clipped) text kept but marked `(off-screen text: …)` and counted: recorded pages showed no such hiding, and real values can live there (decided on the recordings) | ✅ I17 |
+| 2 | Reveal real values: image and canvas labels, tooltips (also `title` of plain elements), CSS-generated text (`::before`/`::after`), collapsed `<details>`, select options, input values; a canvas without text is marked; names, labels and tooltips skip hidden descendants (decoys inside them) | ✅ I17 |
 | 3 | Normalize text: remove invisible characters; keep number-format hints verbatim | ✅ |
 | 4 | Controls as `[n:kind "label"]` refs the tools act on; links show their href | ✅ |
 | 5 | Same-origin iframes inlined, nested ones too | ✅ |
@@ -284,16 +284,16 @@ on disagreement it logs both, re-asks once, then the rule wins.
 
 | Obstacle | Today | Change |
 | --- | --- | --- |
-| Cookie walls, login | the model | auto re-login when a login form appears mid-run (I13) |
+| Cookie walls, login | the model; an expired session is logged in again by code when the very login form the tab got past reappears (`Tab.recover`), never on a TAN or other form | ✅ I13 |
 | Modal dialogs | closed in code on every read | — |
-| Transient error pages | the model retries | code-side retry before the model sees the page (I13) |
+| Transient error pages | code reloads a 5xx page (GET only) twice and `fetch` retries twice before the model sees it; the model is told | ✅ I13 |
 | Unlock gates | the model (`fill` on a slider, `check`) | — |
 | Look-alike controls | the model, guided by hrefs | — |
-| Fixed 1.4 s settle on every read | — | adaptive settle (I13) |
+| Settle on every read | waits while the page has short timers pending (delayed popups) or its DOM changed in the last 300 ms, at most 1.5 s; untracked pages keep the fixed wait | ✅ I13 |
 
 ### 5.3 Documents, numbers and dates
 
-- `fetch` and downloads: ZIP (recursive), CSV, TXT, HTML ✅; PDF needs the `pypdf` dependency (I17).
+- `fetch` and downloads: ZIP (recursive), CSV, TXT, HTML, PDF (`pypdf`) ✅. A fetched page is laid out in a hidden script-free frame, so its own style rules decide what is hidden (I17).
 - Numbers are parsed by code with the stated format; ambiguous forms are refused, never guessed (I10, RULES 4.1).
 - Dates are compared in UTC; models report them as written, with their timezone and format hints (I18).
 
@@ -417,9 +417,9 @@ Every item has exactly one owner. When it touches a file someone else owns (§14
 | ID | Change | Where | Acceptance | Rules | Owner |
 | --- | --- | --- | --- | --- | --- |
 | I10 | Strict numbers: a number's own format beats the hint ✅, thousands separators in grams ✅, text values ✅ (`tests/test_calc.py`); remaining: ambiguous forms refused (the agent re-reads); `Decimal` end to end | `numbers.py`, `calc.py` | parser tests incl. the probes in PLAN_COMPARISON §2.3 | 4, 22 | L |
-| I11 | ERP match check in code ✅ (`validate.material_mismatch` in the ERP `check`, `tests/test_validate.py`); no-bid gate ✅ (`main` `erp_search`: a `no_match` with ≥ 150 s left gets a second agent in a fresh tab; a material it finds wins); remaining: answer schema validated before signing | `agents/erp`, `validate.py`, `agents/submit` | tests with look-alike and blocked candidates | T1.6, 3, 7, 8 | L |
+| I11 | ERP no-match needs proof on kept pages ✅ (`erp.unproven`: result pages kept, every candidate listed with its difference, `tests/test_erp_no_match.py`); ERP match check in code ✅ (`validate.material_mismatch` in the ERP `check`, `tests/test_validate.py`); no-bid gate ✅ (`main` `erp_search`: a `no_match` with ≥ 150 s left gets a second agent in a fresh tab; a material it finds wins); remaining: answer schema validated before signing | `agents/erp`, `validate.py`, `agents/submit` | tests with look-alike and blocked candidates | T1.6, 3, 7, 8 | L |
 | I12 | ✅ Mail topics and senders parsed from the brief (`common.mail_records`, `tests/test_brief.py`); approval found by sender and meaning; technical release for `requirements` from the brief | `agents/webmail`, `agents/common.py`, `agents/resolvers` | no public mail subject in prompts | T0.11, 5, 10, 21 | Y |
-| I13 | Code-side retry of transient error pages; auto re-login; adaptive settle | `browser.py` | fewer model turns on the ERP in the dry-run log | T3.2 | Y |
+| I13 | ✅ Code-side retry of transient error pages; auto re-login; adaptive settle; `form` ref click falls back to a DOM click, a null value is never typed (`tests/test_browser.py`) | `browser.py` | fewer model turns on the ERP in the dry-run log | T3.2 | Y |
 | I14 | ✅ Calculator tests (`tests/test_calc.py`): golden test, values written as text, allocation ties, band edges, inclusive ceilings and thresholds, shared stock | `tests/` | green | 4–9, 12, 15–18, 22–27 | L |
 | I15 | Loud failures instead of silent fallbacks (FX, metal index): tolerant key match and `MISSING` in the trace ✅; omitted positions per rule 9 ✅ (also when all are omitted); a material without prices is submitted with its other fields ✅ | `calc.py` | tests | 9, 22, 28 | L |
 | I23 | Cost: cache-friendly loop (append-only history; when it grows too long, restart from the notes and kept evidence); measure Clef against Qwen for yes/no and pick decisions, then use it or drop it | `llm.py` | cached share of input up; cost per run ≤ $0.10 | T3.4 | F |
@@ -430,7 +430,7 @@ Every item has exactly one owner. When it touches a file someone else owns (§14
 | ID | Change | Where | Acceptance | Rules | Owner |
 | --- | --- | --- | --- | --- | --- |
 | I16 | Gap sweep: after the first pass, code lists missing facts and unresolved keys; short model missions to the other sites | `agent.py`, `agents/common.py` | a fake run with Q&A on another site still finds them (S4) | 10, 19 | Y |
-| I17 | Reader hardening (§5.1 rows 1b, 8); `pypdf` dependency | `reader.js`, `pyproject.toml` | recorded-page tests; a PDF is read | traps 8, 9 | Y |
+| I17 | ✅ Reader hardening (§5.1 rows 1b, 2; row 8 open, optional); `pypdf` dependency (`tests/test_reader.py`) | `reader.js`, `pyproject.toml` | recorded-page tests; a PDF is read | traps 8, 9 | Y |
 | I18 | Code-side selection cross-check (§4.4) | `agents/resolvers`, `select.py` | synthetic-record tests per trap category | 1, 2, 5, 12–14, 16, 17, 20–26, 28 | L |
 | I19 | Extraction while browsing: each kept page read into records right away (small parallel calls), so resolvers only select | `llm.py`, `agents/*` | resolvers finish in seconds after the last agent | T3.2, T4.2 | F |
 | I20 | Mutation tests on recorded pages | `tests/` | extraction stable | 19 | Y |

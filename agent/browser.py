@@ -10,6 +10,60 @@ from urllib.parse import urljoin
 READER = (Path(__file__).parent / "reader.js").read_text()
 MAX_CHARS = 14000
 OPEN_DETAILS = "e => { for (let d = e.closest('details'); d; d = d.parentElement?.closest('details')) d.open = true }"
+SETTLE_MAX = 1.5  # seconds a read waits at most for the page to settle (popups appear up to that long after load)
+# Every page of the tab tracks its pending short timers and its last DOM change, so a read waits exactly as long as
+# something is still due (a delayed popup) instead of a fixed time.
+TRACK = """(() => { if (window.__arefTimers) return; const pending = new Set(), st = window.setTimeout, ct = window.clearTimeout;
+  window.__arefTimers = pending; window.__arefSetTimeout = st; window.__arefChanged = Date.now();
+  window.setTimeout = function (fn, ms, ...rest) {
+    if (typeof fn !== 'function') return st.call(this, fn, ms, ...rest);
+    const id = st.call(this, function (...a) { pending.delete(id); return fn.apply(this, a) }, ms, ...rest);
+    if ((Number(ms) || 0) <= 1500) pending.add(id);
+    return id };
+  window.clearTimeout = function (id) { pending.delete(id); return ct.call(this, id) };
+  new MutationObserver(() => { window.__arefChanged = Date.now() }).observe(document,
+    {subtree: true, childList: true, attributes: true, characterData: true}) })()"""
+QUIET = """(max) => new Promise((resolve) => {
+  if (!window.__arefTimers) return resolve(-1);
+  const start = Date.now(), wait = window.__arefSetTimeout;
+  const tick = () => {
+    const quiet = Date.now() - window.__arefChanged >= 300 && window.__arefTimers.size === 0;
+    if (quiet || Date.now() - start >= max) return resolve(Date.now() - start);
+    wait(tick, 50) };
+  tick() })"""
+# A login form: one password field and exactly one other text field in the same form, nothing else to type into.
+# Returns its signature (action path and field names): only the very form the tab got past is filled in again.
+LOGIN_FORM = """() => {
+  const visible = (e) => e.offsetParent !== null && getComputedStyle(e).visibility !== 'hidden'
+  const typed = (e) => ['text', 'email', 'password', 'tel', 'number', ''].includes(e.type)
+  const pw = [...document.querySelectorAll('input[type=password]')].filter(visible)
+  if (pw.length !== 1 || !pw[0].form) return null
+  const fields = [...pw[0].form.querySelectorAll('input, textarea, select')].filter(visible)
+    .filter((e) => e.tagName === 'INPUT' ? typed(e) : true)
+  const user = fields.filter((e) => e !== pw[0])
+  if (fields.length !== 2 || user.length !== 1 || user[0].tagName !== 'INPUT') return null
+  const action = new URL(pw[0].form.getAttribute('action') || location.href, location.href).pathname
+  return [action, user[0].name || user[0].id, pw[0].name || pw[0].id].join('|') }"""
+LOGIN_SUBMIT = """([username, password]) => {
+  const pw = [...document.querySelectorAll('input[type=password]')].find((e) => e.offsetParent !== null)
+  const user = [...pw.form.querySelectorAll('input')].find((e) => e !== pw && e.offsetParent !== null &&
+    ['text', 'email', 'tel', 'number', ''].includes(e.type))
+  const set = (e, v) => { e.focus(); e.value = v; e.dispatchEvent(new Event('input', {bubbles: true}));
+    e.dispatchEvent(new Event('change', {bubbles: true})) }
+  set(user, username); set(pw, password)
+  pw.form.requestSubmit ? pw.form.requestSubmit() : pw.form.submit() }"""
+FRAMED = """async ([html, url]) => {
+  const frame = document.createElement('iframe')
+  frame.setAttribute('sandbox', 'allow-same-origin')  // no scripts: the fetched page only lays itself out
+  frame.style.cssText = 'position:fixed;left:-30000px;top:0;width:1280px;height:900px;border:0'
+  const base = `<base href="${url.replace(/"/g, '&quot;')}">`
+  frame.srcdoc = /<head[^>]*>/i.test(html) ? html.replace(/<head[^>]*>/i, (m) => m + base) : base + html
+  const loaded = new Promise((resolve) => { frame.onload = resolve; setTimeout(resolve, 3000) })
+  document.documentElement.appendChild(frame)
+  await loaded
+  try { return (READER)({root: frame.contentDocument}) } finally { frame.remove() }
+}"""
+RELOGINS = 3  # automatic logins per tab at most, so a rejected login never loops
 
 
 class Tab:
@@ -18,8 +72,31 @@ class Tab:
         self.site = site
         self.dialogs: list[str] = []
         self.downloads: list[str] = []
+        self.events: list[str] = []  # what code did on the model's behalf (retries, logins), told with the next read
+        self.login_form = ""  # signature of the login form this tab showed; seeing it again after it was past it
+        self.past_login = False  # means the session expired (a TAN or any other form never matches it)
+        self.relogins = 0
+        self.method = "GET"  # of the latest main-frame navigation: only a GET may be reloaded after a server error
+        self.status = 0
         page.on("dialog", self._on_dialog)
         page.on("download", self._on_download)
+        page.on("request", self._on_request)
+        page.on("response", self._on_response)
+        self._tracking = asyncio.ensure_future(self._track(page))
+
+    async def _track(self, page):
+        try:
+            await page.add_init_script(TRACK)
+        except Exception:  # noqa: BLE001
+            pass
+
+    def _on_request(self, request):
+        if request.is_navigation_request() and request.frame == self.page.main_frame:
+            self.method = request.method
+
+    def _on_response(self, response):
+        if response.request.is_navigation_request() and response.frame == self.page.main_frame:
+            self.status = response.status
 
     async def _on_dialog(self, dialog):
         self.dialogs.append(f"{dialog.type}: {dialog.message}")
@@ -37,18 +114,57 @@ class Tab:
             await self.page.wait_for_load_state("domcontentloaded", timeout=15000)
         except Exception:  # noqa: BLE001
             pass
-        await asyncio.sleep(1.4)  # popups and banners appear a moment after load
+        try:  # until no short timer is pending and the DOM was quiet for 300 ms, at most SETTLE_MAX
+            waited = await self.page.evaluate(QUIET, int(SETTLE_MAX * 1000))
+        except Exception:  # noqa: BLE001  navigated while waiting
+            waited = 500
+            await asyncio.sleep(0.5)
+        if waited < 0:  # a page loaded before this tab tracked it: popups appear a moment after load
+            await asyncio.sleep(SETTLE_MAX)
         for frame in self.page.frames:  # in-page popup dialogs only block the page; browser dialogs are accepted above
             try:
                 await frame.evaluate("document.querySelectorAll('dialog[open]').forEach(d => d.close())")
             except Exception:  # noqa: BLE001
                 pass
 
+    async def recover(self):
+        """Before the model sees a page: reload a server error page (GET only) up to twice, and log in again when the
+        session expired (a login form on a tab that was already past its login). Both are told to the model."""
+        for attempt in range(2):
+            if self.status < 500 or self.method != "GET":
+                break
+            await asyncio.sleep(2 + 2 * attempt)
+            try:
+                await self.page.reload(wait_until="domcontentloaded", timeout=30000)
+            except Exception:  # noqa: BLE001
+                pass
+            await self.settle()
+            self.events.append(f"The page answered HTTP 5xx; code reloaded it ({attempt + 1}x), now HTTP {self.status}.")
+        try:
+            form = await self.page.evaluate(LOGIN_FORM)
+        except Exception:  # noqa: BLE001
+            form = None
+        if not form:
+            self.past_login = self.past_login or bool(self.login_form)
+            return
+        credentials = self.site.get("credentials") or {}
+        if form == self.login_form and self.past_login and self.relogins < RELOGINS and credentials.get("password"):
+            self.relogins += 1
+            await self.page.evaluate(LOGIN_SUBMIT, [credentials.get("username", ""), credentials["password"]])
+            await self.settle()
+            self.events.append("The session had expired: code logged in again with this site's credentials.")
+        else:
+            self.login_form, self.past_login = form, False
+
     async def read(self, offset: int = 0) -> str:
         await self.settle()
+        await self.recover()
         result = await self.page.evaluate(f"({READER})({{}})")
         text = result["text"]
         events = ""
+        if self.events:
+            events += "Done by code: " + " ".join(self.events) + "\n"
+            self.events.clear()
         if self.dialogs:
             events += "Browser dialogs (accepted): " + " || ".join(self.dialogs) + "\n"
             self.dialogs.clear()
@@ -115,10 +231,14 @@ class Tab:
                     steps_left = [{"field": step["field"], "value": step.get("value")}, {"click": step["click"]}]
                     log.append((await self.form(steps_left)).split("\n", 1)[0].removeprefix("Form steps: "))
                     continue
-                if step.get("ref") is not None and "value" not in step:
+                if step.get("ref") is not None and step.get("value") is None:
                     loc = await self.locate(int(step["ref"]))
                     await loc.evaluate(OPEN_DETAILS)
-                    await loc.click(timeout=5000)
+                    try:
+                        await loc.scroll_into_view_if_needed(timeout=3000)
+                        await loc.click(timeout=5000)
+                    except Exception:  # noqa: BLE001  covered or inert: click it in the DOM, as act does
+                        await loc.evaluate("e => e.click()")
                     await self.settle()
                     log.append(f"clicked ref {step['ref']}")
                     continue
@@ -132,6 +252,8 @@ class Tab:
                     log.append(f"clicked {step['click']}")
                     continue
                 value = step.get("value")
+                if value is None:
+                    raise ValueError("no value given for this field")
                 if step.get("ref") is not None:
                     label, loc = f"ref {step['ref']}", await self.locate(int(step["ref"]))
                 else:
@@ -163,10 +285,35 @@ class Tab:
         return "Form steps: " + "; ".join(log) + "\n\n" + await self.read()
 
     async def fetch(self, url: str) -> str:
-        """Read a same-origin URL through the logged-in page without navigating: text only, no refs."""
-        result = await self.page.evaluate(
+        """Read a same-origin URL through the logged-in page without navigating: text only, no refs. A server error
+        is retried twice before the model sees it."""
+        for attempt in range(3):
+            result = await self._fetch(url)
+            if result["status"] < 500 or attempt == 2:
+                break
+            await asyncio.sleep(1.5 * (attempt + 1))
+        head = f"Fetched {result['url']} (HTTP {result['status']})" + (f" after {attempt} retries" if attempt else "") + "\n"
+        if "html" in result:
+            return head + (await self.html_text(result["html"], result["url"]))[:MAX_CHARS]
+        import base64
+        return head + describe_file(url.rsplit("/", 1)[-1], base64.b64decode(result["b64"]))
+
+    async def html_text(self, html: str, url: str) -> str:
+        """A fetched page as text, laid out in a hidden script-free frame so its own style rules decide what is
+        hidden; without a usable frame (no page document, a blocking policy), parsed without layout instead."""
+        try:
+            text = (await self.page.evaluate(FRAMED.replace("READER", READER), [html, url]))["text"]
+            if text or not html.strip():
+                return text
+        except Exception:  # noqa: BLE001
+            pass
+        return (await self.page.evaluate(f"({READER})({{doc: {_js(html)}}})"))["text"]
+
+    async def _fetch(self, url: str) -> dict:
+        return await self.page.evaluate(
             """async (url) => {
-                const r = await fetch(url, {credentials: 'include'})
+                const stop = new AbortController(); const timer = (window.__arefSetTimeout || setTimeout)(() => stop.abort(), 30000)
+                const r = await fetch(url, {credentials: 'include', signal: stop.signal}).finally(() => clearTimeout(timer))
                 const type = r.headers.get('content-type') || ''
                 if (!type.includes('html')) {
                     const buf = new Uint8Array(await r.arrayBuffer())
@@ -175,12 +322,6 @@ class Tab:
                 }
                 return {status: r.status, url: r.url, type, html: await r.text()}
             }""", urljoin(self.page.url, url))
-        head = f"Fetched {result['url']} (HTTP {result['status']})\n"
-        if "html" in result:
-            text = (await self.page.evaluate(f"({READER})({{doc: {_js(result['html'])}}})"))["text"]
-            return head + text[:MAX_CHARS]
-        import base64
-        return head + describe_file(url.rsplit("/", 1)[-1], base64.b64decode(result["b64"]))
 
 
 def _js(value: str) -> str:

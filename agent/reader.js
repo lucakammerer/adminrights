@@ -1,6 +1,9 @@
 // Page text the way assistive technology sees it: hidden decoys out, labels/tooltips/collapsed details in,
 // same-origin iframes inlined, every control tagged with a ref the tools can act on.
-// Called as (opts) => string. opts.doc set: a fetched document (no layout, so only inline styles count).
+// CSS-generated text (::before/::after), title tooltips of plain elements and canvases without text are kept or marked;
+// off-screen and screen-reader-only text is kept but marked, since real values can live there and decoys too.
+// Called as (opts) => {text, next, marked}. opts.doc: a fetched document without layout (only inline styles count);
+// opts.root: a fetched document rendered in a hidden frame, so its own style rules decide what is hidden.
 (opts) => {
   const ZW = /[​-‍⁠﻿­]/g
   const clean = (s) => (s || "").replace(ZW, "").replace(/[ \t\r\f\v ]+/g, " ")
@@ -8,35 +11,65 @@
     "TR", "TABLE", "FORM", "FIELDSET", "DL", "DT", "DD", "H1", "H2", "H3", "H4", "H5", "H6", "BR", "HR", "PRE",
     "BLOCKQUOTE", "DETAILS", "SUMMARY", "DIALOG", "FIGURE", "CAPTION", "LEGEND", "OUTPUT", "LABEL"])
   const SKIP = new Set(["SCRIPT", "STYLE", "NOSCRIPT", "TEMPLATE", "HEAD", "META", "LINK"])
-  const fetched = !!opts.doc
+  const fetched = !!opts.doc || !!opts.root
+  const styled = !opts.doc
   let next = opts.start || 1
+  let marked = 0
   const out = []
 
   const hidden = (el) => {
     if (el.hidden || el.getAttribute("aria-hidden") === "true") return true
-    if (fetched) return /display\s*:\s*none|visibility\s*:\s*hidden/i.test(el.getAttribute("style") || "")
+    if (!styled) return /display\s*:\s*none|visibility\s*:\s*hidden/i.test(el.getAttribute("style") || "")
     const st = el.ownerDocument.defaultView.getComputedStyle(el)
     return st.display === "none" || st.visibility === "hidden" || st.opacity === "0" || parseFloat(st.fontSize) === 0
+  }
+  // Positioned outside the page or clipped to (almost) nothing: not on screen, yet read by assistive technology.
+  const offscreen = (el) => {
+    if (!styled) return false
+    const st = el.ownerDocument.defaultView.getComputedStyle(el)
+    if (st.position !== "absolute" && st.position !== "fixed") return false
+    const r = el.getBoundingClientRect()
+    const away = r.right <= 0 || r.bottom <= -el.ownerDocument.defaultView.scrollY || r.left >= 20000
+    const clipped = (/rect\(\s*0(px)?[\s,]+0(px)?[\s,]+0(px)?[\s,]+0(px)?\s*\)/.test(st.clip) ||
+      /inset\(\s*50%/.test(st.clipPath)) && r.width <= 2 && r.height <= 2
+    return away || clipped
+  }
+  // Text a style rule adds before or after an element (content: "..." or attr(x)); decorative symbols are skipped.
+  const generated = (el, which) => {
+    if (!styled) return ""
+    const c = el.ownerDocument.defaultView.getComputedStyle(el, which).content
+    if (!c || c === "none" || c === "normal") return ""
+    const attr = c.match(/^attr\(([\w-]+)\)$/)
+    const text = attr ? el.getAttribute(attr[1]) || "" : /^["']/.test(c) ? c.slice(1, -1).replace(/\\(.)/g, "$1") : ""
+    return /[\p{L}\p{N}]/u.test(text) ? clean(text).trim() : ""
+  }
+  const textOf = (el) => {
+    let t = ""
+    for (const n of el.childNodes) {
+      if (n.nodeType === 3) t += n.textContent
+      else if (n.nodeType === 1 && !SKIP.has(n.tagName) && !hidden(n)) t += " " + textOf(n) + " "
+    }
+    return t
   }
   const labelOf = (el) => {
     const doc = el.ownerDocument
     const by = el.getAttribute("aria-labelledby")
     if (by) {
-      const t = by.split(/\s+/).map((id) => doc.getElementById(id)).filter(Boolean).map((e) => e.textContent).join(" ")
+      const t = by.split(/\s+/).map((id) => doc.getElementById(id)).filter(Boolean).map(textOf).join(" ")
       if (clean(t).trim()) return clean(t).trim()
     }
     if (el.getAttribute("aria-label")) return clean(el.getAttribute("aria-label")).trim()
     if (el.id) {
       const l = doc.querySelector(`label[for="${CSS.escape(el.id)}"]`)
-      if (l && clean(l.textContent).trim()) return clean(l.textContent).trim()
+      if (l && clean(textOf(l)).trim()) return clean(textOf(l)).trim()
     }
     const wrap = el.closest("label")
-    if (wrap && clean(wrap.textContent).trim()) return clean(wrap.textContent).trim()
+    if (wrap && clean(textOf(wrap)).trim()) return clean(textOf(wrap)).trim()
     return clean(el.getAttribute("placeholder") || el.getAttribute("title") || el.getAttribute("name") || "").trim()
   }
   const described = (el) => {
     const ids = (el.getAttribute("aria-describedby") || "").split(/\s+/).filter(Boolean)
-    const t = ids.map((id) => el.ownerDocument.getElementById(id)).filter(Boolean).map((e) => clean(e.textContent).trim())
+    const t = ids.map((id) => el.ownerDocument.getElementById(id)).filter(Boolean).map((e) => clean(textOf(e)).trim())
     return t.filter(Boolean).join("; ")
   }
   const ref = (el) => {
@@ -51,12 +84,12 @@
     const tag = el.tagName
     const role = el.getAttribute("role")
     if (tag === "A" && el.hasAttribute("href")) {
-      const name = clean(el.textContent).trim() || labelOf(el)
+      const name = clean(textOf(el)).trim() || labelOf(el)
       return `[${ref(el)}link "${name}" -> ${el.getAttribute("href")}]`
     }
     if (tag === "BUTTON" || role === "button" || role === "menuitem" || role === "tab" || role === "option" ||
         (tag === "INPUT" && ["submit", "button", "reset"].includes(el.type))) {
-      const name = clean(el.textContent).trim() || labelOf(el) || el.value || ""
+      const name = clean(textOf(el)).trim() || labelOf(el) || el.value || ""
       const d = described(el)
       return `[${ref(el)}button "${name}"${d ? ` (info: ${d})` : ""}${disabledMark(el)}]`
     }
@@ -92,7 +125,7 @@
     if (SKIP.has(tag)) return
     const role = el.getAttribute("role")
     if (role === "tooltip") {
-      out.push(` (tooltip: ${clean(el.textContent).trim()}) `)
+      out.push(` (tooltip: ${clean(textOf(el)).trim()}) `)
       return
     }
     if (hidden(el)) return
@@ -108,8 +141,16 @@
       return
     }
     if (tag === "CANVAS" || tag === "IMG" || tag === "SVG" || role === "img") {
-      const l = el.getAttribute("aria-label") || el.getAttribute("alt") || el.getAttribute("title") || clean(el.textContent)
+      const l = el.getAttribute("aria-label") || el.getAttribute("alt") || el.getAttribute("title") || clean(textOf(el))
       if (clean(l).trim()) out.push(` ${clean(l).trim()} `)
+      else if (tag === "CANVAS") out.push(" [canvas without text: its value is drawn, look for it elsewhere on the page] ")
+      return
+    }
+    if (offscreen(el)) {
+      marked++
+      out.push(" (off-screen text: ")
+      for (const ch of el.childNodes) walk(ch)
+      out.push(") ")
       return
     }
     if (tag === "DIALOG") {
@@ -125,15 +166,22 @@
     if (block) out.push("\n")
     if (/^H[1-6]$/.test(tag)) out.push("#".repeat(+tag[1]) + " ")
     if (tag === "TD" || tag === "TH") out.push(" | ")
+    const before = generated(el, "::before")
+    if (before) out.push(` ${before} `)
+    const start = out.length
     if (el.shadowRoot) for (const ch of el.shadowRoot.childNodes) walk(ch)
     for (const ch of el.childNodes) walk(ch)
+    const after = generated(el, "::after")
+    if (after) out.push(` ${after} `)
+    const title = clean(el.getAttribute("title")).trim()
+    if (title && c === null && !clean(out.slice(start).join("")).includes(title)) out.push(` (tooltip: ${title}) `)
     if (tag === "DIALOG") out.push("\n=== END DIALOG ===\n")
     if (block) out.push("\n")
   }
 
-  const doc = opts.doc ? new DOMParser().parseFromString(opts.doc, "text/html") : document
+  const doc = opts.root || (opts.doc ? new DOMParser().parseFromString(opts.doc, "text/html") : document)
   if (!fetched) document.querySelectorAll("[data-aref]").forEach((e) => e.removeAttribute("data-aref"))
   walk(doc.body || doc.documentElement)
   const text = out.join("").replace(/[ ]*\n[ \n]*/g, "\n").replace(/ {2,}/g, " ").trim()
-  return { text, next }
+  return { text, next, marked }
 }
