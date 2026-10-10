@@ -146,7 +146,7 @@ Every browser agent is the same loop; agents differ only in mission, result sche
   applies rules 3–9, 12, 15–18 and 22–27 in `Decimal` with HALF_UP; exact against the reference (PLAN_COMPARISON §2.3).
 - **Submission** (`agents/submit`): one model agent with the `form` tool and German number formatting; before the TAN
   `verify_summary` checks unit prices and total on the summary page in code; `get_tan`
-  runs in the mail tab; guardrails in the mission (no extra positions, omit only listed ones, never tick our own terms,
+  runs in the mail tab from the mailbox's start page, and a finish without a TAN is refused while time allows; guardrails in the mission (no extra positions, omit only listed ones, never tick our own terms,
   one TAN request). One `form` call per page or position, a configurator's dependent choices each followed by its
   apply button, sent without reading their options first (`form` matches an option by text, beginning or part, and a
   step without a match stops with the page's options).
