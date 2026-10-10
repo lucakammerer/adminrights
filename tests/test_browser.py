@@ -122,6 +122,21 @@ class TabAgainstLocalSite(unittest.TestCase):
         self.assertNotIn("logged in again", tan)
         self.assertNotIn("POST /sign", COUNTS)
 
+    def test_a_mistyped_password_is_entered_exactly_and_a_tan_never_is(self):
+        async def steps(tab):
+            await tab.act("goto", {"url": "/home"})
+            login = await tab.form([{"field": "User", "value": "agent"}, {"field": "Secret", "value": "s3cet"},
+                                    {"click": "Sign in"}])
+            await tab.act("goto", {"url": "/tan"})
+            text = await tab.read()
+            ref = int(text.split('input type=password "Code"')[0].rsplit("[", 1)[1].rstrip(":"))
+            await tab.act("fill", {"ref": ref, "text": "804711"})
+            return login, await tab.page.input_value("input[name=code]")
+        login, tan = self.run_tab(steps)
+        self.assertIn("secret data", login)
+        self.assertIn("code entered it exactly", login)
+        self.assertEqual(tan, "804711")
+
     def test_late_content_is_waited_for(self):
         self.assertIn("late value", self.run_tab(lambda tab: tab.act("goto", {"url": "/late"})))
 

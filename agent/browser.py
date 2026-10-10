@@ -1,6 +1,7 @@
 """Generic browser tools for the model: read a page as text with control refs, act on a ref, read a URL without
 navigating, open downloaded files. Nothing here knows any website; the model decides where to go and what to do."""
 import asyncio
+import difflib
 import io
 import re
 import zipfile
@@ -177,6 +178,21 @@ class Tab:
             body += f"\n[... {len(text) - offset - MAX_CHARS} more chars: call read with offset={offset + MAX_CHARS}]"
         return head + body
 
+    async def credential(self, loc, value: str) -> str:
+        """The site's own username or password when the model typed it one or two characters off (models misread
+        random credentials); any other value, a TAN included, never resembles them and is typed as given."""
+        credentials = self.site.get("credentials") or {}
+        try:
+            kind = await loc.evaluate("e => e.type")
+        except Exception:  # noqa: BLE001
+            return value
+        want = credentials.get("password" if kind == "password" else "username")
+        if want and value != want and difflib.SequenceMatcher(None, value, want).ratio() >= 0.8:
+            self.events.append(f"The typed {'password' if kind == 'password' else 'username'} differed from this "
+                               "site's credentials by a character or two; code entered it exactly.")
+            return want
+        return value
+
     async def locate(self, ref: int):
         for frame in self.page.frames:
             loc = frame.locator(f'[data-aref="{ref}"]')
@@ -212,7 +228,7 @@ class Tab:
                     await loc.evaluate("(e, v) => { e.value = v; e.dispatchEvent(new Event('input', {bubbles: true}));"
                                        " e.dispatchEvent(new Event('change', {bubbles: true})) }", str(args["text"]))
                 else:
-                    await loc.fill(str(args["text"]), timeout=5000)
+                    await loc.fill(await self.credential(loc, str(args["text"])), timeout=5000)
             elif action == "select":
                 await loc.select_option(label=str(args["option"]), timeout=5000)
             elif action == "check":
@@ -277,7 +293,7 @@ class Tab:
                 elif tag in ("INPUT:checkbox", "INPUT:radio"):
                     await loc.set_checked(value not in (False, "false", "no", "0"), timeout=5000, force=True)
                 else:
-                    await loc.fill(str(value), timeout=5000)
+                    await loc.fill(await self.credential(loc, str(value)), timeout=5000)
                 log.append(f"set {label} = {value}")
             except Exception as error:  # noqa: BLE001  stop at the first failing step, the model sees why
                 log.append(f"FAILED at {step}: {str(error)[:300]}")
@@ -289,6 +305,9 @@ class Tab:
         is retried twice before the model sees it."""
         for attempt in range(3):
             result = await self._fetch(url)
+            if result.get("failed"):  # no answer within a minute (or no connection): the model decides what next
+                return (f"Fetched {result['url']} (HTTP 504) no answer within 60 s ({result['failed']}): the site may be "
+                        "slow; try again or open another page\n")  # a 5xx status, so it is never kept as evidence
             if result["status"] < 500 or attempt == 2:
                 break
             await asyncio.sleep(1.5 * (attempt + 1))
@@ -312,8 +331,11 @@ class Tab:
     async def _fetch(self, url: str) -> dict:
         return await self.page.evaluate(
             """async (url) => {
-                const stop = new AbortController(); const timer = (window.__arefSetTimeout || setTimeout)(() => stop.abort(), 30000)
-                const r = await fetch(url, {credentials: 'include', signal: stop.signal}).finally(() => clearTimeout(timer))
+                const stop = new AbortController(); const timer = (window.__arefSetTimeout || setTimeout)(() => stop.abort(), 60000)
+                let r
+                try { r = await fetch(url, {credentials: 'include', signal: stop.signal}) }
+                catch (e) { return {status: 0, url, type: '', html: '', failed: String(e && e.name || e)} }
+                finally { clearTimeout(timer) }
                 const type = r.headers.get('content-type') || ''
                 if (!type.includes('html')) {
                     const buf = new Uint8Array(await r.arrayBuffer())

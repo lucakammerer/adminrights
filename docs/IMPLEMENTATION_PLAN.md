@@ -284,9 +284,9 @@ on disagreement it logs both, re-asks once, then the rule wins.
 
 | Obstacle | Today | Change |
 | --- | --- | --- |
-| Cookie walls, login | the model; an expired session is logged in again by code when the very login form the tab got past reappears (`Tab.recover`), never on a TAN or other form | ✅ I13 |
+| Cookie walls, login | the model; an expired session is logged in again by code when the very login form the tab got past reappears (`Tab.recover`), never on a TAN or other form; a username or password the model typed one or two characters off is entered exactly as the site's login gives it (`Tab.credential`) | ✅ I13 |
 | Modal dialogs | closed in code on every read | — |
-| Transient error pages | code reloads a 5xx page (GET only) twice and `fetch` retries twice before the model sees it; the model is told | ✅ I13 |
+| Transient error pages | code reloads a 5xx page (GET only) twice and `fetch` retries twice before the model sees it; a `fetch` without an answer for 60 s returns as HTTP 504 (never kept as evidence); the model is told | ✅ I13 |
 | Unlock gates | the model (`fill` on a slider, `check`) | — |
 | Look-alike controls | the model, guided by hrefs | — |
 | Settle on every read | waits while the page has short timers pending (delayed popups) or its DOM changed in the last 300 ms, at most 1.5 s; untracked pages keep the fixed wait | ✅ I13 |
