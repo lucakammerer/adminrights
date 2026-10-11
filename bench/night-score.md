@@ -222,6 +222,23 @@ safe for all. (b) The TAN agent's mission or check: a finish with an empty TAN s
 it found, not search again.
 
 
+### 6 · 05:10 · The first TAN look-up's mailbox tab opens before the bid
+
+Evidence: TAN look-up `get_tan` → TAN agent's finish: run_b4c23813dd122d18 16 s (fresh 5 s, 3 steps),
+run_26b1c884ae47eb49 86 s (fresh 14 s, a 40 s model timeout), run_5150d06e5790477d 161 s (`fresh` 50 s: the mailbox
+start page twice not loaded, the agent's own `goto` right after worked; then a finish with found true but an empty
+TAN, refused with "no message found yet", so it searched every folder again: two `all_pages` fetches, 32 s and 42 s).
+
+Hypothesis: open the first look-up's tab when the submission starts (it waits minutes for the bid anyway), so a slow
+start page loads off the critical path; and a finish that found the message but gave no TAN is told to open that
+message, not to search again. Iteration 4 showed the idle-tab stalls were unanswered navigations (now stopped), not
+idleness, so a pre-opened tab idling for minutes should be safe; the runs check it.
+
+Commit 5c1668a. Gate: check_release green, audit clean, reviewer PASS (risk: if idleness did cause stalls, the first
+look-up gets them back; a mailbox whose session times out lands on its login page, the mission's login line covers
+it). Runs (5c1668a): run_7d633f73aa69af53, run_96d33dd7b340c037 (started 05:14). Judge by: `get_tan` → TAN finish,
+no `fresh` line at the look-up, quality, signing.
+
 ## Backlog
 
 - TAN look-up after the bid (iteration 5): `fresh` waits up to 50 s for a mailbox start page that sometimes
