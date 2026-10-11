@@ -352,6 +352,17 @@ Next idea: phase 1 is again the spread (webmail agent 201→382 s here, against 
 makes the mailbox agent page every archive page twice (steps 18-23 re-open pages 1-4 by `goto`) before touching
 prompts; the `kept_at` reminder doesn't cover `goto`.
 
+### 10 · 06:18 · Does the branch tip hold its pace? Two more runs of 38d5b42
+
+Evidence for the pick: the morning decision rests on 2c5dd5f/38d5b42 with four runs (49.6, 79.0, 61.5, 87.7 $·s),
+spread 1.8x. Two more runs of the unchanged tip say more than one more insurance change with an hour left. Side
+look at run_28dc851b508f1f3c's slow phase 1: the mailbox login's two `goto`s to the start page took 33 s each
+(93→158 s) before a `goto` to the login page worked; the technical-release mail agent had kept its record at 224 s
+and then re-opened every archive and inbox page by `goto` until 382 s, looking for a superseded revision.
+
+Runs (38d5b42, unchanged): run_4b06a64ace34d51f, run_b5bfbb3ed5ed5292 (started 06:19). Judge by: quality, signing,
+$·s against 70 (our submission) and 25 (rank 1).
+
 ## Backlog
 
 - `specs` at effort low: it only starts the early ERP searches and `requirements` corrects it, yet at medium it took
