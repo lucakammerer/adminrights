@@ -53,6 +53,9 @@ means. The output is typed facts for `calc`, which does all the arithmetic.
   which looks for facts it left open), effort medium; only `calc.facts` waits
   for it. Prompt: exact reference, authorized sender, latest record up to the scenario date, newer replaces older,
   future-dated records never apply; without a condition group, `base` applies. Every amount is a plain JSON number.
+  An answer without positions while the tender lists some (valid JSON that stops after the first keys) is asked once
+  more while at least a minute is left before the stage cut; the second answer is kept only if it has positions, and a
+  failed second call keeps the first.
 
 ## Pitfalls
 

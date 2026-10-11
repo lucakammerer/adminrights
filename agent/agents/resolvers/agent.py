@@ -1,6 +1,7 @@
 """Resolvers: apply the brief's rules to the kept evidence, without a browser. See README.md."""
 import asyncio
 import json
+import time
 
 import llm
 from agents.common import (RESOLVE, commercial_records, context, evidence, mentions, names_position, routed,
@@ -13,6 +14,9 @@ ROLES = {
     "webmail": "the sales mailbox with the approvals and the signing TAN",
 }
 
+
+RETRY_MARGIN = 10  # seconds the second commercials answer leaves before the stage cut
+RETRY_MIN = 60  # seconds a second commercials answer needs to be worth asking for
 
 SITES_TIMEOUT = 60  # seconds per attempt, so one slow call still leaves room for the second before elimination
 
@@ -141,4 +145,21 @@ JSON: {{"tender_reference": "the exact reference", "discount": {{"percent": 0, "
 "project_bonus_bands": [{{"from": 0, "to": null, "percent": 0}}]}}
 Every amount, rate and percent is a plain JSON number (decimal point, no units)."""
     llm.log("commercials", f"asking with {len(question)} chars")
-    return await llm.ask_json(RESOLVE, question, effort="medium")
+    answer = await llm.ask_json(RESOLVE, question, effort="medium")
+    # Qwen sometimes answers valid JSON with only the first keys (2026-10-11: reference and discount, no positions),
+    # which silently drops every per-position and rate fact; once more is cheaper than a stage of lost points.
+    left = llm.UNTIL.get() - time.time() - RETRY_MARGIN  # the stage cut would drop the first answer too
+    if tender.get("positions") and not _rows(answer.get("positions")) and left > RETRY_MIN:
+        llm.log("commercials", f"answer without positions (keys {sorted(answer)}): asking once more")
+        try:
+            again = await asyncio.wait_for(llm.ask_json(RESOLVE, question, effort="medium"), timeout=left)
+        except Exception as error:  # noqa: BLE001  the first answer still holds the discount and the reference
+            llm.log("commercials", f"second answer failed: {type(error).__name__}")
+            return answer
+        if _rows(again.get("positions")):
+            return again
+    return answer
+
+
+def _rows(value) -> list[dict]:
+    return [row for row in value if isinstance(row, dict)] if isinstance(value, list) else []

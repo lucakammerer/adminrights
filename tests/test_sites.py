@@ -111,5 +111,23 @@ class FirstTest(unittest.TestCase):
         with self.assertRaises(TimeoutError):
             asyncio.run(resolvers.first(fails(), fails()))
 
+
+class CommercialsTest(unittest.TestCase):
+    def setUp(self):
+        self.ask_json, self.log = llm.ask_json, llm.log
+        llm.log = lambda tag, text: None
+
+    def tearDown(self):
+        llm.ask_json, llm.log = self.ask_json, self.log
+
+    def test_an_answer_without_positions_is_asked_once_more(self):
+        partial, full = {"discount": {"percent": 3}}, {"discount": {"percent": 3}, "positions": [{"position": "1"}]}
+        tender = {"positions": [{"position": "1"}]}
+        for answers, want, calls in (((full,), full, 1), ((partial, full), full, 2), ((partial, partial), partial, 2),
+                                     ((partial, TimeoutError("hung")), partial, 2)):
+            llm.ask_json = FakeModel(*answers)
+            self.assertEqual(asyncio.run(resolvers.commercials(task(), tender, {})), want)
+            self.assertEqual(llm.ask_json.calls, calls)
+
 if __name__ == "__main__":
     unittest.main()
