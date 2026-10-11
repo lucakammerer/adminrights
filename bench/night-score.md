@@ -363,6 +363,22 @@ and then re-opened every archive and inbox page by `goto` until 382 s, looking f
 Runs (38d5b42, unchanged): run_4b06a64ace34d51f, run_b5bfbb3ed5ed5292 (started 06:19). Judge by: quality, signing,
 $·s against 70 (our submission) and 25 (rank 1).
 
+Results (38d5b42): run_4b06a64ace34d51f 100 / 5:35 / $0.139 / **46.6 $·s** (best Qwen run of the night),
+run_b5bfbb3ed5ed5292 100 / 7:16 / $0.141 / 61.3 $·s. The 38d5b42 family (2c5dd5f + 38d5b42) now has 6 runs, all 100
+and signed: 46.6, 49.6, 61.3, 61.5, 79.0, 87.7 $·s, median 61.4 (our Haiku submission: 70).
+
+Profile of run_b5bf: 3→35 s with no input and no model call. `main` loads the four start pages one after another with
+Playwright's 30 s goto timeout, and one of them hung (the mailbox's start page hangs often: `fresh` logged `start page
+not loaded` on it in this run and in run_28dc851b508f1f3c). run_28dc had the same 31 s gap (sites call at 3 s, next
+call at 36 s); the other four runs started their agents at 5-7 s.
+
+Change cd967a0: the four start pages load side by side, each within `OPEN_TIMEOUT` (20 s, as `fresh`), a missed one is
+stopped (`Tab.stop`) so the agent's own `goto` isn't locked; the `Tab` exists before the load. Saves ≥ 10 s when a
+start page hangs and the sum of the other loads always. Gate: check_release green, audit clean, reviewer PASS (a
+start page slower than 20 s is opened by its agent, as `fresh` already accepts). Runs (cd967a0): run_f17b48d291a7d8fd,
+run_ddc02354bde271f3 (started 06:32). Judge by: time of the first agent calls after the sites call, `first load
+failed` lines, quality, signing.
+
 ## Backlog
 
 - `specs` at effort low: it only starts the early ERP searches and `requirements` corrects it, yet at medium it took
