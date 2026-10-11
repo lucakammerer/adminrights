@@ -21,6 +21,7 @@
   const styled = !opts.doc
   let next = opts.start || 1
   let marked = 0
+  let inCell = 0
   const out = []
 
   // A checkbox or radio made transparent under a styled label is still the control people tick: only display and
@@ -183,7 +184,10 @@
       out.push(`\n[iframe src=${el.getAttribute("src") || ""}]\n`)
       if (doc && doc.body) {
         doc.querySelectorAll("[data-aref]").forEach((e) => e.removeAttribute("data-aref"))
+        const cellAround = inCell
+        inCell = 0
         walk(doc.body)
+        inCell = cellAround
       }
       out.push("\n[/iframe]\n")
       return
@@ -214,8 +218,9 @@
     }
     const display = styled ? el.ownerDocument.defaultView.getComputedStyle(el).display : ""
     const cell = tag === "TD" || tag === "TH" || CELL.has(role) || display === "table-cell"
-    const block = !cell && (BLOCK.has(tag) || role === "row" || BLOCKISH.test(display))
-    const spaced = !cell && !block && /^inline-/.test(display)
+    // inside a table cell, layout alone only spaces values apart, so a row stays on one line
+    const block = !cell && (BLOCK.has(tag) || role === "row" || BLOCKISH.test(display) && !inCell)
+    const spaced = !cell && !block && /^inline-|^(block|flex|grid|flow-root|list-item)$/.test(display)
     if (block) out.push("\n")
     if (spaced) out.push(" ")
     if (/^H[1-6]$/.test(tag)) out.push("#".repeat(+tag[1]) + " ")
@@ -224,8 +229,10 @@
     const before = generated(el, "::before")
     if (before) out.push(` ${before} `)
     const start = out.length
+    if (cell) inCell++
     if (el.shadowRoot) for (const ch of el.shadowRoot.childNodes) walk(ch)
     for (const ch of el.childNodes) walk(ch)
+    if (cell) inCell--
     const after = generated(el, "::after")
     if (after) out.push(` ${after} `)
     const title = clean(el.getAttribute("title")).trim()
