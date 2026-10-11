@@ -332,7 +332,7 @@ Commit 38d5b42, test (a refetch of a kept page gets the line, another address or
 check_release green, audit clean. Reviewer first REJECTED the address-only version (hash routes, state-dependent
 pages, `goto` redirects would get a false "already kept" and the model could skip keeping new facts); reworked to
 `fetch` only, same address and same `paging.body`, fragment kept; re-review PASS. Runs (38d5b42):
-run_076dc1c00233e5a6, run_0847ad70cbda7696 (started ~06:10). Judge by: quality, signing, ERP search step counts and
+run_076dc1c00233e5a6, run_0847ad70cbda7696 (started 05:53). Judge by: quality, signing, ERP search step counts and
 last-ERP-finish time, how often the line fires (`Unchanged since` is not logged; count refetches of kept URLs with
 /tmp-style log parsing as in this entry).
 
