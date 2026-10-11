@@ -73,6 +73,9 @@ _fallback = None
 # An OpenRouter model's last three attempts at a call go to the hosted Qwen, which agent.json keeps warm (its warm-up
 # never counts toward the run's time): a provider that fails three times must not end an agent.
 FALLBACK = "qwen3.8-flash-next"
+# OpenRouter refusing for credit (402: not enough for the calls in flight) goes to the fallback at once; a spent key
+# (403, a limit) does for the rest of the run: three attempts, each refused, cost 15 s a call (run_469a981dbeaabbf8).
+_spent = False
 T0 = time.time()
 
 
@@ -132,13 +135,15 @@ async def chat(messages: list, tools: list | None = None, hosted: bool = False, 
     """One model reply, each attempt bounded by CAP and all of them by UNTIL; raises TimeoutError when time is up. An
     attempt silent for SILENCE seconds (twice that on a retry) is dropped and asked again. hosted: the hosted Qwen
     answers even when MODEL is an OpenRouter model."""
+    global _spent
+    refused = False
     for attempt in range(6):
         left = UNTIL.get() - time.time() - 1
         if left < 3:
             raise TimeoutError("no time left for a model call")
         limit = min(CAP.get(), left)
         began = time.time()
-        fallback = OPENROUTER and (hosted or attempt >= 3) and "QWEN_BASE_URL" in os.environ
+        fallback = OPENROUTER and (hosted or attempt >= 3 or refused or _spent) and "QWEN_BASE_URL" in os.environ
         heard = asyncio.Event()  # never set for an unstreamed OpenRouter reply: its twin waits for the answer
 
         def ask(heard: asyncio.Event) -> asyncio.Future:
@@ -174,6 +179,10 @@ async def chat(messages: list, tools: list | None = None, hosted: bool = False, 
                 raise
             print(f"[llm] retry after {type(error).__name__} at {time.time() - began:.0f} s: {str(error)[:200]}",
                   flush=True)
+            status = getattr(error, "status_code", None)
+            if OPENROUTER and not fallback and status in (402, 403) and "QWEN_BASE_URL" in os.environ:
+                refused, _spent = True, _spent or (status == 403 and "limit" in str(error).lower())
+                continue
             await asyncio.sleep(min(2 + 3 * attempt, max(0.0, UNTIL.get() - time.time() - 5)))
         finally:
             listening.cancel()

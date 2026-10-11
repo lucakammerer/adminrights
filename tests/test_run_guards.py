@@ -7,11 +7,13 @@ Run from the repo root: uv run --project agent --no-sync python -m unittest disc
 """
 import asyncio
 import json
+import os
 import sys
 import time
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
+from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "agent"))
 
@@ -133,6 +135,35 @@ class HedgedCall(unittest.TestCase):
                 llm.reply, llm.OPENROUTER, llm.HEDGE = real
         answer, seconds = asyncio.run(scenario())
         self.assertEqual((answer, len(asked)), ("twin", 2))
+        self.assertLess(seconds, 2)
+
+
+    def test_a_spent_key_goes_to_the_fallback_at_once_and_stays_there(self):
+        import httpx
+        from openai import PermissionDeniedError
+        asked = []
+
+        async def reply(_messages, _tools, _silence, fallback, *_args, **_kwargs):
+            asked.append(fallback)
+            if not fallback:
+                response = httpx.Response(403, request=httpx.Request("POST", "http://openrouter.test"))
+                raise PermissionDeniedError("Key limit exceeded (total limit)", response=response, body=None)
+            return "hosted"
+
+        async def scenario():
+            real = llm.reply, llm.OPENROUTER, llm._spent
+            llm.reply, llm.OPENROUTER = reply, True
+            began = time.time()
+            try:
+                with llm.limits(time.time() + 30):
+                    answers = [await llm.chat([{"role": "user", "content": "x"}]) for _ in range(2)]
+                return answers, time.time() - began
+            finally:
+                llm.reply, llm.OPENROUTER, llm._spent = real
+        with mock.patch.dict(os.environ, {"QWEN_BASE_URL": "http://hosted.test"}):
+            answers, seconds = asyncio.run(scenario())
+        self.assertEqual(answers, ["hosted", "hosted"])
+        self.assertEqual(asked, [False, True, True])  # the second call never tried the spent key
         self.assertLess(seconds, 2)
 
 
