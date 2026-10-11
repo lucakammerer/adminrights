@@ -181,7 +181,8 @@ Every browser agent is the same loop; agents differ only in mission, result sche
   stuck calls never reach the model and used to hold their stage to the cap (run_76abdc35df9c092b: six, among them
   three of the four ERP searches' first calls). A streamed attempt without its first chunk after `FIRST_CHUNK` (10 s)
   gets a twin like an OpenRouter call and keeps running; the first answer wins (6-10 silent Qwen calls a run cost
-  30 s each before).
+  30 s each before). When the original is dropped at `SILENCE` and its twin has not sent a chunk either, the call is
+  asked again at once instead of waiting out the twin.
 - **Cut agents keep their evidence:** every `investigate` registers its evidence list in `llm.KEPT`, one per stage
   (`agent.start`); a stage that is cut or fails hands those pages on, marked `forced`.
 - **Shared system prompt** `agents/common.py` `SYSTEM`: the sites' traps in general terms, no site and no value.

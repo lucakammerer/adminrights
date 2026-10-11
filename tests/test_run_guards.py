@@ -72,15 +72,15 @@ TOOL_STREAM = [chunk({"role": "assistant", "content": ""}),
                chunk({}, "tool_calls")]
 
 
-def streaming(replies: list, silent_first: bool = False):
-    """A server that streams one of `replies` per request; with `silent_first`, the first request never hears back."""
+def streaming(replies: list, silent: int = 0):
+    """A server that streams one of `replies` per request; the first `silent` requests never hear back."""
     requests = []
 
     async def serve(reader, writer):
         await reader.readuntil(b"\r\n\r\n")
         requests.append(1)
         try:
-            if silent_first and len(requests) == 1:
+            if len(requests) <= silent:
                 await asyncio.sleep(60)
             body = b"".join(b"data: %s\n\n" % json.dumps(c).encode() for c in replies[len(requests) - 1]) + \
                 b"data: [DONE]\n\n"
@@ -138,7 +138,7 @@ class HedgedCall(unittest.TestCase):
 
 class StuckCallAskedAgain(unittest.TestCase):
     def test_silent_call_is_asked_again(self):
-        serve, requests = streaming([None, TOOL_STREAM], silent_first=True)
+        serve, requests = streaming([None, TOOL_STREAM], silent=1)
         reply, seconds = ask(serve, silence=1)
         self.assertEqual(len(requests), 2)
         self.assertLess(seconds, 10)  # the first request would have held the call for 60 s
@@ -147,7 +147,7 @@ class StuckCallAskedAgain(unittest.TestCase):
         self.assertEqual(json.loads(call.function.arguments), {"result": {"material_number": "M-1"}})
 
     def test_call_without_a_first_chunk_gets_a_twin(self):
-        serve, requests = streaming([None, TOOL_STREAM], silent_first=True)
+        serve, requests = streaming([None, TOOL_STREAM], silent=1)
         real, llm.FIRST_CHUNK = llm.FIRST_CHUNK, 0.3
         try:
             reply, seconds = ask(serve)  # the silent call alone would be dropped only after 30 s
@@ -155,6 +155,17 @@ class StuckCallAskedAgain(unittest.TestCase):
             llm.FIRST_CHUNK = real
         self.assertEqual(len(requests), 2)
         self.assertLess(seconds, 5)
+        self.assertEqual(reply.choices[0].message.tool_calls[0].function.name, "finish")
+
+    def test_twin_as_silent_as_the_dropped_call_is_not_waited_out(self):
+        serve, requests = streaming([None, None, TOOL_STREAM], silent=2)
+        real, llm.FIRST_CHUNK = llm.FIRST_CHUNK, 0.9
+        try:
+            reply, seconds = ask(serve, silence=1)  # waiting out the twin: 1.9 s + the 2 s pause
+        finally:
+            llm.FIRST_CHUNK = real
+        self.assertEqual(len(requests), 3)
+        self.assertLess(seconds, 3.5)
         self.assertEqual(reply.choices[0].message.tool_calls[0].function.name, "finish")
 
     def test_streamed_reply_reads_like_a_plain_one(self):

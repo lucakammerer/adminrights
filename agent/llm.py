@@ -142,7 +142,7 @@ async def chat(messages: list, tools: list | None = None, hosted: bool = False, 
                                                heard, **kwargs))
             call.add_done_callback(lambda c: c.cancelled() or c.exception())  # a dropped call's failure stays quiet
             return call
-        calls = [ask(heard)]
+        calls, twin_heard = [ask(heard)], asyncio.Event()
         listening = asyncio.ensure_future(heard.wait())
         try:
             # asyncio.wait, not wait_for: wait_for waits until the cancelled call has stopped, a cut never does
@@ -150,14 +150,17 @@ async def chat(messages: list, tools: list | None = None, hosted: bool = False, 
                                timeout=min(HEDGE if OPENROUTER and not fallback else FIRST_CHUNK, limit))
             if not calls[0].done() and not heard.is_set():
                 print(f"[llm] twin after {time.time() - began:.0f} s without a reply", flush=True)
-                calls.append(ask(asyncio.Event()))
+                calls.append(ask(twin_heard))
             while True:
                 answered = [c for c in calls if c.done() and not c.cancelled() and c.exception() is None]
                 if answered:
                     return answered[0].result()
                 waiting = [c for c in calls if not c.done()]
-                if not waiting:
-                    raise calls[-1].exception()
+                # a streamed twin as silent as the dropped call is asked again now, not at its own SILENCE: both
+                # stayed silent and the twin held a submit step 10 s longer (run_abc7db6e7a9804f9)
+                streamed_twin = len(calls) > 1 and not (OPENROUTER and not fallback)
+                if not waiting or (streamed_twin and calls[0].done() and not twin_heard.is_set()):
+                    raise calls[0].exception() if calls[0].done() else calls[-1].exception()
                 rest = limit - (time.time() - began)
                 if rest <= 0:
                     raise TimeoutError(f"model call over {limit:.0f} s")
