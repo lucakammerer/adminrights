@@ -97,6 +97,8 @@ class Tab:
         self.lines: Counter = Counter()  # lines without controls -> how many reads of this tab showed them
         self.method = "GET"  # of the latest main-frame navigation: only a GET may be reloaded after a server error
         self.status = 0
+        self.stalled: set = set()  # frames that did not load within FRAME_WAIT: not waited for again
+        page.on("framenavigated", lambda frame: self.stalled.discard(frame))  # a reloaded frame may hold a form: wait for it again
         page.on("dialog", self._on_dialog)
         page.on("download", self._on_download)
         page.on("request", self._on_request)
@@ -146,17 +148,21 @@ class Tab:
             await asyncio.sleep(0.5)
         if waited < 0:  # a page loaded before this tab tracked it: popups appear a moment after load
             await asyncio.sleep(SETTLE_MAX)
-        frames = [frame.wait_for_load_state("domcontentloaded") for frame in self.page.frames[1:]]
-        if frames:  # a form inside a frame reloads only that frame, by now under way
-            try:
-                await asyncio.wait_for(asyncio.gather(*frames, return_exceptions=True), FRAME_WAIT)
-            except Exception:  # noqa: BLE001  a frame that never loads (ads, chat) costs this wait once per settle
-                pass
-        for frame in self.page.frames:  # in-page popup dialogs only block the page; browser dialogs are accepted above
-            try:
-                await frame.evaluate("document.querySelectorAll('dialog[open]').forEach(d => d.close())")
-            except Exception:  # noqa: BLE001
-                pass
+        async def ready(frame):  # a form inside a frame reloads only that frame, by now under way
+            if frame != self.page.main_frame and frame not in self.stalled:
+                await frame.wait_for_load_state("domcontentloaded")
+            # in-page popup dialogs only block the page; browser dialogs are accepted above
+            await frame.evaluate("document.querySelectorAll('dialog[open]').forEach(d => d.close())")
+
+        frames = self.page.frames
+        tasks = [asyncio.ensure_future(ready(frame)) for frame in frames]
+        await asyncio.wait(tasks, timeout=FRAME_WAIT)
+        for frame, task in zip(frames, tasks):  # a frame that never loads (ads, chat) is waited for once
+            if not task.done():
+                self.stalled.add(frame)
+                task.cancel()
+            elif not task.cancelled():
+                task.exception()
 
     async def recover(self):
         """Before the model sees a page: reload a server error page (GET only) up to twice, and log in again when the

@@ -6,6 +6,7 @@ Run from the repo root: uv run --project agent --no-sync python -m unittest disc
 import asyncio
 import sys
 import threading
+import time
 import unittest
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -83,6 +84,11 @@ class Site(BaseHTTPRequestHandler):
             return self.page('<input name="q" placeholder="Quantity"><input type="hidden" name="Quantity"><select name="p" title="Ø Pressure"><option>choose'
                              '</option><option>16 bar</option></select><div role="button" onclick="document.title='
                              '\'sent\'">Send</div>')
+        if path == "/stall":  # a frame source that never answers (an ad or chat server)
+            time.sleep(20)
+            return None
+        if path == "/stalled":
+            return self.page('<iframe src="/stall"></iframe><p>Main content</p>')
         if path == "/framed":  # the configurator inside a frame of the page
             return self.page('<h1>Order</h1><iframe src="/config" width="600" height="200"></iframe>')
         return self.page("start")
@@ -243,6 +249,19 @@ class TabAgainstLocalSite(unittest.TestCase):
         self.assertLess(spent, 4.0)
         self.assertNotIn("FAILED", applied.split("\n", 1)[0])
         self.assertNotIn("FAILED", scripted.split("\n", 1)[0])
+
+    def test_a_frame_that_never_loads_does_not_hold_up_reads(self):
+        async def steps(tab):
+            await tab.page.goto(self.url + "/stalled", wait_until="commit")
+            loop = asyncio.get_running_loop()
+            started = loop.time()
+            first = await asyncio.wait_for(tab.read(), 30)
+            second = await tab.read()
+            return first, second, loop.time() - started
+        first, second, spent = self.run_tab(steps)
+        self.assertIn("Main content", first)
+        self.assertIn("Main content", second)
+        self.assertLess(spent, 10)
 
     def test_form_finds_fields_by_the_reader_s_name_and_inside_frames(self):
         async def steps(tab):
