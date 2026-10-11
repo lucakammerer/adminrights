@@ -75,6 +75,24 @@ because it "differs from the early searches") is where it goes. Profile run_ba99
 
 
 
+### 3 · 03:00 · A twin for a streamed call that brings no first chunk
+
+Profile of run_ba99f2d4eb2f586e (bid only at 545 s): the critical path was the slowest ERP search (189→510 s, 39
+steps, forced finish). Three of its gaps were `[llm] retry after APITimeoutError at 30 s`: a hosted Qwen call that
+never brought a byte, dropped only at `SILENCE`. Count per run: run_ba99f2d4eb2f586e 6, run_cf57141fcf4352a0 10,
+run_bd99f53d4d7d5c7f 0, run_a65e32634be4efce 0. Answered calls' queue wait p95 1.3 s (night) to 14 s (loaded).
+
+Hypothesis: a streamed attempt without its first chunk after 10 s gets a twin (the silent one keeps running, first
+answer wins), as OpenRouter calls already do after 15 s. Saves ~20 s per stuck call; costs a twin on queue waits over
+10 s under load.
+
+Commit 4d4a37f: `llm.FIRST_CHUNK`, `reply` sets an event at its first chunk, `chat` sends the twin and logs
+`[llm] twin after`. Test: a silent first request answered by the twin in < 5 s. Gate: check_release green, audit clean,
+reviewer PASS (watch the twin rate under load: it adds requests while the service queues).
+
+Runs (4d4a37f): run_840f0cd20f29dc8c, run_6038f546123323a1 (started 01:12 UTC). Judge by: count of `twin after` vs
+`retry after APITimeoutError`, time to bid, quality.
+
 ## Backlog
 
 - ERP: "its requirement differs from the early searches: searching it now" at 252–268 s in both a4b9d2c runs; why
