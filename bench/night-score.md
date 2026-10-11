@@ -2,7 +2,10 @@
 
 ## Morning summary
 
-Best candidate: **cd967a0**, the branch tip's code (2c5dd5f + 38d5b42 + the start pages loaded side by side).
+Best candidate: **b942b04**, the branch tip: cd967a0 + an insurance fix in `llm.chat` (a call dropped silent while
+its twin is silent too is asked again at once, ~10 s saved per such stall; fired in neither of its two runs:
+run_e36d97ed806dea22 100 / 5:45 / $0.135 / 46.7 $·s, run_f070cde80a0f6a81 100 / 7:49 / $0.142 / 66.4 $·s).
+Merging cd967a0 alone is equally fine if b942b04 looks unnecessary. Evidence for the code line below:
 cd967a0's own six runs, all 100 and signed: run_aeaefa93edce1937 5:20 / $0.121 / **38.8 $·s**, run_6fd78246ef5da521
 5:12 / $0.139 / 43.2 $·s, run_2bfbe16b551a62a3 5:17 / $0.144 / 45.6 $·s, run_f17b48d291a7d8fd 6:15 / $0.136 /
 51.1 $·s, run_abc7db6e7a9804f9 8:24 / $0.182 / 91.8 $·s, run_ddc02354bde271f3 10:41 / $0.160 / 102.6 $·s (slow model
@@ -428,7 +431,12 @@ Commit b942b04 (`llm.chat`, test fails on the old code at 3.95 s, passes on the 
 IMPLEMENTATION_PLAN). Gate: release check green, audit clean, adversarial reviewer PASS (worst case: a twin that would
 have started streaming between 30 and 40 s is asked again). Insurance: saves ~10 s on a rare stall.
 
-Runs (b942b04, started 07:11): run_f070cde80a0f6a81, run_e36d97ed806dea22.
+Runs (b942b04, started 07:11): run_e36d97ed806dea22 100 / 5:45 / $0.135 / **46.7 $·s**, run_f070cde80a0f6a81
+100 / 7:49 / $0.142 / 66.4 $·s, both signed. The new rule fired in neither (one twin in run_e36d, and it answered).
+
+Verdict: keep as insurance. Not worse on quality or signing (14 Qwen runs in a row at 100 on this line); the speed
+gain is only on the rare double-silent call and can't show in two runs. Next idea: phase 1 spread (generalization
+owner's area) is the largest remaining variance.
 
 ## Backlog
 
