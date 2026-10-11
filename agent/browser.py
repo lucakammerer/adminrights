@@ -92,6 +92,9 @@ NAVIGATION_TIMEOUT = 30
 # the recorded sites). Controls always stay, so every ref remains usable; evidence and explicit reads stay complete.
 CHROME_SEEN = 2
 CONTROL = re.compile(r"\[\d+:")
+# Playwright's call log of a click that was dispatched and then timed out waiting for the navigation it started
+CLICKED = "click action done"
+ACTION_TIMEOUT = 10_000  # ms for any Playwright wait without its own timeout: its default of 30 s hid stalls
 
 
 def _gap() -> str:
@@ -146,6 +149,8 @@ class Tab:
 
     async def _track(self, page):
         try:
+            page.set_default_timeout(ACTION_TIMEOUT)
+            page.set_default_navigation_timeout(30_000)  # loads keep Playwright's default: agent.OPEN_TIMEOUT bounds them
             await page.add_init_script(TRACK)
         except Exception:  # noqa: BLE001
             pass
@@ -343,8 +348,12 @@ class Tab:
         try:
             await loc.scroll_into_view_if_needed(timeout=1000)
             await loc.click(timeout=2000)
-        except Exception:  # noqa: BLE001  covered, off-screen in a scroll box, inert: click it in the DOM
-            await loc.evaluate("e => e.click()")
+        except Exception as error:  # noqa: BLE001
+            if CLICKED in str(error):  # it went through, only the page it opened is slow: the read after waits for it
+                return
+            # covered, off-screen in a scroll box, inert: click it in the DOM (a click repeated on a page that loaded
+            # slowly waited 30 s there for its button, gone with the old page, on 2026-10-11)
+            await loc.evaluate("e => e.click()", timeout=3000)
 
     async def locate(self, ref: int):
         for frame in self.page.frames:
@@ -457,7 +466,11 @@ class Tab:
         if step.get("click"):
             loc = await self.named(str(step["click"]), click=True)
             await loc.scroll_into_view_if_needed(timeout=3000)
-            await loc.click(timeout=5000)
+            try:
+                await loc.click(timeout=5000)
+            except Exception as error:  # noqa: BLE001  a click that went through to a slow page counts
+                if CLICKED not in str(error):
+                    raise
             await self.settle()
             return f"clicked {step['click']}"
         value = step.get("value")

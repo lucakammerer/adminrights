@@ -19,22 +19,31 @@ MODEL = os.environ.get("AGENT_MODEL", "anthropic/claude-haiku-5.5")
 OPENROUTER = "/" in MODEL
 # Anthropic models cache only behind a breakpoint; this top-level one moves with the conversation
 CACHE = {"cache_control": {"type": "ephemeral"}} if MODEL.startswith("anthropic/") else {}
-STEP_EFFORT = os.environ.get("STEP_EFFORT", "low")  # reasoning per browser step; latency is mostly thinking tokens
-KEEP_STEPS = 4  # tool results of the latest steps stay in full; older page reads shrink so the context stays small
-# Older reads shrink in batches, not every step: a shortened read changes the history, so the prompt cache only covers
-# what comes before it. Trimming each step re-sent the latest pages at full price on every call (50-64% of a run's
-# uncached input); between batches the history only grows and is read from the cache. A batch is due once TRIM_EVERY
-# steps have left the KEEP_STEPS window, or earlier when their tool results reach TRIM_CHARS.
-TRIM_EVERY = 6
-TRIM_CHARS = 60_000
+# OpenRouter tries the provider with the lowest latency first instead of balancing load across providers (a call took
+# 1.65 s plus 3.3 s per 1,000 output tokens on 2026-10-10). Its sticky routing keeps a conversation on one provider, so
+# the cache still hits. PROVIDER_SORT=throughput or none switches it.
+PROVIDER_SORT = os.environ.get("PROVIDER_SORT", "latency")
+ROUTE = {"provider": {"sort": PROVIDER_SORT}} if OPENROUTER and PROVIDER_SORT not in ("", "none") else {}
+# reasoning per browser step; latency is mostly thinking tokens. "none" switches thinking off on OpenRouter (an A/B
+# still to run: step replies were short already, a median 1.3 s, and thinking may be what gets the agents past traps)
+STEP_EFFORT = os.environ.get("STEP_EFFORT", "low")
+# The loop's history only grows, so each call reads all of it but the newest step from the cache (a tenth of the input
+# price): a shortened read changes the history, and every call after it pays for the rest again as cache writes. Once
+# the prompt passes COMPACT_AT (estimated tokens), the reads older than the last KEEP_STEPS steps shrink at once: one
+# rewrite, and every call stays far below Haiku 5.5's 100k-token price step (5x). Replayed on run_0bf3628e04112a0c's
+# calls, loop input cost about $0.069 this way against $0.085 with a batch every 6 steps.
+KEEP_STEPS = 4
+COMPACT_AT = 60_000
+CHARS_PER_TOKEN = 3  # of page text, JSON and tool schemas (about 3 on a measured first prompt)
 # The API returns the model's reasoning with every reply and reads whatever is sent back as input on every later
 # step. It stays while its step is in the KEEP_STEPS window (the model's train of thought) and goes in the same
-# batches as the older page reads.
+# rewrite as the older page reads.
 REASONING = ("reasoning", "reasoning_content", "reasoning_details")  # OpenRouter returns Claude's thinking in details
 CALL_TIMEOUT = 180  # one model call; a slower one is retried while its deadline allows (steps took 20-90 s under load,
 # a tender finish 132 s: a cut call starts over, so the cap sits above the slowest calls seen)
 CHECK_TIMEOUT = 60  # one model call inside a finish check (ERP extract: 13-21 s); one hung call cost a position
 TOOL_TIMEOUT = 60  # one browser tool; a fetch that hung 109 s held the tender agent to its cut, its kept pages lost
+SLOW_TOOL = 5  # seconds after which a tool's time is logged (a search form once took 30 s inside the TAN look-up)
 # A call that brings no byte for this long is stuck and asked again (a retry waits twice as long, in case the service is
 # only slow). Replies are streamed, so a healthy one sends its first chunk within seconds and then one every <1 s; a
 # stuck call never reaches the model (none of the 6 in run_76abdc35df9c092b shows in the platform's calls) and held
@@ -106,8 +115,11 @@ async def reply(messages: list, tools: list | None, silence: float, fallback: bo
     """One streamed model reply, assembled like a non-streamed one; every read must bring a byte within `silence`, and
     `heard` is set at the first chunk. The snapshot, not get_final_completion: that raises on a reply cut at its length
     limit, which counted before. cache=False for a prompt no later call reads back: a request with the breakpoint has every
-    uncached token written to the cache at 1.25x the input price."""
-    extra = {"extra_body": CACHE} if CACHE and cache and not fallback else {}
+    uncached token written to the cache at 1.25x the input price. OpenRouter's own options (ROUTE, an extra_body from
+    `reasoning`) never go to the hosted Qwen."""
+    own = kwargs.pop("extra_body", {})
+    body = {} if fallback else {**ROUTE, **(CACHE if cache else {}), **own}
+    extra = {"extra_body": body} if body else {}
     if fallback:  # the hosted Qwen gets plain text where Claude's system message carries its cache breakpoint
         messages = [{**m, "content": m["content"][0]["text"]} if m.get("role") == "system" and
                     isinstance(m.get("content"), list) else m for m in messages]
@@ -188,6 +200,20 @@ async def chat(messages: list, tools: list | None = None, hosted: bool = False, 
             listening.cancel()
             for call in calls:
                 call.cancel()  # no-op once done; frees the connection of a call over its time or of a cut stage
+
+
+def reasoning(level: str | None) -> dict:
+    """The request options for a reasoning effort; "none" switches thinking off (OpenRouter's reasoning.enabled)."""
+    if not level:
+        return {}
+    if level == "none":
+        return {"extra_body": {"reasoning": {"enabled": False}}} if OPENROUTER else {}
+    return {"reasoning_effort": level}
+
+
+def size(messages: list, tools: list) -> int:
+    """A request's prompt in estimated tokens (its characters / CHARS_PER_TOKEN)."""
+    return len(json.dumps([messages, tools], ensure_ascii=False, default=str)) // CHARS_PER_TOKEN
 
 
 def parse_object(text: str) -> dict | None:
@@ -313,7 +339,7 @@ async def investigate(tab, system: str, mission: str, finish_schema: dict, deadl
         url = (getattr(tab, "site", None) or {}).get("url")
         page = f"Error: the page did not load ({type(error).__name__}). " + \
             (f"Open {url} to start." if url else "Read it again.")
-    if CACHE:  # a breakpoint after the shared system: every agent reads it, also after a batch of shortened reads
+    if CACHE:  # a breakpoint after the shared system: every agent reads it, also after the older reads were shortened
         system = [{"type": "text", "text": system, "cache_control": {"type": "ephemeral"}}]
     messages = [{"role": "system", "content": system},
                 {"role": "user", "content": mission + "\n\nfinish takes `result`, a JSON object of this schema:\n" +
@@ -403,7 +429,7 @@ async def investigate(tab, system: str, mission: str, finish_schema: dict, deadl
             messages.append({"role": "user", "content": news.pop(0)})
         try:
             with limits(deadline):  # a step never eats the grace the forced finish below needs
-                reply = await chat(messages, tools, **({"reasoning_effort": STEP_EFFORT} if STEP_EFFORT else {}))
+                reply = await chat(messages, tools, **reasoning(STEP_EFFORT))
         except Exception as error:  # noqa: BLE001  out of time or the model keeps failing: finish with what is kept
             log(tag, f"step failed: {type(error).__name__}: {str(error)[:200]}")
             break
@@ -462,6 +488,7 @@ async def investigate(tab, system: str, mission: str, finish_schema: dict, deadl
             reopened = kept_at.get(address(args["url"])) if name == "fetch" and args.get("url") else None
             limit = max(1.0, deadline - time.time() if handler else
                         min(TOOL_TIMEOUT * (2 if listed else 1), deadline - time.time()))
+            began = time.time()
             try:
                 if name == "note":
                     output = "Saved."
@@ -481,6 +508,8 @@ async def investigate(tab, system: str, mission: str, finish_schema: dict, deadl
                     output += "\n\n" + await asyncio.wait_for(tab.read(), 15)
                 except Exception:  # noqa: BLE001
                     pass
+            if (took := time.time() - began) > SLOW_TOOL:  # where a run's browser time goes
+                log(tag, f"{step}: {name} took {took:.0f} s")
             quiet = QUIET_READ.match(output) if name in PAGE_ACTIONS and i < last_action else None
             if quiet:  # a later action of this turn shows the page
                 output = ((quiet.group(1) or f"Done: {name}.").rstrip() +
@@ -493,8 +522,9 @@ async def investigate(tab, system: str, mission: str, finish_schema: dict, deadl
             entry = {"role": "tool", "tool_call_id": call.id, "content": output}
             messages.append(entry)
             results.append(entry)
-        stale = [entry for results in steps[trimmed:-KEEP_STEPS] for entry in results]
-        if len(steps) - KEEP_STEPS - trimmed >= TRIM_EVERY or sum(len(e["content"]) for e in stale) >= TRIM_CHARS:
+        if len(steps) - KEEP_STEPS > trimmed and size(messages, tools) > COMPACT_AT:  # one rewrite, not one per step
+            stale = [entry for results in steps[trimmed:-KEEP_STEPS] for entry in results]
+            log(tag, f"prompt past {COMPACT_AT} tokens: older page reads shortened at once")
             for old in stale:
                 if len(old["content"]) > 400 and not old["content"].startswith(PINNED):
                     old["content"] = old["content"][:300] + (SHORTENED_KEPT if old["content"].startswith(KEPT_PREFIX)
