@@ -32,8 +32,12 @@ total net {german(answer['total_net'])} EUR (net; a displayed gross amount with 
 
 
 def readable(tan: str) -> bool:
-    """A TAN as a message writes it: one short code with digits, not a sentence about it."""
-    return len(tan) <= 32 and len(tan.split()) <= 3 and any(c.isdigit() for c in tan)
+    """A TAN as messages usually write it: a short code with digits (also in blocks), not a sentence about it."""
+    return len(tan) <= 40 and len(tan.split()) <= 5 and any(c.isdigit() for c in tan)
+
+
+def squeezed(text: str) -> str:
+    return "".join(text.split()).lower()
 
 
 def number(text) -> float | None:
@@ -81,10 +85,27 @@ yourself: a list on the page may be left from an earlier search, and its newest 
 message. Pick only a message that gives a signing TAN for this tender, the one for that request (highest request
 number / newest), open it and finish with found true and the TAN exactly as written.{search}"""
 
-        async def check(result, _evidence):
+        doubted: set[str] = set()  # values refused once: sent again, they count
+
+        async def usable(result: dict, evidence: list) -> bool:
+            """A TAN that stands word for word on the page or in the kept pages counts, whatever its shape; otherwise
+            only one that reads like a TAN or that the model sent a second time."""
+            tan = str(result.get("tan") or "").strip()
+            if not (result.get("found") and tan):
+                return False
+            if readable(tan) or tan in doubted:
+                return True
+            try:
+                page = await asyncio.wait_for(mail_tab.read(), 10)
+            except Exception:  # noqa: BLE001
+                page = ""
+            return squeezed(tan) in squeezed(page + "".join(evidence))
+
+        async def check(result, evidence):
             """A look-up that found no TAN keeps searching instead of handing the portal a non-TAN."""
-            if result.get("found") and readable(str(result.get("tan") or "").strip()):
+            if await usable(result, evidence):
                 return result, ""
+            doubted.add(str(result.get("tan") or "").strip())
             if result.get("found"):
                 return result, ("Not done: you found the message but gave no TAN as written in it. Open that message "
                                 "and finish with its TAN exactly as written.")
@@ -94,8 +115,7 @@ number / newest), open it and finish with found true and the TAN exactly as writ
         found = await llm.investigate(mail_tab, system(task), mission,
                                       obj(found=BOOL, tan=STR, request=STR, subject=STR),
                                       min(deadline, time.time() + 120), "tan", max_steps=16, check=check)
-        found.pop("evidence", None)
-        if found.get("found") and readable(str(found.get("tan") or "").strip()):
+        if await usable(found, found.pop("evidence", None) or []):
             return json.dumps(found, ensure_ascii=False)
         # a finish forced at the step or time limit skips the check: never hand the portal what isn't a TAN
         llm.log("tan", "no TAN read")

@@ -440,6 +440,7 @@ class TanLookUp(unittest.TestCase):
         from agents.submit.agent import readable
         self.assertTrue(readable("483 920"))
         self.assertTrue(readable("TAN-7Q4K2"))
+        self.assertTrue(readable("4821 9375 1046 2283"))
         self.assertFalse(readable("Not captured — located in message at 10:42"))
         self.assertFalse(readable("unknown"))
 
