@@ -71,7 +71,8 @@ class MutatedPages(unittest.TestCase):
                     plain = facts(re.sub(r" -> [^\]]*\]", "]", self.read[(path.name, None)][0]))
                 with self.subTest(page=path.name, seed=seed):
                     self.assertGreater(stats["decoys"], 0)
-                    self.assertNotIn("S2DECOY", text)
+                    # a decoy in its background's colour may be kept, but only inside the reader's mark
+                    self.assertNotIn("S2DECOY", re.sub(r"\(text in its background's colour: [^)]*S2DECOY\)", "", text))
                     self.assertEqual(plain - facts(text), set())
                     links = self.read[(path.name, None)][0].count(':link "')
                     self.assertEqual(text.count(':link "') + text.count(":clickable]"), links)  # every link still usable

@@ -24,6 +24,7 @@ PAGE = """<!doctype html><html><head><style>
 .gone { display: none } .ghost { visibility: hidden } .label::before { content: attr(data-label) ": " }
 .unit::after { content: " pieces" } .sr { position: absolute; width: 1px; height: 1px; overflow: hidden;
   clip: rect(0 0 0 0) } .away { position: absolute; left: -9999px } .dot::before { content: "\\2022" }
+.dim { display: inline-block; transform: scale(0) }
 </style></head><body>
 <p>Quantity <span class="label" data-label="Binding total">40</span><span class="unit"></span></p>
 <p class="gone">Quantity 999 decoy-class</p><p class="ghost">decoy-ghost</p>
@@ -41,6 +42,12 @@ PAGE = """<!doctype html><html><head><style>
 <button aria-describedby="d1">Check</button><span id="d1">Approved <b hidden>decoy-in-description</b></span>
 <table><tr><th>Ref</th><th>Value</th></tr><tr><td><div>R-1</div></td><td><p>12</p><p>units</p></td></tr></table>
 <button aria-describedby="t9">Date</button><span id="t9" role="tooltip">2031-05-06</span>
+<p style="color:transparent">decoy-clear</p><p style="color:#fff;background:#fff">decoy-white</p><p class="dim">kept-scaled</p>
+<div style="background:#123"><p style="color:#112233">decoy-same-ink</p><p style="color:#fff">kept-light-on-dark</p></div>
+<p style="text-indent:-9999px">indented value 29</p><p style="filter:opacity(0)">decoy-filtered</p>
+<p style="background:linear-gradient(red,blue);-webkit-background-clip:text;color:transparent">kept-gradient</p>
+<section style="position:relative"><span style="position:absolute;inset:0;background:#000"></span>
+<b style="position:relative;color:#fff">kept-over-a-box</b></section>
 <div style="display:flex"><span>Bore</span><span>63</span></div>
 <div role="row"><span role="gridcell">250</span><span role="gridcell">17,40</span></div>
 <span role="link">Open record</span><div role="checkbox" aria-checked="false">Confirm</div>
@@ -105,6 +112,16 @@ class Reader(unittest.TestCase):
             for decoy in ("decoy-class", "decoy-ghost", "decoy-aria", "decoy-inline", "999", "decoy-in-tooltip",
                           "decoy-in-link", "decoy-in-description"):
                 self.assertNotIn(decoy, text)
+
+    def test_text_painted_invisibly_stays_out(self):
+        for text in (self.live, self.fetched):
+            for decoy in ("decoy-clear", "decoy-filtered"):
+                self.assertNotIn(decoy, text)
+            for kept in ("kept-light-on-dark", "kept-gradient", "kept-over-a-box", "kept-scaled"):  # scaled: a tooltip at rest
+                self.assertIn(kept, text)
+            self.assertIn("(off-screen text: indented value 29)", text)
+            self.assertIn("(text in its background's colour: decoy-white)", text)
+            self.assertIn("(text in its background's colour: decoy-same-ink)", text)
 
     def test_generated_labels_and_units_are_read(self):
         for text in (self.live, self.fetched):

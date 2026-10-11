@@ -118,12 +118,15 @@
     node.replaceWith(frag)
   }
 
-  // 4. Hidden decoys (last, so they never change what the steps above match): a copy of a number-bearing text with other digits, hidden in one of four ways.
+  // 4. Hidden decoys (last, so they never change what the steps above match): a copy of a number-bearing text with other digits, hidden in one of seven ways.
   const HIDE = [
     (e) => { e.className = "s2-hidden-rule" },
     (e) => { e.setAttribute("aria-hidden", "true") },
     (e) => { e.style.cssText = "display:none" },
-    (e) => { e.hidden = true }]
+    (e) => { e.hidden = true },
+    (e) => { e.style.cssText = "color:transparent" },
+    (e) => { e.style.cssText = "color:#fcfcfc;background-color:#fcfcfc" },
+    (e) => { e.style.cssText = "filter:opacity(0)" }]
   const style = doc.createElement("style")
   style.textContent = ".s2-hidden-rule { display: none }"
   ;(doc.head || doc.documentElement).appendChild(style)

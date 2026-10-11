@@ -33,12 +33,53 @@
     if (!styled) return /display\s*:\s*none|visibility\s*:\s*hidden/i.test(el.getAttribute("style") || "")
     const st = el.ownerDocument.defaultView.getComputedStyle(el)
     if (st.display === "none" || st.visibility === "hidden") return true
-    return !toggle(el) && (st.opacity === "0" || parseFloat(st.fontSize) === 0)
+    return !toggle(el) && vanished(st)
+  }
+  // Zero opacity or font size: nothing of it is painted.
+  const vanished = (st) => st.opacity === "0" || parseFloat(st.fontSize) === 0 || /opacity\(0\)/.test(st.filter)
+  // Text painted (almost) transparent: a decoy nobody sees ("clear"). Text in the colour of an opaque background its
+  // own box or an ancestor's paints behind it may be one too, or real text over something the reader cannot see (an
+  // image, a sibling, a hover colour): kept but marked ("camouflaged"). Not judged in SVG, with gradient, outlined or
+  // shadowed text, or with a background image, shadow, border image, blending or a positioned box in between.
+  const rgba = (c) => {
+    const m = /^rgba?\(([\d.]+), ([\d.]+), ([\d.]+)(?:, ([\d.]+))?\)$/.exec(c || "")
+    return m ? [+m[1], +m[2], +m[3], m[4] === undefined ? 1 : +m[4]] : null
+  }
+  const same = (a, b) => Math.max(Math.abs(a[0] - b[0]), Math.abs(a[1] - b[1]), Math.abs(a[2] - b[2])) <= 8
+  const inks = new Map()
+  const ink = (el) => {
+    if (!styled || !el) return ""
+    if (!inks.has(el)) inks.set(el, paint(el))
+    return inks.get(el)
+  }
+  const paint = (el) => {
+    if (el.namespaceURI !== "http://www.w3.org/1999/xhtml") return ""
+    const view = el.ownerDocument.defaultView, st = view.getComputedStyle(el)
+    if (st.webkitBackgroundClip === "text" || st.backgroundClip === "text" || parseFloat(st.webkitTextStrokeWidth) > 0 ||
+      st.textShadow !== "none") return ""
+    const c = rgba(st.webkitTextFillColor || st.color)
+    if (!c) return ""
+    if (c[3] < 0.05) return "clear"
+    if (c[3] < 1) return ""
+    for (let e = el; e; e = e.parentElement) {
+      const s = e === el ? st : view.getComputedStyle(e)
+      if (e !== el && s.position !== "static") return ""
+      if (s.backgroundImage !== "none" || s.boxShadow !== "none" || s.borderImageSource !== "none" ||
+        s.mixBlendMode !== "normal") return ""
+      const bg = rgba(s.backgroundColor)
+      if (!bg || bg[3] > 0 && bg[3] < 1) return ""
+      if (bg[3] === 1) return same(c, bg) ? "camouflaged" : ""
+      if (s.position !== "static") return ""
+    }
+    return ""
   }
   // Positioned outside the page or clipped to (almost) nothing: not on screen, yet read by assistive technology.
   const offscreen = (el) => {
     if (!styled) return false
-    const st = el.ownerDocument.defaultView.getComputedStyle(el)
+    const view = el.ownerDocument.defaultView, st = view.getComputedStyle(el)
+    // text indented far out of its box (inherited by children, so only where it is set)
+    if (parseFloat(st.textIndent) <= -999 &&
+      !(el.parentElement && parseFloat(view.getComputedStyle(el.parentElement).textIndent) <= -999)) return true
     if (st.position !== "absolute" && st.position !== "fixed") return false
     const r = el.getBoundingClientRect()
     const away = r.right < 0 || r.bottom + el.ownerDocument.defaultView.scrollY < 0 || r.left >= 20000
@@ -62,14 +103,13 @@
     if (!styled) return /display\s*:\s*none|visibility\s*:\s*hidden/i.test(el.getAttribute("style") || "")
     const view = el.ownerDocument.defaultView, st = view.getComputedStyle(el)
     const inherited = el.parentElement && view.getComputedStyle(el.parentElement).visibility === "hidden"
-    return st.display === "none" || st.opacity === "0" || parseFloat(st.fontSize) === 0 ||
-      (st.visibility === "hidden" && !inherited)
+    return st.display === "none" || vanished(st) || (st.visibility === "hidden" && !inherited)
   }
   // An element's text without its hidden descendants (decoys planted inside names, labels and tooltips).
   const textOf = (el) => {
     let t = ""
     for (const n of el.childNodes) {
-      if (n.nodeType === 3) t += n.textContent
+      if (n.nodeType === 3) t += ink(el) === "clear" ? "" : n.textContent
       else if (n.nodeType === 1 && !SKIP.has(n.tagName) && !hiddenWithin(n)) t += " " + textOf(n) + stamp(n) + " "
     }
     return t
@@ -172,7 +212,11 @@
 
   const walk = (node) => {
     if (node.nodeType === 3) {
-      out.push(clean(node.textContent))
+      const how = ink(node.parentElement), t = clean(node.textContent)
+      if (how === "camouflaged" && t.trim()) {
+        marked++
+        out.push(` (text in its background's colour: ${t.trim()}) `)
+      } else if (how !== "clear") out.push(t)
       return
     }
     if (node.nodeType !== 1) return
