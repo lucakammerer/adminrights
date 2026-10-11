@@ -192,6 +192,13 @@ Hypothesis: hand the corrected values to the running early search of the same ca
 needs (requirement updated in place, a message before its next step via `investigate(news=...)`); its candidates and
 kept pages still count. Expected: ~50 s off the critical path whenever an amendment changes a value.
 
+Commit 5f858c2. Gate: check_release green, audit clean. Reviewer first REJECTED: a search that had already decided
+(in its final extract or check) never reads the message, so its old-values result would stand. Fixed: an unread
+message when the search returns means it decided on the old values, so `erp_search` runs a fresh search (the old
+behaviour); an empty catalogue group is never redirected; test for both cases. Re-review PASS. Runs (5f858c2):
+run_b4c23813dd122d18, run_5150d06e5790477d (started 04:53). Judge by: `told the search` in the log, time from the
+requirements answer to the last ERP finish, quality, signing.
+
 ## Backlog
 
 - In-page `fetch` without an answer: `FETCH_ABORT` 40 s, then the model retries and gets through at once
