@@ -67,6 +67,9 @@ class Site(BaseHTTPRequestHandler):
                              '<label>Note <input id="n" value="kept"></label>'
                              '<label class="fancy"><input type="checkbox" id="c" style="opacity:0;position:absolute">'
                              '<span style="position:relative;z-index:2;background:#eee">Accept</span></label>')
+        if path == "/silent":  # a start page the site never answers
+            time.sleep(20)
+            return
         if path == "/stuck":
             return self.page('<form method="post" action="/never"><label>Size <input name="s"></label>'
                              '<button>Apply</button></form>')
@@ -229,6 +232,18 @@ class TabAgainstLocalSite(unittest.TestCase):
         self.assertLess(took, 14)  # every script on the page waited for the answer, a read until the tool timeout
         self.assertIn("no answer to POST", shown)
         self.assertIn('value="5"', shown)  # stopped, not reloaded: what was typed is still there
+
+    def test_a_new_tab_whose_start_page_never_answers_still_reads(self):
+        import agent
+
+        async def steps(tab):
+            open_timeout, agent.OPEN_TIMEOUT = agent.OPEN_TIMEOUT, 1
+            try:
+                new = await agent.fresh(Tab(tab.page, {"url": self.url + "/silent"}))
+            finally:
+                agent.OPEN_TIMEOUT = open_timeout
+            return await asyncio.wait_for(new.read(), 10)  # the pending load held every script to the tool timeout
+        self.assertIn("URL:", self.run_tab(steps))
 
 
 if __name__ == "__main__":

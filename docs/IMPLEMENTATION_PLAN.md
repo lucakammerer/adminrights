@@ -333,7 +333,7 @@ on disagreement it logs both, re-asks once, then the rule wins.
 | Unlock gates | the model (`fill` on a slider, `check`) | — |
 | Look-alike controls | the model, guided by hrefs | — |
 | Settle on every read | waits while the page has short timers pending (delayed popups) or its DOM changed in the last 300 ms, at most 1.5 s; untracked pages keep the fixed wait | ✅ I13 |
-| Unanswered navigation | a main-frame request without an answer after 30 s is stopped (CDP `Page.stopLoading`) and the model told; until then the page runs no script for any tool | ✅ |
+| Unanswered navigation | a main-frame request without an answer after 30 s is stopped (CDP `Page.stopLoading`) and the model told; until then the page runs no script for any tool. `agent.fresh` stops a start page that misses `OPEN_TIMEOUT` and opens it once more | ✅ |
 
 ### 5.3 Documents, numbers and dates
 

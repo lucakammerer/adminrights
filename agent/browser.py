@@ -125,14 +125,19 @@ class Tab:
         if request is not self.navigation:
             return
         self.navigation = None
+        if await self.stop():
+            self.events.append(f"The site sent no answer to {request.method} {request.url} within {NAVIGATION_TIMEOUT}"
+                               " s; code stopped waiting for it. The last action may not have taken effect: check the page.")
+
+    async def stop(self) -> bool:
+        """Stop the page's pending navigation, as the browser's stop button does; False when that failed."""
         try:
             session = await self.page.context.new_cdp_session(self.page)
             await session.send("Page.stopLoading")
-            self.events.append(f"The site sent no answer to {request.method} {request.url} within {NAVIGATION_TIMEOUT}"
-                               " s; code stopped waiting for it. The last action may not have taken effect: check the page.")
             await session.detach()
+            return True
         except Exception:  # noqa: BLE001  the page closed meanwhile
-            pass
+            return False
 
     def _on_response(self, response):
         try:

@@ -178,7 +178,7 @@ def bid(tender: dict, requirements: dict, commercials: dict, erp: dict) -> dict:
 
 
 async def fresh(tab: Tab) -> Tab:
-    """A new tab of the same browser (same login) on the site's start page, within OPEN_TIMEOUT, and never an error:
+    """A new tab of the same browser (same login) on the site's start page, within 3 × OPEN_TIMEOUT, never an error:
     it opens the ERP searches' tabs inside their time and the submission's outside any stage, where a failed load
     would end the run unsigned. A start page that doesn't load leaves the agent the new tab to open the URL itself
     (its mission names it); a tab that doesn't open leaves it the old one."""
@@ -187,11 +187,15 @@ async def fresh(tab: Tab) -> Tab:
     except Exception as error:  # noqa: BLE001
         llm.log("fresh", f"no new tab ({type(error).__name__}): the old one for {tab.site.get('url')}")
         return tab
-    try:
-        await asyncio.wait_for(page.goto(tab.site["url"], wait_until="domcontentloaded"), OPEN_TIMEOUT)
-    except Exception as error:  # noqa: BLE001
-        llm.log("fresh", f"start page not loaded ({type(error).__name__}): {tab.site.get('url')}")
-    return Tab(page, tab.site)
+    new = Tab(page, tab.site)
+    for attempt in (1, 2):  # a load the site never answers keeps the page from running any script: stop it, again
+        try:
+            await asyncio.wait_for(page.goto(tab.site["url"], wait_until="domcontentloaded"), OPEN_TIMEOUT * attempt)
+            break
+        except Exception as error:  # noqa: BLE001
+            llm.log("fresh", f"start page not loaded ({type(error).__name__}): {tab.site.get('url')}")
+            await new.stop()
+    return new
 
 
 async def main() -> int:
