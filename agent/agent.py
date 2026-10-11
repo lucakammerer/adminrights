@@ -253,9 +253,8 @@ async def main() -> int:
         async def submission():
             mail = await mail_job
             portal = await fresh(tabs["tender_portal"])
-            mailbox = await fresh(tabs["webmail"]) if "webmail" in CUT else tabs["webmail"]
-            return await submit_agent.run(task, portal, mailbox, bid_ready, mail.get("own_address", ""), end - 20,
-                                          mail.get("search_url", ""))
+            return await submit_agent.run(task, portal, lambda: fresh(tabs["webmail"]), bid_ready,
+                                          mail.get("own_address", ""), end - 20, mail.get("search_url", ""))
         submitting = start(submission(), end) if early_submit else None
 
         erp_end = end - 6 * 60  # leaves the submission six minutes

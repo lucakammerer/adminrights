@@ -53,9 +53,10 @@ def unentered(steps: list, answer: dict) -> list[str]:
             for key, label in OPTIONAL if p.get(key) and round(p[key], 2) not in typed]
 
 
-async def run(task, tab, mail_tab, bid: asyncio.Future, contact: str, deadline, mail_search: str = ""):
+async def run(task, tab, mailbox, bid: asyncio.Future, contact: str, deadline, mail_search: str = ""):
     """Starts before the bid is calculated: the agent enters what doesn't depend on it (bidder data, offer kind) and
-    then waits in `bid_values`, which returns once `bid` holds (answer, omitted, specs)."""
+    then waits in `bid_values`, which returns once `bid` holds (answer, omitted, specs). `mailbox()` opens a tab in the
+    mailbox for each TAN look-up."""
     async def bid_values(_args):
         answer, omitted, specs = await bid
         llm.log("submit", "bid values handed over")
@@ -65,6 +66,9 @@ async def run(task, tab, mail_tab, bid: asyncio.Future, contact: str, deadline, 
         answer, _, _ = await bid
         search = (f"\nA search this mailbox ran earlier, as a URL (change its query to search for the TAN message): "
                   f"{mail_search}" if mail_search else "")
+        # a new tab, not the one the mailbox agents left: that tab, idle since then, stopped answering for 45-150 s in
+        # 5 of 10 runs (run_bd99f53d4d7d5c7f, run_840f0cd20f29dc8c), while a later look-up got through at once
+        mail_tab = await mailbox()
         mission = f"""{login_line(mail_tab.site)}
 In this mailbox (you may already be logged in), find the newest signing-TAN message for tender
 {answer['tender_reference']}. The tender portal just said: "{args.get('portal_message', '')}". Search for it
@@ -79,10 +83,6 @@ number / newest), open it and finish with found true and the TAN exactly as writ
             return result, ("Not done: no signing-TAN message found yet. Search the mailbox for it (newest first, "
                             "every folder), open it and finish with found true and its TAN.")
 
-        try:  # an earlier agent may have left this tab inside one of its search lists
-            await mail_tab.page.goto(mail_tab.site["url"], wait_until="domcontentloaded", timeout=15000)
-        except Exception as error:  # noqa: BLE001  a slow page: the agent opens the mailbox itself
-            llm.log("tan", f"start page failed: {type(error).__name__}")
         found = await llm.investigate(mail_tab, system(task), mission,
                                       obj(found=BOOL, tan=STR, request=STR, subject=STR),
                                       min(deadline, time.time() + 120), "tan", max_steps=12, check=check)

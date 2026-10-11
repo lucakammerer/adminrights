@@ -12,7 +12,7 @@ bindingly. Without a submission the run scores 0.
 ## Input / output
 
 - Input: a future that holds the answer and `omitted` positions from `calc.compute` (an optional field missing from a row is left blank), specification per position (for the configurator choices), own mailbox address
-  from the mail agent (contact field), portal login, the mail tab for the TAN.
+  from the mail agent (contact field), portal login, a way to open a mailbox tab for each TAN look-up.
 - Output `{confirmation}`: what the portal confirmed.
 
 ## Implementation
@@ -38,7 +38,8 @@ bindingly. Without a submission the run scores 0.
 - Extra tool `get_tan`: starts its own `investigate` in the mail tab, tag `tan`, at most 12 steps, at most 2 min,
   with the search URL the webmail agent reported (`search_url`), so it searches instead of browsing (9 steps, 71 s
   in run_acc211d89c011277).
-  Finds the newest TAN mail for the request just made. The tab is first opened on the mailbox's start page, and a
+  Finds the newest TAN mail for the request just made, in a new tab of the mailbox's browser (same login) opened on
+  its start page: the mail agent's tab, idle since phase 1, stopped answering for 45-150 s in half the runs. A
   `check` refuses a finish without `found` and a TAN while more than 45 s remain: in one test run the look-up started
   inside the mail agent's last search list, returned the newest message there (not a TAN mail) with no TAN, and the
   second look-up the submit agent then started ran out of time, so nothing was signed.
@@ -59,7 +60,7 @@ bindingly. Without a submission the run scores 0.
 
 - Positions appear in any order; check on every page which one it is.
 - Forms with a reset button first: click the intended button instead of pressing Enter.
-- The mail tab is shared with the mail agent: whatever list it left open is not where the TAN message is.
+- The mailbox's own tab can stop answering after minutes idle: the TAN look-up never uses it.
 
 ## Open
 
