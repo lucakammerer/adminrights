@@ -2,7 +2,8 @@
 
 ## Morning summary
 
-Best candidate so far: **a4b9d2c** (f5e86da + two fixes), runs pending: run_ba99f2d4eb2f586e, run_bd99f53d4d7d5c7f.
+Best candidate so far: **a4b9d2c** (f5e86da + two fixes): 100 / 11:20 / $0.230 / 156.2 $·s (run_bd99f53d4d7d5c7f),
+100 / 12:52 / $0.235 / 181.6 $·s (run_ba99f2d4eb2f586e). Main on Qwen tonight: 122.6–262 $·s.
 - a4b9d2c fixes a quality loss that main has too: `calc.facts` added the ERP's per-material setup fee to the
   commercials' per-position one (run_cf57141fcf4352a0: 84.8). Now the commercials' value, the ERP's only when the
   commercials lack the position. Judgement call: the brief doesn't say where the ordinary setup fee lives; public-1
@@ -64,9 +65,20 @@ agnostic parser, both done. Reviewer on a4b9d2c: no hardcoding, warned an unseen
 setup fee only in the ERP; kept because the old sum double-counts whenever both sources show it, and the ERP value
 still stands in when the commercials lack the position. Flagged for Luca above.
 
-Runs: run_ba99f2d4eb2f586e, run_bd99f53d4d7d5c7f (a4b9d2c, started 00:44 UTC). Verdict pending.
+Runs (a4b9d2c): run_bd99f53d4d7d5c7f 100 / 11:20 / 156.2 $·s, run_ba99f2d4eb2f586e 100 / 12:52 / 181.6 $·s. Both
+signed, setup fees right (01.02 0, 01.03 106.62), `verify_summary` matched first time, the hold never fired (no false
+hold, but its catch is untested in a live run). Verdict: keep both; the hold is insurance (saves ~110 s when it
+catches), not a measured speed-up.
+
+Next idea: time to the bid varies 350–545 s between identical runs; the ERP phase (one requirement searched late
+because it "differs from the early searches") is where it goes. Profile run_ba99f2d4eb2f586e 4–9 min.
+
+
 
 ## Backlog
+
+- ERP: "its requirement differs from the early searches: searching it now" at 252–268 s in both a4b9d2c runs; why
+  does the early search miss that requirement, and how long does the late search take?
 
 - Qwen reasoning tokens: the requirements and commercials resolvers spend 5–7k output tokens (69–124 s each, at
   ≈55 tok/s) at effort medium, asked twice; in run_39d8950d739e2e2a 3:04→5:08 was nothing but resolver calls. Try a

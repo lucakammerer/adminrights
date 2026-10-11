@@ -5,6 +5,8 @@ logged answer scored by `eval/compare.py` (what the bid would have scored if sig
 
 | Date (UTC) | Run | Commit | Platform | Eval | Time | Cost | Outcome and top problem (owner) |
 | --- | --- | --- | --- | --- | --- | --- | --- |
+| 2026-10-11 00:41 | run_bd99f53d4d7d5c7f | luca/night-score@a4b9d2c | 100, eligible | – | 11 min (680 s) | $0.230 | Setup fee from the commercials and the submit `form` hold: 156.2 $·s. Bid at 350 s, verify_summary matched first time at 475 s; no hold needed. |
+| 2026-10-11 00:41 | run_ba99f2d4eb2f586e | luca/night-score@a4b9d2c | 100, eligible | – | 13 min (772 s) | $0.235 | Same package: 181.6 $·s. Bid only at 545 s (ERP phase), verify_summary first time at 689 s; no hold needed. |
 | 2026-10-11 00:23 | run_cf57141fcf4352a0 | luca/night-score@f5e86da | 84.8, eligible | – | 15 min (886 s) | $0.263 | Paired with the baseline: 232.9 $·s. calc added the ERP's per-material setup fee (85) to the commercials' per-position one: 01.02 got 85 it doesn't have, 01.03 counted it twice (Luca: a4b9d2c). Supplier portal to 258 s, one ERP search 38 steps to 607 s. |
 | 2026-10-11 00:23 | run_52961ce393c136de | luca/night-score@1fa269f (main, `git archive`) | 100, eligible | – | 10 min (601 s) | $0.204 | Paired baseline: 122.6 $·s, the best Qwen run so far; the merge's lead from the earlier runs was load, not code. |
 | 2026-10-11 00:07 | run_a65e32634be4efce | luca/night-score@f5e86da | 100, eligible | – | 13 min (792 s) | $0.249 | radical-speed merged, on Qwen: 197 $·s. Answer at 478 s; submit then 314 s (22 sequential steps, ~10 s of browser per form step). |
