@@ -379,6 +379,16 @@ start page slower than 20 s is opened by its agent, as `fresh` already accepts).
 run_ddc02354bde271f3 (started 06:32). Judge by: time of the first agent calls after the sites call, `first load
 failed` lines, quality, signing.
 
+Results (cd967a0): run_f17b48d291a7d8fd 100 / 6:15 / $0.136 / 51.1 $·s, run_ddc02354bde271f3 100 / 10:41 / $0.160 /
+102.6 $·s. Agents started at 7 s in both, no `first load failed`: no start page hung, so the change had nothing to
+catch. run_ddc0's 10:41 is load (Qwen ~40 tok/s, calls up to 65 s; requirements at 362 s; one 50 s submit step).
+Verdict: keep cd967a0 as insurance (2/2 at 100 and signed, reviewer PASS, removes a 30 s stall seen in 2 of 6 runs;
+its catch is not yet shown live). One more pair started for evidence: run_2bfbe16b551a62a3, run_6fd78246ef5da521
+(06:45).
+
+Next idea: the requirements resolver is the gate to the bid in slow runs (362 s here); the backlog's "smaller
+question or effort low" is the next lever, measured offline with `tools/resolver_eval.py --repeat` first.
+
 ## Backlog
 
 - `specs` at effort low: it only starts the early ERP searches and `requirements` corrects it, yet at medium it took

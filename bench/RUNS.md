@@ -5,6 +5,8 @@ logged answer scored by `eval/compare.py` (what the bid would have scored if sig
 
 | Date (UTC) | Run | Commit | Platform | Eval | Time | Cost | Outcome and top problem (owner) |
 | --- | --- | --- | --- | --- | --- | --- | --- |
+| 2026-10-11 04:33 | run_ddc02354bde271f3 | luca/night-score@cd967a0 | 100, eligible | – | 11 min (641 s) | $0.160 | Same package, 102.6 $·s: slow model (~40 tok/s, calls up to 65 s), requirements answer at 362 s with an amendment told to the running search (bid 467 s), one 50 s submit step. |
+| 2026-10-11 04:33 | run_f17b48d291a7d8fd | luca/night-score@cd967a0 | 100, eligible | – | 6 min (375 s) | $0.136 | Start pages side by side: agents at 7 s, no start page hung (change inert), 51.1 $·s. |
 | 2026-10-11 04:19 | run_b5bfbb3ed5ed5292 | luca/night-score@38d5b42 | 100, eligible | – | 7 min (436 s) | $0.141 | Branch tip unchanged, 61.3 $·s. 3→35 s nothing ran: the four start pages load one after another and one waited out the 30 s goto timeout (also in run_28dc851b508f1f3c); fixed in cd967a0 (Luca). |
 | 2026-10-11 04:19 | run_4b06a64ace34d51f | luca/night-score@38d5b42 | 100, eligible | – | 6 min (335 s) | $0.139 | Branch tip unchanged: 46.6 $·s, the best Qwen run of the night. |
 | 2026-10-11 04:04 | run_822da1971e1635d9 | luca/night-score@38d5b42 | 100, eligible | – | 7 min (436 s) | $0.141 | Fetching a kept page unchanged says it is kept: no refetch of a kept page this run (searches 15-24 steps), 61.5 $·s. Restart of run_076dc1c00233e5a6 (platform failure: Qwen 502 upstream unreachable). |
