@@ -81,6 +81,32 @@ class Investigate(unittest.TestCase):
                                                               warn_at=0), 10))
         self.assertTrue(result["forced"])
 
+    def test_reopening_a_kept_page_says_it_is_kept(self):
+        """run_0a26a180075ecc2c: an ERP search reopened kept pages 14 times to re-check values, then hit its step limit."""
+        class Tab(FakeTab):
+            page = SimpleNamespace(url="https://erp.example/start")
+
+            async def fetch(self, url):
+                self.fetched = getattr(self, "fetched", 0) + 1
+                return f"Fetched {url} (HTTP 200)\nrecord" + (" changed" if self.fetched == 4 else "")
+
+            async def act(self, name, args):
+                return await self.fetch(args["url"])
+        replies = iter([finish({}, {"url": "/record?id=1", "label": "record"}, tool="save_evidence"),
+                        finish({}, {"url": "https://erp.example/record?id=1"}, tool="fetch"),
+                        finish({}, {"url": "/record?id=2"}, tool="fetch"),
+                        finish({}, {"url": "/record?id=1"}, tool="fetch"),  # its content changed since it was kept
+                        finish({"material_number": "M"})])
+
+        async def chat(messages, *_, **__):
+            self.prompts.append([m.get("content") for m in messages if isinstance(m, dict)])
+            return next(replies)
+        llm.chat = chat
+        asyncio.run(llm.investigate(Tab(), "", "", {}, time.time() + 300, "test"))
+        self.assertIn("Unchanged since you kept it as evidence #1", self.prompts[2][-1])
+        self.assertNotIn("Unchanged since", self.prompts[3][-1])
+        self.assertNotIn("Unchanged since", self.prompts[4][-1])
+
 
 if __name__ == "__main__":
     unittest.main()

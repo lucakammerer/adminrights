@@ -137,7 +137,8 @@ Every browser agent is the same loop; agents differ only in mission, result sche
   the last `save_evidence`.
 - **Small context:** tool results of the last 4 steps stay in full (`KEEP_STEPS`); older ones shrink to 300 characters, and a
   shortened `save_evidence` result tells the model the page is kept in full for the analyst, so it doesn't reopen it
-  to copy values (`llm.SHORTENED_KEPT`). They shrink in batches, once 6 steps have left the window (`TRIM_EVERY`) or
+  to copy values (`llm.SHORTENED_KEPT`); a `fetch` of a kept page's address that shows the same content gets
+  the same reminder appended (`investigate`'s `kept_at`). They shrink in batches, once 6 steps have left the window (`TRIM_EVERY`) or
   their results reach 60,000 characters (`TRIM_CHARS`): every shortening invalidates the prompt cache from that point
   on, and between batches the history only grows, so the model reads it from the cache.
 - **Shared prefix:** every agent sends the same system message, the website rules and the brief

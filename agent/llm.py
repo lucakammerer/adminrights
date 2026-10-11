@@ -309,6 +309,13 @@ async def investigate(tab, system: str, mission: str, finish_schema: dict, deadl
 
     kept: dict[str, int] = {}  # page text -> evidence number, so a page kept twice reaches the analyst once
     shown: set[str] = set()  # pages the model has read (paging.body): keeping one again needn't show it again
+    # address -> (evidence number, paging.body): searches spent their last steps fetching kept pages again to re-check
+    # values (run_0a26a180075ecc2c: 14 times in one ERP search, which then hit its step limit)
+    kept_at: dict[str, tuple[int, str]] = {}
+
+    def address(url: str) -> str:
+        page = getattr(tab, "page", None)
+        return urljoin(getattr(page, "url", "") or "", url or "")
 
     async def load(url: str) -> tuple[str, int]:
         """A page to keep and its HTTP status; a URL that answers with an error page is retried a few times."""
@@ -324,7 +331,7 @@ async def investigate(tab, system: str, mission: str, finish_schema: dict, deadl
             await asyncio.sleep(2 + 2 * attempt)
         return text, status
 
-    def store(text: str, status: int, label: str, where: str) -> str:
+    def store(text: str, status: int, label: str, where: str, url: str | None = None) -> str:
         """An error page is never evidence: the model is told it was not kept."""
         if status >= 400:
             log(tag, f"evidence not kept: HTTP {status} {where}")
@@ -334,6 +341,8 @@ async def investigate(tab, system: str, mission: str, finish_schema: dict, deadl
             return f"Already kept as evidence #{kept[text]} (same content); not kept again."
         evidence.append(f"### {label}\n{text}")
         kept[text] = len(evidence)
+        if url is not None:
+            kept_at.setdefault(address(url), (len(evidence), paging.body(text)))
         if paging.body(text) in shown:
             return f"{KEPT_PREFIX}{len(evidence)}: {where}, the page as you read it before, kept word for word."
         shown.add(paging.body(text))
@@ -342,7 +351,7 @@ async def investigate(tab, system: str, mission: str, finish_schema: dict, deadl
     async def keep(args):
         url, label = (args.get("url") or "").strip(), args.get("label", "")
         text, status = await load(url)
-        output = store(text, status, label, url or "the current page")
+        output = store(text, status, label, url or "the current page", url)
         if not args.get("all_pages") or status >= 400:
             return output
         where, statuses = urljoin(tab.page.url, url), {}
@@ -351,7 +360,7 @@ async def investigate(tab, system: str, mission: str, finish_schema: dict, deadl
             page, statuses[page_url] = await load(page_url)
             return page
         pages, note = await paging.rest(fetch, where, text)
-        return "\n\n".join([output] + [store(page, statuses.get(u, 0), f"{label} (further page)", u)
+        return "\n\n".join([output] + [store(page, statuses.get(u, 0), f"{label} (further page)", u, u)
                                         for u, page in pages] + [note])
 
     async def whole_list(name: str, args: dict) -> str:
@@ -432,6 +441,7 @@ async def investigate(tab, system: str, mission: str, finish_schema: dict, deadl
             # a tool never outlasts the deadline, so the forced finish below still returns what was kept
             handler = handlers.get(name) if handlers else None
             listed = bool(args.get("all_pages")) and name in ("read", "fetch", "save_evidence")
+            reopened = kept_at.get(address(args["url"])) if name == "fetch" and args.get("url") else None
             limit = max(1.0, deadline - time.time() if handler else
                         min(TOOL_TIMEOUT * (2 if listed else 1), deadline - time.time()))
             try:
@@ -459,6 +469,9 @@ async def investigate(tab, system: str, mission: str, finish_schema: dict, deadl
                           "\n(The page after this turn's actions is in the result of its last one.)")
             elif (name in PAGE_ACTIONS or name == "fetch") and not listed and not output.startswith("Error"):
                 shown.add(paging.body(output))
+            if reopened and not listed and paging.body(output) == reopened[1]:  # same address, same content
+                output += (f"\n[Unchanged since you kept it as evidence #{reopened[0]}: the analyst reads it word for "
+                           "word, so you need not open it again to copy its values.]")
             entry = {"role": "tool", "tool_call_id": call.id, "content": output}
             messages.append(entry)
             results.append(entry)
