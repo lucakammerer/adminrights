@@ -1,14 +1,15 @@
 // Stress level S2 mutations (I24, I20, rule 19): rewrite a page the way another site would show the same facts.
 // Applied live by run_agents.py --mutate (each read-only page rewritten before the agent sees it) and offline by
 // tests/test_mutations.py (recorded pages). Called as (opts) => {relabelled, decoys, shuffled, rows, reformatted,
-// framed}; opts.seed makes every choice repeatable. It never changes a fact: labels get synonyms, numbers that carry an
-// explicit locale hint are rewritten in the other locale with the hint changed to match, menus and the rows of plain
-// data tables are shuffled, hidden decoys are added, and the main content moves into an extra same-origin frame.
+// invisible, framed}; opts.seed makes every choice repeatable. It never changes a fact: labels get synonyms, numbers
+// that carry an explicit locale hint are rewritten in the other locale with the hint changed to match, menus and the
+// rows of plain data tables are shuffled, identifiers get invisible characters inside, hidden decoys are added, and
+// the main content moves into an extra same-origin frame.
 (opts) => {
   let seed = (opts && opts.seed) || 1
   const rand = () => ((seed = (seed * 16807) % 2147483647) / 2147483647)
   const doc = (opts && opts.doc) || document
-  const stats = { relabelled: 0, decoys: 0, shuffled: 0, rows: 0, reformatted: 0, framed: 0, grids: 0, scripted: 0 }
+  const stats = { relabelled: 0, decoys: 0, shuffled: 0, rows: 0, reformatted: 0, framed: 0, grids: 0, scripted: 0, invisible: 0 }
 
   // 1. Labels: whole-word synonyms on controls, headings and table headers only (never in data cells).
   const SYNONYMS = {
@@ -66,6 +67,21 @@
     }
     rows.forEach((r) => body.appendChild(r))
     stats.rows++
+  }
+
+  // 3c. Invisible format characters inside identifiers (trap 10): zero-width, bidi marks, invisible separators, a tag.
+  const INVISIBLE = ["\u200b", "\u200e", "\u200f", "\u202c", "\u2060", "\u2063", "\u2066", "\u{e0020}"]
+  const ID = /\b(?:[A-Za-z]{1,6}-?\d[\w-]*\d|\d{5,})\b/g
+  const texts = doc.createTreeWalker(doc.body || doc.documentElement, NodeFilter.SHOW_TEXT)
+  while (texts.nextNode()) {
+    const node = texts.currentNode
+    if (node.parentElement && node.parentElement.closest("script, style, textarea, select, option")) continue
+    const next = node.textContent.replace(ID, (id) => {
+      const at = 1 + Math.floor(rand() * (id.length - 1))
+      stats.invisible++
+      return id.slice(0, at) + INVISIBLE[Math.floor(rand() * INVISIBLE.length)] + id.slice(at)
+    })
+    if (next !== node.textContent) node.textContent = next
   }
 
   // 4. Hidden decoys (last, so they never change what the steps above match): a copy of a number-bearing text with other digits, hidden in one of four ways.

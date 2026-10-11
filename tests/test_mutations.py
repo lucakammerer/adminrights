@@ -1,6 +1,6 @@
 """Mutation tests (I20, rule 19): recorded pages rewritten the way another site would show the same facts
 (tools/stress/mutations.js: synonym labels, hidden decoys, shuffled menus and table rows, swapped number formats,
-content moved into an extra frame; with widgets, tables as styled span rows and links as scripted elements) must give
+content moved into an extra frame, invisible characters inside identifiers; with widgets, tables as styled span rows and links as scripted elements) must give
 the reader the same facts, a ref for every scripted link and none of the decoys. No website and no model: headless Chromium, network blocked.
 
 Run from the repo root: uv run --project agent --no-sync python -m unittest discover -s tests -v
@@ -57,6 +57,7 @@ class MutatedPages(unittest.TestCase):
         cls.read = asyncio.run(read_all([None] + cls.seeds))
 
     def test_facts_survive_and_decoys_stay_out(self):
+        self.assertGreater(sum(stats.get("invisible", 0) for _, stats in self.read.values()), 0)
         for path in PAGES:
             plain = facts(self.read[(path.name, None)][0])
             self.assertTrue(plain, path.name)

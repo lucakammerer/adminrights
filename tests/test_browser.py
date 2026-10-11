@@ -81,11 +81,12 @@ class Site(BaseHTTPRequestHandler):
                              + f'</select></label><label>Stroke <select name="stroke"{"" if bore else " disabled"}>'
                              + f'<option value="">choose</option>{strokes}</select></label>'
                              + '<button>Apply choice</button></form>')
-        if path == "/config-js":  # the same, opened by a script a moment after the first choice changes
+        if path == "/config-js":  # the same, opened by a script a moment after the first choice changes, its option
+            # text with an invisible mark inside
             return self.page('<label>Bore <select id="b"><option value="">choose</option><option>50</option></select>'
                              '</label><label>Stroke <select id="s" disabled><option value="">choose</option></select>'
                              '</label><script>document.getElementById("b").onchange = () => setTimeout(() => {'
-                             'const s = document.getElementById("s"); s.add(new Option("600")); s.disabled = false'
+                             'const s = document.getElementById("s"); s.add(new Option("6\\u200e00")); s.disabled = false'
                              '}, 600)</script>')
         if path == "/plain":  # fields named only by placeholder or title, as some software ships them
             return self.page('<input name="q" placeholder="Quantity"><input type="hidden" name="Quantity"><select name="p" title="Ø Pressure"><option>choose'

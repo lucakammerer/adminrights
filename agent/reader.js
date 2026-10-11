@@ -5,7 +5,7 @@
 // Called as (opts) => {text, next, marked}. opts.doc: a fetched document without layout (only inline styles count);
 // opts.root: a fetched document rendered in a hidden frame, so its own style rules decide what is hidden.
 (opts) => {
-  const ZW = /[​-‍⁠﻿­]/g
+  const ZW = /[\p{Cf}\u034f]/gu  // invisible format characters, also inside identifiers (trap 10)
   const clean = (s) => (s || "").replace(ZW, "").replace(/[ \t\r\f\v ]+/g, " ")
   const BLOCK = new Set(["P", "DIV", "SECTION", "ARTICLE", "MAIN", "HEADER", "FOOTER", "NAV", "ASIDE", "UL", "OL", "LI",
     "TR", "TABLE", "FORM", "FIELDSET", "DL", "DT", "DD", "H1", "H2", "H3", "H4", "H5", "H6", "BR", "HR", "PRE",

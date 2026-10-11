@@ -32,6 +32,7 @@ PAGE = """<!doctype html><html><head><style>
 <canvas id="c1" aria-label="Receipt 4711"></canvas><canvas id="c2"></canvas>
 <span class="sr">screen reader value 17</span><div class="away">off page value 23</div>
 <p class="dot">listed</p>
+<p>Ref AB\u200e-12\u2063-3\u202c4\U000e0041</p>
 <span role="tooltip">Status released <span class="gone">decoy-in-tooltip</span></span>
 <span role="tooltip" style="visibility:hidden">Valid until 2030-12-31 <b>hover value 31</b></span>
 <a href="/x">Open <span aria-hidden="true">decoy-in-link</span></a>
@@ -139,6 +140,10 @@ class Reader(unittest.TestCase):
         self.assertRegex(self.live, r'\[\d+:link "Open record"\]')
         self.assertRegex(self.live, r'\[\d+:checkbox "Confirm" unchecked\]')
         self.assertRegex(self.live, r"\[\d+:clickable\] Next results page")
+
+    def test_invisible_characters_leave_identifiers(self):
+        for text in (self.live, self.fetched, describe_file("ref.txt", "Ref AB\u200f-12\u2066-34".encode())):
+            self.assertIn("Ref AB-12-34", text)
 
     def test_pdf_is_read(self):
         self.assertIn("Delivery note 0815", describe_file("note.pdf", minimal_pdf("Delivery note 0815")))

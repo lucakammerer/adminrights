@@ -10,7 +10,8 @@ Run from the repo root, with `atira models proxy` running and `source tools/dev-
 
 --mutate SEED runs stress level S2: every read-only page (GET, no password field, no POST form) is rewritten by
 tools/stress/mutations.js before the agent sees it (synonym labels, hidden decoys, shuffled menus, swapped number
-formats with their hints, shuffled table rows, main content in an extra frame), in this tool's browser only. Pass:
+formats with their hints, shuffled table rows, invisible characters inside identifiers, main content in an extra
+frame), in this tool's browser only. Pass:
 the gather score stays what it is unmutated. --widgets adds framework-app markup: tables as styled rows of spans and
 every other link a pointer element without href that a page script follows.
 --s4 PAGE runs stress level S4 (needs --resolve): the mail message recorded in PAGE (raw HTML from a fixture, its

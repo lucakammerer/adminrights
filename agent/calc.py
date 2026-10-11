@@ -1,9 +1,14 @@
 """The brief's bid arithmetic over facts the models established. No website values live here: only the rules."""
 import re
+import sys
+import unicodedata
 from decimal import ROUND_FLOOR, ROUND_HALF_UP, Decimal
 from math import ceil
 
 CENT = Decimal("0.01")
+# invisible format characters (zero-width, bidi marks, invisible separators, tags) a page may hide in an identifier
+INVISIBLE = re.compile("[\u034f" + "".join(c for c in map(chr, range(sys.maxunicode + 1))
+                                           if unicodedata.category(c) == "Cf") + "]")
 
 
 def d(value) -> Decimal:
@@ -20,6 +25,11 @@ def record(value) -> dict:
 
 def records(value) -> list[dict]:
     return [v for v in value if isinstance(v, dict)] if isinstance(value, list) else []
+
+
+def ident(value) -> str:
+    """An identifier as the page shows it, without invisible characters a model may have copied along."""
+    return INVISIBLE.sub("", str(value or "")).strip()
 
 
 def cents(value: Decimal) -> Decimal:
@@ -63,7 +73,7 @@ def compute(facts: dict) -> dict:
     """facts: from `facts` below. Returns the answer in the challenge's format, the positions left unfinished (to omit
     in the form, rule 9) and a calculation trace."""
     positions = facts["positions"]
-    reference = facts["tender_reference"]
+    reference = ident(facts["tender_reference"])
     approval = facts.get("discount") or {}
     percent = d(approval.get("percent"))
     threshold = approval.get("min_order_value")
@@ -119,7 +129,7 @@ def compute(facts: dict) -> dict:
         unit_price = cents(base_net + mass_net + (setup + packaging - rebate) / qty)
         commitment = p.get("delivery_commitment") or {}
         ceiling = commitment.get("max_pieces", commitment.get("max_pooled_pieces"))
-        if (commitment.get("material_number") or commitment.get("material")) == material and ceiling is not None \
+        if ident(commitment.get("material_number") or commitment.get("material")) == material and ceiling is not None \
                 and commitment.get("weeks") is not None and demand[material] <= d(ceiling):
             weeks = int(d(commitment["weeks"]))
         elif d(p.get("stock")) >= demand[material]:
@@ -225,7 +235,7 @@ def facts(tender, requirements, commercials, erp: dict) -> dict:
         positions.append({
             "position": key, "quantity_pieces": int(d(req.get("final_quantity_pieces"))),
             # no match needs the searched result list kept (rule 3): one claimed without evidence is unfinished
-            "material_number": e.get("material_number") or None,
+            "material_number": ident(e.get("material_number")) or None,
             "no_match": e.get("no_match") is True and bool(e.get("evidence")),
             "scales": [{"min_quantity": s.get("from_quantity"), "price": number(s["price_as_shown"], fmt)}
                        for s in records(pc.get("scales")) if s.get("price_as_shown") not in (None, "")],

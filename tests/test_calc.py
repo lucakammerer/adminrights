@@ -48,6 +48,11 @@ class Golden(unittest.TestCase):
         self.assertEqual(result["answer"]["tender_reference"], FACTS["tender_reference"])
         self.assertEqual(len(result["omitted"]), len(FACTS["positions"]))
 
+    def test_invisible_characters_leave_the_answer_s_identifiers(self):
+        facts = copy.deepcopy(FACTS)
+        facts["tender_reference"] = "\u200e" + facts["tender_reference"] + "\u2063"
+        self.assertEqual(quality(facts), 100.0)
+
     def test_known_material_without_prices_is_submitted(self):
         """Rule 9: material, quantity, surcharge, packaging and lead time keep their points; base stays blank."""
         facts = copy.deepcopy(FACTS)

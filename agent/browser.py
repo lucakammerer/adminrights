@@ -14,6 +14,8 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from urllib.parse import urljoin
 
+from calc import INVISIBLE
+
 READER = (Path(__file__).parent / "reader.js").read_text()
 MAX_CHARS = 14000
 DISABLED = "e => e.matches(':disabled') || e.getAttribute('aria-disabled') === 'true'"
@@ -430,9 +432,10 @@ class Tab:
                                  "apply or next button), then send this step again")
         tag = await loc.evaluate("e => e.tagName + ':' + (e.type || '')")
         if tag.startswith("SELECT"):
-            want = str(value).strip()
+            want = INVISIBLE.sub("", str(value)).strip()
             for attempt in range(2):  # options a script loads after the last step: wait for the page once
-                options = await loc.evaluate("e => [...e.options].map(o => [o.value, o.textContent.trim()])")
+                options = [(v, INVISIBLE.sub("", t).strip())  # option texts as the reader shows them
+                           for v, t in await loc.evaluate("e => [...e.options].map(o => [o.value, o.textContent])")]
                 pick = next((v for v, t in options if t == want), None) or next(
                     (v for v, t in options if v == want), None) or next(
                     (v for v, t in options if t.startswith(want + " ") or t.startswith(want + " ")), None) or next(
@@ -511,18 +514,17 @@ def describe_file(name: str, data: bytes) -> str:
             except Exception:  # noqa: BLE001  a broken or unknown office part: list the members instead
                 office = None
             if office is not None:
-                return f"DOCUMENT {name}:\n" + office[:MAX_CHARS]
+                return f"DOCUMENT {name}:\n" + INVISIBLE.sub("", office)[:MAX_CHARS]
             parts = [describe_file(info.filename, archive.read(info)) for info in archive.infolist() if not info.is_dir()]
         return f"ZIP {name}:\n" + "\n\n".join(parts)
     if data[:4] == b"%PDF":
-        return f"PDF {name}:\n" + pdf_text(data)
+        return f"PDF {name}:\n" + INVISIBLE.sub("", pdf_text(data))
     text = decode(data)
     if "<html" in text[:500].lower() or name.endswith((".htm", ".html")):
         text = re.sub(r"<(script|style)[\s\S]*?</\1>", " ", text)
         text = re.sub(r"<br\s*/?>|</(p|div|tr|li|h\d)>", "\n", text)
         text = re.sub(r"<[^>]+>", " ", text)
-    text = re.sub(r"[​-‍⁠﻿]", "", text)
-    return f"FILE {name}:\n" + re.sub(r"[ \t]+", " ", text)[:MAX_CHARS]
+    return f"FILE {name}:\n" + re.sub(r"[ \t]+", " ", INVISIBLE.sub("", text))[:MAX_CHARS]
 
 
 def decode(data: bytes) -> str:
