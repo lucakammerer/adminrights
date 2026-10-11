@@ -4,7 +4,8 @@
 
 - **Merge candidate 4 (a140f33):** the commercials resolver asks once more when Qwen's answer stops after the
   discount (no positions), bounded by the stage deadline. In run_cf4790f7da25d77b that one answer cost about 40
-  points (FX, metal, cartons, commitments all empty). Sandbox check: see iteration 4.
+  points (FX, metal, cartons, commitments all empty). Sandbox run_2bc252ed46c457d7: 100 in 9:28 on the normal path (retry not
+  fired).
 - **Merge candidate 3 (eec30f0):** `form` reports a dependent choice that is still closed as "disabled: apply the
   earlier choice first" instead of "no option ...; options: ['choose']", after one wait. The old message plausibly
   caused the 9-minute configurator loss in run_dba11642f54df6c6. Sandbox run_cf4790f7da25d77b submitted cleanly
@@ -143,9 +144,11 @@ partial twice = partial; partial then timeout = partial. Check release green, au
 1 FAIL (a late retry that timed out or hit the stage cut dropped the first answer, so `safe` returned `{}`), fixed;
 round 2 PASS. Local measurement of how often Qwen answers without positions (`resolver_eval --repeat 8`) impossible:
 every local call got HTTP 429 from 03:35 on (same as iteration 1). Commit a140f33. Sandbox `run_2bc252ed46c457d7`
-started 03:50 (normal-path regression check; the retry itself fires rarely).
+(normal-path check): 100, 9:28, $0.221 (125 $·s, best Qwen time so far; one sample, the speed is not from this
+change). Commercials answered completely in one call (56k chars, 170 s), so the retry did not fire.
 
-Verdict: pending the sandbox run.
+Verdict: keep. Normal path unchanged and clean in the sandbox; the retry turns a silent stage loss into one bounded
+extra call, and a failed or late retry keeps the first answer.
 
 Next: measure the partial-answer rate with `tools/resolver_eval.py --repeat 8` once the local 429s stop; if it is
 more than rare, a hedged pair (`first` that accepts only answers with positions) would save the retry's 100 s.
