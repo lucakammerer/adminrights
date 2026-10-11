@@ -13,7 +13,7 @@ from openai.lib.streaming.chat import ChatCompletionStreamState
 
 import paging
 
-MODEL = os.environ.get("AGENT_MODEL", "qwen3.8-flash-next")
+MODEL = os.environ.get("AGENT_MODEL", "anthropic/claude-haiku-5.5")
 # AGENT_MODEL="<provider>/<model>" runs on OpenRouter with the team secret OPENROUTER_API_KEY, through the run's proxy:
 # no shared queue (35-47 % of the hosted Qwen's call time was queue wait); Haiku signed 100 in 580-598 s for $0.11.
 OPENROUTER = "/" in MODEL
