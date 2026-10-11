@@ -2,6 +2,13 @@
 
 ## Morning summary
 
+- **Merge candidate 6 (a36d345 + 9a59bdf), most important:** `settle` closed in-page dialogs with an unbounded
+  `frame.evaluate` in every frame. A frame whose server never answers blocked it forever, so every `read` on such a
+  page ran into the 60 s tool timeout. That cost `run_a9338f4c12a5d253` (15: submit hung twice for 77 s, signed with no
+  positions) and plausibly `run_a1e07a5b9bdce64b` (80.1, three 60 s read timeouts). Now each frame waits under one 3 s
+  cap and a stalled frame is not waited for again until it navigates. Also `form` finds a field by any name the reader
+  shows (label, placeholder, title, name) and in frames, and fails at once instead of after 30 s. After the fix:
+  `run_7705434641fff595` scored 100 in 6:23 (85.8 $·s), the best Qwen run so far (one sample).
 - **Merge candidate 5 (0c59c29):** downloads in office formats and other encodings. XLSX/ODS row by row with labels
   next to values, dates as dates, hidden sheets/rows/columns dropped; DOCX/ODT/PPTX as paragraphs, hidden runs and
   tracked deletions dropped; UTF-16 and Windows-1252 text decoded. Before: raw XML or NUL-interleaved garbage. Public-1
@@ -227,9 +234,10 @@ Follow-up 9a59bdf: each frame's load wait and dialog close run as tasks under on
 the cap is not waited for again until it navigates. Test `test_a_frame_that_never_loads_does_not_hold_up_reads`:
 old code 20 s (until the test server gave up), new code under 4 s; a form step on such a page takes 3.3 s, a missing
 field 0.4 s. Review PASS after a third round (a frame marked stalled must be waited for again after it navigates).
-Sandbox `run_7705434641fff595` (9a59bdf): pending.
+Sandbox `run_7705434641fff595` (9a59bdf): 100, 6:23, $0.224 (85.8 $·s, best Qwen so far), no idle stretch over 60 s,
+no model error.
 
-Verdict so far: keep both commits, pending the 9a59bdf run. The lookup is a strict superset of the old one (exact
+Verdict: keep both commits. The lookup is a strict superset of the old one (exact
 label first, as before) and fails fast instead of after 30 s. The stalled-frame bound removes a 60 s-per-read hang
 that has now cost two sandbox runs.
 
