@@ -83,8 +83,9 @@ Phase 2, no browser
     only when the first brings nothing; a resolver call may use its whole window
 Phase 3, ERP tabs in parallel, hard cut end − 6 min (a cut search → its positions are omitted)
     erp.run per distinct governing requirement (agent.spec_key compares the values however a model wrote them); a
-    position whose values no early search had gets its own search while search time is left (else it is omitted), a
-    search no position needs is stopped; a no_match is confirmed by a second erp.run when ≥ 150 s remain;
+    position whose values no early search had is handed to a running early search of the same catalogue group that no
+    position needs (`redirect`: the corrected values reach it as a message, its kept pages still count), else it gets
+    its own search while search time is left (else it is omitted); a search no position needs is stopped; a no_match is confirmed by a second erp.run when ≥ 150 s remain;
     then resolvers.commercials (three parts at once), hard cut end − 5.5 min
 Phase 4, code
     calc.facts → calc.compute

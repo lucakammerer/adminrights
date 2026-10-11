@@ -26,7 +26,10 @@ match exactly, and keep every page holding its facts. If there is none, report t
 
 - `agent.py` `login`: tag `erp-login`, at most 20 steps, phase 1. Only warms up the session.
 - `agent.py` `run`: tag `erp:<catalogue group>`, at most 40 steps, deadline end − 6 min.
-  `main` dedupes requirements and runs each in its own tab of the same browser.
+  `main` dedupes requirements and runs each in its own tab of the same browser. `news`: when the final requirements
+  correct an early search's values in the same catalogue group, `main` updates its requirement in place and the
+  agent gets the new values as a message before its next step instead of starting over; a search that had
+  already decided (the message unread) is run again with the new values.
 - `agent.py` `run`: at most `PARALLEL` (6) searches at once (`slots`), so a scenario with many requirements doesn't
   crowd the shared model calls; a waiting search keeps its own deadline.
 - `agent.py` `extract`: runs as `check` on `finish`. One `ask_json` (effort low: 13 s instead of 56 s; thinking off rewrote number formats) reads the facts **only from the kept

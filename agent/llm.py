@@ -282,12 +282,13 @@ async def page_status(tab) -> int:
 
 async def investigate(tab, system: str, mission: str, finish_schema: dict, deadline: float, tag: str,
                       extra_tools: list | None = None, handlers: dict | None = None, max_steps: int = 60,
-                      check=None, warn_at: float = 60, warning: str = FINISH_NOW) -> dict:
+                      check=None, warn_at: float = 60, warning: str = FINISH_NOW, news: list | None = None) -> dict:
     """Let the model work the tab until it calls finish(result) or the deadline passes.
 
     check(result, evidence) -> (result, problem): runs on finish, its model calls bounded by CHECK_TIMEOUT and the
     deadline; a problem sends the model back to work, a check that fails or runs out of time lets the result through.
-    `warning` goes to the model `warn_at` seconds before the deadline. A finish forced by the deadline or the step
+    `warning` goes to the model `warn_at` seconds before the deadline; messages appended to `news` reach it before its
+    next step. A finish forced by the deadline or the step
     limit, or sent after the warning, is marked `forced`: whatever it says, the agent did not finish its mission."""
     tools = BROWSER_TOOLS + [FINISH] + (extra_tools or [])  # the same for every agent but submit's own extra tools
     try:  # like every tool, the first read never outlasts TOOL_TIMEOUT: a page that never returns can't eat the stage
@@ -371,6 +372,8 @@ async def investigate(tab, system: str, mission: str, finish_schema: dict, deadl
             warned = True
         if left < 0:
             break
+        while news:
+            messages.append({"role": "user", "content": news.pop(0)})
         try:
             with limits(deadline):  # a step never eats the grace the forced finish below needs
                 reply = await chat(messages, tools, **({"reasoning_effort": STEP_EFFORT} if STEP_EFFORT else {}))

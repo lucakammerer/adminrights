@@ -264,11 +264,15 @@ async def main() -> int:
         erp_end = end - 6 * 60  # leaves the submission six minutes
         erp_search_end = erp_end - 30 - erp_agent.FINISH_GRACE  # where each ERP agent's own search must end
         erp_tab = tabs["erp"]
-        searches: dict[tuple, tuple[str, asyncio.Task]] = {}  # one ERP search per governing requirement (spec_key)
+        searches: dict[tuple, tuple] = {}  # spec_key -> (tag, task, requirement, news), one per governing requirement
 
-        async def erp_search(req, first):
+        async def erp_search(req, first, news):
             tab = erp_tab if first and "erp-login" not in CUT else await fresh(erp_tab)
-            result = await erp_agent.run(task, tab, req, erp_end - 30)
+            result = await erp_agent.run(task, tab, req, erp_end - 30, news)
+            if news:  # the requirement changed after this search had decided: its result is for the old values
+                news.clear()
+                llm.log(f"erp:{req.get('catalogue_group')}", "requirement changed after the search decided: again")
+                result = await erp_agent.run(task, await fresh(erp_tab), req, erp_end - 30)
             if result.get("forced"):  # cut off: its search did not finish, so it can't have proven "no match"
                 result.pop("no_match", None)
             if result.get("no_match") and erp_end - 30 - time.time() > 150:  # a no_bid costs the bid: confirm it (I11)
@@ -281,8 +285,25 @@ async def main() -> int:
         def search(row: dict):
             """Start the ERP search for a governing requirement, unless one with the same values runs already."""
             if (key := spec_key(row)) not in searches:
-                req = {k: row.get(k) for k in SPEC_KEYS}
-                searches[key] = f"erp:{req.get('catalogue_group')}", start(erp_search(req, not searches), erp_end)
+                req, news = {k: row.get(k) for k in SPEC_KEYS}, []
+                job = start(erp_search(req, not searches, news), erp_end)
+                searches[key] = f"erp:{req.get('catalogue_group')}", job, req, news
+
+        def redirect(row: dict, wanted: set) -> bool:
+            """Hand a running early search of the same catalogue group that no position needs the corrected values
+            (an amendment the specification lacked): its candidates and kept pages still count, a new search would
+            start over."""
+            group = SPEC_KEYS.index("catalogue_group")
+            for key, (tag, job, req, news) in list(searches.items()):
+                if key not in wanted and not job.done() and key[group] and key[group] == spec_key(row)[group]:
+                    req.update({k: row.get(k) for k in SPEC_KEYS})
+                    news.append("The requirement changed (a later amendment): it is now " +
+                                json.dumps(req, ensure_ascii=False) + ". Compare the candidates with these values "
+                                "instead; pages you kept still count.")
+                    searches[spec_key(row)] = searches.pop(key)
+                    llm.log(tag, f"requirement changed to {json.dumps(req, ensure_ascii=False)}: told the search")
+                    return True
+            return False
 
         async def search_early():
             """The ERP searches need the governing requirements, not the quantities: they start once the
@@ -328,8 +349,9 @@ async def main() -> int:
         llm.log("requirements", json.dumps(requirements, ensure_ascii=False))
 
         early_searches = len(searches)
+        wanted = set(map(spec_key, rows))
         for r in rows:
-            if spec_key(r) in searches:
+            if spec_key(r) in searches or redirect(r, wanted):
                 continue
             if time.time() >= erp_search_end:
                 llm.log("erp", f"{r['position']}: no time left to search its requirement")
@@ -338,11 +360,11 @@ async def main() -> int:
                 llm.log("erp", f"{r['position']}: its requirement differs from the early searches: searching it now")
             search(r)
         needed = [key for key in dict.fromkeys(map(spec_key, rows)) if key in searches]
-        for key, (tag, job) in searches.items():
+        for key, (tag, job, *_) in searches.items():
             if key not in needed and not job.done():
                 job.cancel()
                 llm.log(tag, "no position needs this search: stopped")
-        found = dict(zip(needed, await asyncio.gather(*(safe(*searches[key], erp_end) for key in needed))))
+        found = dict(zip(needed, await asyncio.gather(*(safe(*searches[key][:2], erp_end) for key in needed))))
         erp_done.set()  # a sweep still looking for commercial facts stops: calc must not wait for it
         erp = {r["position"]: found[spec_key(r)] for r in rows if spec_key(r) in found}
         llm.log("erp", json.dumps(erp, ensure_ascii=False)[:4000])

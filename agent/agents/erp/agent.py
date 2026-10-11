@@ -98,7 +98,8 @@ def unproven(result: dict, evidence: list[str]) -> str:
     return ""
 
 
-async def run(task, tab, requirement: dict, deadline):
+async def run(task, tab, requirement: dict, deadline, news: list | None = None):
+    """`news`: main appends a message when it changes `requirement` in place while the search runs."""
     mission = f"""{login_line(tab.site)} (you should already be logged in)
 Your part: find the material for one requirement in this ERP. Requirement: {json.dumps(requirement, ensure_ascii=False)}
 1. Search by the requirement's catalogue group (the brief says how records are found) and read every result page.
@@ -140,7 +141,8 @@ Finish with material_number and why; the facts are read from the pages you kept.
         with llm.limits(deadline):  # a forced finish must not eat the time the extract below needs after it
             result = await llm.investigate(tab, system(task), mission,
                                            obj(material_number=STR, no_match=BOOL, why=STR, candidates=CANDIDATES),
-                                           deadline - FINISH_GRACE, tag, max_steps=40, check=check)
+                                           deadline - FINISH_GRACE, tag, max_steps=40, check=check,
+                                           news=news)
     if result.get("material_number") and not result.get("price_condition"):
         try:
             result, _ = await extract(task, requirement, result, result.get("evidence", []))

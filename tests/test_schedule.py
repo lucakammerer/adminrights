@@ -45,7 +45,7 @@ class FakePlaywright:
 
 
 class Schedule(unittest.TestCase):
-    def run_main(self, specs_answer: dict, spec_seconds: float = 0):
+    def run_main(self, specs_answer: dict, spec_seconds: float = 0, positions: list | None = None):
         """agent.main with fake agents; returns the (event, time) list, the stopped searches and the ERP findings."""
         events: list[tuple[str, float]] = []
         stopped: list[str] = []
@@ -72,19 +72,25 @@ class Schedule(unittest.TestCase):
             return specs_answer
 
         async def requirements(*_, effort="medium"):
-            return {"positions": [  # 1 has R1's values written differently, 2 values no early search had
+            return {"positions": positions or [  # 1 has R1's values written differently, 2 values no early search had
                 {"position": "1", "final_quantity_pieces": 5, **SPEC_A, "stroke_mm": "200.0", "mounting": "Eye"},
                 {"position": "2", "final_quantity_pieces": 5, **SPEC_C}]}
 
-        async def erp_run(task, tab, req, deadline):
+        async def erp_run(task, tab, req, deadline, news=None):
             group = req["catalogue_group"]
             events.append((f"search {group}", time.time()))
             try:
-                await asyncio.sleep(100 if group == "B" else 0.1)
+                if group in ("B", "D") and news is not None:  # runs until it is told of a changed requirement
+                    while not news:
+                        await asyncio.sleep(0.05)
+                    if group == "B":  # read before its next step; D had already decided and never reads it
+                        events.append((news.pop(0), time.time()))
+                await asyncio.sleep(0.1)
             except asyncio.CancelledError:
                 stopped.append(group)
                 raise
-            return {"material_number": f"M-{group}"}
+            stale = group == "D" and news
+            return {"material_number": f"M-{group}" + ("-old" if stale else ""), "stroke_mm": req["stroke_mm"]}
 
         def bid(tender_result, requirements_result, commercials, erp):
             handed.update(erp)
@@ -127,14 +133,34 @@ class Schedule(unittest.TestCase):
         self.assertGreater(at["search C"], at["tender done"])  # only the requirements named C
         self.assertEqual([name for name, _ in events].count("search A"), 1)  # position 1 reused A's search
         self.assertEqual(stopped, ["B"])  # no position needed B
-        self.assertEqual(handed, {"1": {"material_number": "M-A"}, "2": {"material_number": "M-C"}})
+        self.assertEqual({p: r["material_number"] for p, r in handed.items()}, {"1": "M-A", "2": "M-C"})
+
+    def test_a_changed_requirement_goes_to_the_running_search_of_its_group(self):
+        events, stopped, handed = self.run_main(
+            {"requirements": [{"requirement": "R1", **SPEC_A}, {"requirement": "R2", **SPEC_B}]},
+            positions=[{"position": "1", "final_quantity_pieces": 5, **SPEC_A},
+                       {"position": "2", "final_quantity_pieces": 5, **SPEC_B, "stroke_mm": 300}])
+        names = [name for name, _ in events]
+        self.assertEqual(names.count("search B"), 1)  # not started over
+        self.assertTrue(any("changed" in name and "300" in name for name in names))
+        self.assertEqual(stopped, [])
+        self.assertEqual(handed["2"], {"material_number": "M-B", "stroke_mm": 300})
+
+    def test_a_search_that_decided_before_the_change_is_run_again(self):
+        spec_d = {**SPEC_A, "catalogue_group": "D"}
+        events, stopped, handed = self.run_main(
+            {"requirements": [{"requirement": "R1", **SPEC_A}, {"requirement": "R2", **spec_d}]},
+            positions=[{"position": "1", "final_quantity_pieces": 5, **SPEC_A},
+                       {"position": "2", "final_quantity_pieces": 5, **spec_d, "stroke_mm": 300}])
+        self.assertEqual([name for name, _ in events].count("search D"), 2)
+        self.assertEqual(handed["2"], {"material_number": "M-D", "stroke_mm": 300})
 
     def test_without_specs_the_searches_wait_for_the_requirements(self):
         events, stopped, handed = self.run_main({"requirements": []})
         at = dict(events)
         self.assertGreater(at["search A"], at["tender done"])
         self.assertEqual(stopped, [])
-        self.assertEqual(handed, {"1": {"material_number": "M-A"}, "2": {"material_number": "M-C"}})
+        self.assertEqual({p: r["material_number"] for p, r in handed.items()}, {"1": "M-A", "2": "M-C"})
 
     def test_no_specs_call_once_the_tender_agent_is_done(self):
         # the specification comes in after the tender: requirements starts at once, a specs call would only compete
@@ -142,7 +168,7 @@ class Schedule(unittest.TestCase):
             {"requirements": [{"requirement": "R1", **SPEC_A}, {"requirement": "R2", **SPEC_B}]}, spec_seconds=0.8)
         self.assertNotIn("specs asked", dict(events))
         self.assertEqual(stopped, [])
-        self.assertEqual(handed, {"1": {"material_number": "M-A"}, "2": {"material_number": "M-C"}})
+        self.assertEqual({p: r["material_number"] for p, r in handed.items()}, {"1": "M-A", "2": "M-C"})
 
 
 if __name__ == "__main__":

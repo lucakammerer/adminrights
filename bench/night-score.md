@@ -180,6 +180,18 @@ Verdict: keep 9d32034 and fcac256 (4/4 runs 100 and signed, no regression, two r
 reverted (wrong hypothesis). Next idea: the in-page `fetch` without an answer (backlog, first item), the same family
 of site requests that never answer; then the TAN agent's model calls (a 40 s timeout after a twin).
 
+### 5 · 04:45 · A changed requirement goes to the running early search, not a new one
+
+Profile of run_2ec4765202c21efd (fcac256, 100 / 11:59): the early ERP searches start at 299 s from the specification;
+the requirements resolver answers at 355 s with an amendment the specification lacked (a scoped stroke change), so
+main cancelled the early search of that catalogue group (55 s in, the right candidate already on screen) and started
+a new one from scratch: 355→466 s, the last search to finish (the others 387-413 s). Same pattern ("differs from the
+early searches") in both a4b9d2c runs. Then extract 466→497 s, then the submit agent's first step after the bid 43 s.
+
+Hypothesis: hand the corrected values to the running early search of the same catalogue group that no position
+needs (requirement updated in place, a message before its next step via `investigate(news=...)`); its candidates and
+kept pages still count. Expected: ~50 s off the critical path whenever an amendment changes a value.
+
 ## Backlog
 
 - In-page `fetch` without an answer: `FETCH_ABORT` 40 s, then the model retries and gets through at once
