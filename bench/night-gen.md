@@ -2,6 +2,10 @@
 
 ## Morning summary
 
+- **Merge candidate 3 (eec30f0):** `form` reports a dependent choice that is still closed as "disabled: apply the
+  earlier choice first" instead of "no option ...; options: ['choose']", after one wait. The old message plausibly
+  caused the 9-minute configurator loss in run_dba11642f54df6c6. Sandbox run_cf4790f7da25d77b submitted cleanly
+  (56.9, lost in the commercials resolver, see iteration 3).
 - **Merge candidate 2:** `calc.number` reads space/apostrophe grouping (`1 234,50`, `1'234.50`) and comma-locale hints
   other than German (iteration 2). Before, such a price ≥ 1000 parsed as 1 and `1234,50` with a `fr-FR` hint as
   123450. No change on public-1.
@@ -89,6 +93,35 @@ difference, and my last two runs on this branch answer the reader question alrea
 Next: the configurator failure in `run_dba11642f54df6c6` is the bigger risk on unseen portals (dependent dropdowns
 that only enable after an apply click or a trusted event). Submit is Finn's; worth a stress page with dependent
 selects to measure how often the submit agent gets stuck.
+
+### 3 · 2026-10-11 03:10 · browser: a closed dependent choice reads as "disabled", not as "no option"
+
+Hypothesis: in `run_dba11642f54df6c6` submit lost 9 min in the configurator after setting all dependent choices
+before one apply click. A local probe (`tests/test_browser.py`, `/config`: a choice that opens only once the earlier
+one is applied) shows what `form` told the model: `no option '600'; options: ['choose']`. With the submit mission's
+"the page may word a value differently" that invites rewording values instead of pressing apply. Any configurator on
+unseen software that opens choices server-side or a moment later by script hits the same message.
+
+Fix (`Tab.form`): a field still disabled (`:disabled`, `aria-disabled`) gets one `settle`; if it stays disabled the
+step stops with "disabled: if it depends on an earlier choice, apply that choice first". A select without the wanted
+option is re-read once after a `settle` (options a script loads a moment after the change). The normal path (enabled,
+option present) waits for nothing new.
+
+Evidence: new test fails on the old `form` ("no option") and passes now, with the scripted case (options added
+600 ms after the change) passing too and the closed case failing within 4 s; 96 tests and `check_release.sh` green,
+audit clean, adversarial review PASS (nits only). Commit eec30f0. Sandbox `run_cf4790f7da25d77b`: 56.9, 12.5 min, $0.272.
+The submit path this change touches was clean: five positions in five `form` calls with an apply after each choice
+(70 s), verify_summary all match, signed. The lost points come from the commercials resolver: webmail kept every
+record, but its single Qwen call (55k chars) took 219 s and came back with FX, metal index, cartons and commitments
+empty. That is not in this diff.
+
+Verdict: keep. It changes only what the model is told when a choice is closed, and waits only when a field is
+disabled or lacks the option. One sandbox run shows no regression on the configurator.
+
+Next: commercials on Qwen is now the largest single loss seen on this branch (a whole stage empty from one answer).
+Worth checking with `tools/resolver_eval.py --repeat N` on recorded evidence whether Qwen often leaves commercials
+fields empty, and whether its result could be validated (records kept but values empty means ask again while time
+allows). That touches resolvers (Luca's) and llm (Finn's), so measure first.
 
 ## Backlog
 
