@@ -36,6 +36,7 @@ flowchart LR
   end
 
   subgraph P5["5 · Submit · ⏱ −20 s"]
+    prep["✍️ Stage 1, during 2–3<br/>wizard steps before the bid"]
     submit["✍️ Fill · read back<br/>sign with TAN from webmail"]
   end
 
@@ -48,13 +49,15 @@ flowchart LR
   com -. facts left open .-> sweepnode -. until ERP is done .-> calc
   com --> calc
   calc --> submit --> bid([✅ Bid])
+  mail -. own address .-> prep -. same tab .-> submit
+  mail -. its search URLs, for the TAN .-> submit
 
   classDef browser fill:#dbeafe,stroke:#2563eb,color:#111827
   classDef model fill:#ede9fe,stroke:#7c3aed,color:#111827
   classDef code fill:#dcfce7,stroke:#16a34a,color:#111827
   classDef store fill:#fef3c7,stroke:#d97706,color:#111827
   classDef terminal fill:#111827,stroke:#111827,color:#ffffff
-  class tender,supplier,mail,login,erp,sweepnode,submit browser
+  class tender,supplier,mail,login,erp,sweepnode,prep,submit browser
   class roles,req,com model
   class calc code
   class evidence store

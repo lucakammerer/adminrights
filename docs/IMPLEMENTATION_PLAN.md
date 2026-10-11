@@ -114,8 +114,18 @@ Every browser agent is the same loop; agents differ only in mission, result sche
 - **View:** `Tab.read` returns the page as text (`agent/reader.js`, §5.1), at most 14,000 characters per read; the rest
   via `offset`.
 - **Tools:** `read`, `goto`, `click`, `fill`, `select`, `check`, `press`, `back`, `form` (a whole form by visible
-  labels, survives reloads; `ref` steps for unlabeled controls; opens collapsed sections around a field), `fetch` (read a same-site URL without navigating; opens ZIPs and PDFs), `save_evidence`
-  (keep a page word for word), `note` (pin verified facts), `finish`.
+  labels, survives reloads; `ref` steps for unlabeled controls; opens collapsed sections around a field; a label or
+  button that isn't on the page fails the step at once instead of after Playwright's 30 s wait), `fetch` (read a
+  same-site URL without navigating; opens ZIPs and PDFs), `save_evidence` (keep a page word for word), `note` (pin
+  verified facts), `finish`. `fetch` and `save_evidence` take `all_pages`: code then reads every further page of the
+  list the model chose by the list's own page links (`Tab.fetch_list`, `browser.page_links`: a number, "next" or
+  "previous" leading to the same path with one query value set to another page number, anything else only added, such
+  as a mailbox's open message; at most `LIST_PAGES` more pages and `LIST_CHARS` characters), in
+  parallel, each kept on its own; anything else the model pages itself, and the note says so. Tools of one turn run in
+  order, so `finish` may follow the turn's last `save_evidence` calls in the same turn.
+- **Shared within a run:** every agent's result carries `visited`, the URLs it opened or read (`common.evidence`
+  leaves them out of the resolvers' prompts); the TAN look-up starts from the mailbox pages the webmail agent opened
+  (`submit.mailbox_urls`), so a search URL of the same shape replaces exploring the mailbox again.
 - **Cache-friendly history:** the conversation only grows, so the prompt cache serves each call everything but its
   newest step, at a tenth of the input price. Once a prompt passes `llm.COMPACT_AT` (60,000 tokens, estimated as
   characters / `CHARS_PER_TOKEN`), the tool results older than the last 4 steps (`KEEP_STEPS`) shrink to 300
@@ -144,7 +154,9 @@ Every browser agent is the same loop; agents differ only in mission, result sche
 - **Model:** `AGENT_MODEL`, default Claude Haiku 5.5 on OpenRouter (any `<provider>/<model>` id; in a run through
   `$LLM_PROXY_URL/openrouter/v1`; the tool loop's Anthropic prompts cached with `llm.CACHE`, while one-off `ask_json`
   calls go without it: nothing reads them back, and a cache write costs 1.25× the input price), `qwen3.8-flash-next`
-  for the hosted Qwen; browser steps run with low reasoning effort (`STEP_EFFORT`). `chat` tries up to 6 times, each
+  for the hosted Qwen; browser steps run with low reasoning effort (`STEP_EFFORT`; `none` switches thinking off, an
+  A/B still to run). On OpenRouter every call asks for the provider with the lowest latency (`llm.ROUTE`,
+  `PROVIDER_SORT`; sticky routing keeps a conversation, and so its cache, on one provider). `chat` tries up to 6 times, each
   attempt at most `CALL_TIMEOUT` (no SDK-internal retries) and all of them bounded by the stage's `llm.UNTIL`, which
   `agent.safe`/`agent.start` set per stage; step calls end at the agent's deadline so the forced `finish` keeps its
   grace. An attempt without a reply after `HEDGE_AFTER` sends the same request again alongside and takes the first
@@ -167,13 +179,18 @@ Every browser agent is the same loop; agents differ only in mission, result sche
   `agent.bid` calls them: if they raise, a position whose facts break the calculation loses its ERP finding (or the
   position itself) and is omitted as unfinished, never no_bid; as a last resort every position is omitted, so the run
   still signs.
-- **Submission** (`agents/submit`): one model agent with the `form` tool and German number formatting; before the TAN
+- **Submission** (`agents/submit`), in two stages (I6): `prepare` starts on the portal's tab as soon as phase 1 is in
+  and, while the resolvers and the ERP searches work, goes through the wizard's steps that need no bid (expression of
+  interest, company data with the mailbox's own address, offer type) up to the first page that asks for bid values;
+  `run` continues from that page once the bid is calculated (a stage 1 still at work then is cut, and `run` takes a
+  tab of its own). Neither stage runs in a dry run or for an answer by API.
+  `run`: one model agent with the `form` tool and German number formatting; before the TAN
   `verify_summary` checks unit prices and total on the summary page in code; `get_tan`
   runs in the mail tab from the mailbox's start page, and a finish without a TAN is refused while time allows; guardrails in the mission (no extra positions, omit only listed ones, never tick our own terms,
   one TAN request). One `form` call per page or position, a configurator's dependent choices each followed by its
   apply button, named by field label (refs are lost when a choice is applied) and sent without reading their options
   first (`form` matches an option by text, beginning or part, and a step without a match stops with the page's
-  options).
+  options); once the first position is accepted, all remaining positions in a single `form` call.
   First watchdog slice: `SIGN_BY` (180 s) before its deadline the agent is told to omit what isn't entered, request the
   TAN and sign, instead of the generic "call finish" (which once ended a run unsigned with 4 positions entered).
 
@@ -182,7 +199,8 @@ Every browser agent is the same loop; agents differ only in mission, result sche
 Every line goes through `llm.log` as `[tag  123s] ...` (seconds since start). `main` logs one line per stage
 (`sites`, `tender-portal`, `supplier-portal`, `webmail`, `requirements`, `commercials`, `erp`, `facts`, `calc`, `answer`,
 `submit`); every agent step
-appears as `[tag  123s] n: tool {args}`.
+appears as `[tag  123s] n: tool {args}`, and a tool that took over `llm.SLOW_TOOL` (5 s) adds
+`[tag  123s] n: tool took 30 s`: where a run's browser time goes.
 
 ---
 
@@ -322,6 +340,10 @@ on disagreement it logs both, re-asks once, then the rule wins.
 | Anything else | a frontier model via team secret | off; only behind a flag where it buys quality (E6) |
 
 - Calls are bounded by the caller's deadline (I2); at most 12 concurrent calls per run (the team shares 32).
+- A Haiku call took 1.65 s plus 3.3 s per 1,000 output tokens on 2026-10-10 (125 calls; thinking counts as output,
+  prompt size hardly mattered). So: fewer calls (`all_pages`, `finish` with the last saves, one `form` call for the
+  remaining positions) and fewer words (no wording copied into a `finish` the kept pages hold, terse resolver and
+  extraction fields, notes only where a page isn't kept).
 - Reasoning effort: low for browser steps (`STEP_EFFORT`) and for copying values, medium for the resolvers. Low is
   several times faster; switching thinking off entirely made the model rewrite number formats (PR #5).
 - Prompt layout: static system prompt and tool schemas first (cached input is cheaper), then brief, then dynamic parts;
@@ -424,7 +446,7 @@ Every item has exactly one owner. When it touches a file someone else owns (§14
 | I3 | ✅ Site roles from the brief (PR #5); the run's submission target pins the tender portal, and an unclear assignment falls back by elimination instead of crashing. Tests: `tests/test_sites.py`, `tools/stress/s1_sites.py` | `agent.py`, `agents/resolvers` | stress level S1 passes (§14.1) | T1.12 | Y |
 | I4 | Dependency graph + per-stage budgets (§4.1, §4.2). Since PR #5 every phase has a hard cut; remaining: start stages when their inputs exist, budgets computed at stage start | `agent.py`, `budget.py`, `agents/erp` | dry run: ERP starts during the first stage; answer < 8 min | T1.3, T3.2 | F |
 | I5 | Slimmer missions and inputs: no word-for-word copies in `finish` schemas when the evidence holds them; "every needed page kept → finish"; resolvers get only the evidence they need (object `finish` done in PR #5) | `agents/tender_portal`, `agents/supplier_portal`, `agents/resolvers`, `llm.py` | no page fetched twice without reason; commercials resolver much faster | T3.2, T4.2 | F |
-| I6 | Submit in two stages + watchdog: stage 1 at start, stage 2 with the answer, watchdog at end − 3 min | `agents/submit` | a short-budget run still signs | T1.3, 9 | F |
+| I6 | Submit in two stages + watchdog: two stages ✅ (`submit.prepare` during the resolvers and ERP, `submit.run` with the answer); remaining: watchdog at end − 3 min | `agents/submit` | a short-budget run still signs | T1.3, 9 | F |
 | I6b | ✅ Read-back before the TAN: `verify_summary` checks every unit price and the total net on the summary page in code | `agents/submit`, `validate.py` | a mistyped value is corrected before signing | T1.9, 7 | L |
 | I7 | Built, first full run pending: `DRY_RUN=1` stops `main` after the answer; `tools/score.sh` (run + `eval/compare.py`) | `agent.py`, `tools/` | one command → a score | T4.3 | L |
 | I8 | ✅ `tools/check_release.sh` (audit, tests, `agent.json`), `tools/audit_package.py` (public-1 values, site paths, own browsers, API keys; repo and `--package`), `tools/ci.py` (gates before every test run, docs/release.md). Was: release tools: `tools/audit_package.py` + `tools/check_release.sh` (audit, tests, `agent.json`). The audit also runs on the uploaded package (`atira run_package`), not only on the repo | `tools/` | green on `main` and on the last uploaded package | T0.1, T0.2, T0.6, T1.1 | L |
@@ -437,7 +459,7 @@ Every item has exactly one owner. When it touches a file someone else owns (§14
 | I10 | Strict numbers: a number's own format beats the hint ✅, thousands separators in grams ✅, text values ✅ (`tests/test_calc.py`); remaining: ambiguous forms refused (the agent re-reads); `Decimal` end to end | `numbers.py`, `calc.py` | parser tests | 4, 22 | L |
 | I11 | ERP no-match needs proof on kept pages ✅ (`erp.unproven`: result pages kept, every candidate listed with its difference, `tests/test_erp_no_match.py`); ERP match check in code ✅ (`validate.material_mismatch` in the ERP `check`, `tests/test_validate.py`); no-bid gate ✅ (`main` `erp_search`: a `no_match` with ≥ 150 s left gets a second agent in a fresh tab; a material it finds wins); remaining: answer schema validated before signing | `agents/erp`, `validate.py`, `agents/submit` | tests with look-alike and blocked candidates | T1.6, 3, 7, 8 | L |
 | I12 | ✅ Mail topics and senders parsed from the brief (`common.mail_records`, `tests/test_brief.py`); approval found by sender and meaning; technical release for `requirements` from the brief | `agents/webmail`, `agents/common.py`, `agents/resolvers` | no public mail subject in prompts | T0.11, 5, 10, 21 | Y |
-| I13 | ✅ Code-side retry of transient error pages; auto re-login; adaptive settle; `form` ref click falls back to a DOM click, a null value is never typed (`tests/test_browser.py`) | `browser.py` | fewer model turns on the ERP in the dry-run log | T3.2 | Y |
+| I13 | ✅ Code-side retry of transient error pages; auto re-login; adaptive settle; `form` ref click falls back to a DOM click, a null value is never typed; a click that went through to a slow page counts (it took 32 s and ended in an error: 2 s, then 30 s waiting for its button, gone with the old page), a missing label or button fails at once, and no Playwright wait is longer than `ACTION_TIMEOUT` (`tests/test_browser.py`) | `browser.py` | fewer model turns on the ERP in the dry-run log | T3.2 | Y |
 | I14 | ✅ Calculator tests (`tests/test_calc.py`): golden test, values written as text, allocation ties, band edges, inclusive ceilings and thresholds, shared stock | `tests/` | green | 4–9, 12, 15–18, 22–27 | L |
 | I15 | Loud failures instead of silent fallbacks (FX, metal index): tolerant key match and `MISSING` in the trace ✅; omitted positions per rule 9 ✅ (also when all are omitted); a material without prices is submitted with its other fields ✅ | `calc.py` | tests | 9, 22, 28 | L |
 | I23 | Cost: cache-friendly loop ✅ (append-only history, older reads shortened once past `COMPACT_AT`; no page twice in one turn; the cache only where a later call reads it; `requirements` asked once on OpenRouter); remaining: measure Clef for yes/no and pick decisions, then use it or drop it | `llm.py` | cached share of input up; cost per run ≤ $0.10 | T3.4 | F |

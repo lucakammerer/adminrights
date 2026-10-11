@@ -15,6 +15,7 @@ from types import SimpleNamespace
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "agent"))
 
 import llm  # noqa: E402
+from agents.common import evidence  # noqa: E402
 
 
 class FakeTab:
@@ -124,8 +125,8 @@ class History(unittest.TestCase):
             options.append(kwargs)
             return turns[len(sent) - 1] if len(sent) <= len(turns) else finish({})
         llm.chat = chat
-        asyncio.run(llm.investigate(tab or PageTab(), "system", "mission", {"type": "object"}, time.time() + 300,
-                                    "test"))
+        self.result = asyncio.run(llm.investigate(tab or PageTab(), "system", "mission", {"type": "object"},
+                                                  time.time() + 300, "test"))
         return sent, options
 
     @staticmethod
@@ -166,9 +167,8 @@ class History(unittest.TestCase):
         self.assertEqual(tab.reads, 3)
 
     def test_only_the_tool_loop_asks_for_the_cache(self):
-        llm.CACHE = {"extra_body": {"cache_control": {"type": "ephemeral"}}}
         _, options = self.play([turn(("read", {}))])
-        self.assertTrue(all(o.get("extra_body") == llm.CACHE["extra_body"] for o in options))
+        self.assertTrue(all(o.get("cache") is True for o in options))
         asked = []
 
         async def chat(messages, tools=None, **kwargs):
@@ -176,7 +176,28 @@ class History(unittest.TestCase):
             return SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(content="{}"))])
         llm.chat = chat
         asyncio.run(llm.ask_json("system", "question", effort="low"))
-        self.assertNotIn("extra_body", asked[0])
+        self.assertFalse(asked[0].get("cache"))
+        self.assertEqual(asked[0]["reasoning_effort"], "low")
+
+    def test_pages_kept_in_the_turn_of_finish_count_and_a_list_comes_whole(self):
+        class ListTab(PageTab):
+            page = SimpleNamespace(url="https://site.example/start")
+
+            async def fetch(self, url):
+                return f"Fetched {url} (HTTP 200)\nmessage at {url}"
+
+            async def fetch_list(self, url):
+                return [(url, f"Fetched {url} (HTTP 200)\nrow 1"), (url + "&page=2", "Fetched x (HTTP 200)\nrow 2")], \
+                    "[this list: 2 pages read]"
+        self.play([turn(("save_evidence", {"url": "/messages/1", "label": "approval"}),
+                        ("save_evidence", {"url": "/list?q=x", "label": "results", "all_pages": True}),
+                        ("finish", {"result": {"kept": "approval, results"}}))], ListTab())
+        result = self.result
+        self.assertEqual(result["kept"], "approval, results")
+        self.assertEqual([page.split("\n")[0] for page in result["evidence"]],
+                         ["### approval", "### results", "### results (page 2)"])
+        self.assertEqual(result["visited"], ["https://site.example/messages/1", "https://site.example/list?q=x"])
+        self.assertNotIn("site.example", evidence(result).split("Pages kept as evidence:")[0])  # no URL list for the analyst
 
 
 if __name__ == "__main__":

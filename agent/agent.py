@@ -200,6 +200,15 @@ async def main() -> int:
         llm.log("webmail", json.dumps(mail, ensure_ascii=False)[:4000])
 
         erp_end = end - 6 * 60  # leaves the submission six minutes
+        # The submission's first steps need no bid: they run on the portal's tab while the resolvers and the ERP
+        # searches work, and the submission continues from there once the bid is calculated (I6)
+        submitting = not os.environ.get("DRY_RUN") and (task.get("submission") or {}).get("kind") != "api"
+
+        async def prepare_submission():
+            portal = await fresh(tabs["tender_portal"]) if "tender-portal" in CUT else tabs["tender_portal"]
+            return portal, await submit_agent.prepare(task, portal, mail.get("own_address", ""), erp_end)
+        preparing = start(prepare_submission(), erp_end) if submitting else None
+
         async def sweep_tabs():  # the other websites are idle while the ERP searches run: tabs of their own for a sweep
             return {role: await fresh(tabs[role]) for role in ("tender_portal", "supplier_portal", "webmail")}
 
@@ -256,11 +265,22 @@ async def main() -> int:
             return 0
 
         specs = {r["position"]: ", ".join(f"{k} {r.get(k)}" for k in spec_keys) for r in requirements["positions"]}
-        # a phase-1 agent that was cut may still be acting on its tab: the submission then works in a tab of its own
-        portal = await fresh(tabs["tender_portal"]) if "tender-portal" in CUT else tabs["tender_portal"]
+        portal, prepared = None, ""
+        if preparing is not None and preparing.done() and not preparing.cancelled() and preparing.exception() is None:
+            portal, done = preparing.result()
+            prepared = "; ".join(str(done[k]) for k in ("entered", "stopped_on") if done.get(k))
+        elif preparing is not None:  # still at work (or failed): it may still be acting on its tab
+            preparing.cancel()
+            CUT.add("submit-prepare")
+            llm.log("submit-prepare", "not done when the bid was ready: the submission takes a tab of its own")
+        # a stage that was cut may still be acting on its tab: the submission then works in a tab of its own
+        if portal is None:
+            cut = bool(CUT & {"tender-portal", "submit-prepare"})
+            portal = await fresh(tabs["tender_portal"]) if cut else tabs["tender_portal"]
         mailbox = await fresh(tabs["webmail"]) if "webmail" in CUT else tabs["webmail"]
         outcome = await safe("submit", submit_agent.run(task, portal, mailbox, result["answer"], result["omitted"],
-                                                        specs, mail.get("own_address", ""), end - 20), end)
+                                                        specs, mail.get("own_address", ""), end - 20, prepared,
+                                                        mail.get("visited")), end)
         llm.log("submit", json.dumps(outcome, ensure_ascii=False))
     return 0
 

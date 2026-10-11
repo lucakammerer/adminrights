@@ -13,6 +13,8 @@ senders), read at run time by `common.mail_records`, not from public-1.
 ## Input / output
 
 - Input: brief, mailbox login.
+- Also `visited` (as every agent's result): the mailbox pages it opened, its searches among them; the TAN look-up
+  starts from them.
 - Output `RESULT`: `kept` (one line on what was kept), `own_address` (the mailbox's own address, for the contact
   field in the configurator), `other_relevant_facts`, plus `evidence`. The actual content is the evidence.
 

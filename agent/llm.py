@@ -6,6 +6,7 @@ import re
 import time
 from contextlib import contextmanager
 from contextvars import ContextVar
+from urllib.parse import urljoin
 
 from openai import AsyncOpenAI
 
@@ -14,8 +15,15 @@ OPENROUTER = "/" in MODEL  # "<provider>/<model>" runs on OpenRouter with the te
 # Anthropic caches only behind a breakpoint; the top-level one moves with the conversation. Only the tool loop sends
 # it: a request that carries it has every uncached token written to the cache at 1.25× the input price, which pays off
 # only when a later call reads them back, and no call reads a one-off ask_json back
-CACHE = {"extra_body": {"cache_control": {"type": "ephemeral"}}} if MODEL.startswith("anthropic/") else {}
-STEP_EFFORT = os.environ.get("STEP_EFFORT", "low")  # reasoning per browser step; latency is mostly thinking tokens
+CACHE = {"cache_control": {"type": "ephemeral"}} if MODEL.startswith("anthropic/") else {}
+# OpenRouter tries the provider with the lowest latency first instead of balancing load across providers (a call took
+# 1.65 s plus 3.3 s per 1,000 output tokens on 2026-10-10). Its sticky routing keeps a conversation on one provider, so
+# the cache still hits. PROVIDER_SORT=throughput or none switches it.
+PROVIDER_SORT = os.environ.get("PROVIDER_SORT", "latency")
+ROUTE = {"provider": {"sort": PROVIDER_SORT}} if OPENROUTER and PROVIDER_SORT not in ("", "none") else {}
+# reasoning per browser step; "none" switches thinking off on OpenRouter (an A/B still to run: step replies were short
+# already, a median 1.3 s, and thinking may be what gets the agents past the sites' traps)
+STEP_EFFORT = os.environ.get("STEP_EFFORT", "low")
 # The loop's history only grows, so each call reads all of it but the newest step from the cache (a tenth of the input
 # price). Shortening older page reads on every step rewrote the history right behind them, and every call paid for
 # the latest pages again as cache writes: on 2026-10-10 a third of a Haiku run's prompt came from the cache and 17 % of
@@ -33,6 +41,7 @@ CALL_TIMEOUT = 45 if OPENROUTER else 180
 HEDGE_AFTER = 20 if OPENROUTER else 45
 CHECK_TIMEOUT = 60  # one model call inside a finish check (ERP extract: 13-21 s); one hung call cost a position
 TOOL_TIMEOUT = 60  # one browser tool; a fetch that hung 109 s held the tender agent to its cut, its kept pages lost
+SLOW_TOOL = 5  # seconds after which a tool's time is logged (a search form once took 30 s inside the TAN look-up)
 
 # The time by which every model call in this task must be over (set by agent.safe for each stage) and the longest
 # one call may take. chat enforces both on the wall clock: the HTTP timeout only bounds the silence between bytes, and
@@ -75,16 +84,29 @@ def client() -> AsyncOpenAI:
     return _client
 
 
-def send(messages: list, tools: list | None, limit: float, kwargs: dict) -> asyncio.Future:
+def send(messages: list, tools: list | None, limit: float, kwargs: dict, cache: bool = False) -> asyncio.Future:
+    options = dict(kwargs)
+    body = {**ROUTE, **(CACHE if cache else {}), **options.pop("extra_body", {})}
     call = asyncio.ensure_future(client().chat.completions.create(model=MODEL, messages=messages, tools=tools,
-                                                                  timeout=limit, **kwargs))
+                                                                  timeout=limit, **options,
+                                                                  **({"extra_body": body} if body else {})))
     call.add_done_callback(lambda c: c.cancelled() or c.exception())  # a dropped call's failure stays quiet
     return call
 
 
-async def chat(messages: list, tools: list | None = None, **kwargs):
+def reasoning(level: str | None) -> dict:
+    """The request options for a reasoning effort; "none" switches thinking off (OpenRouter's reasoning.enabled)."""
+    if not level:
+        return {}
+    if level == "none":
+        return {"extra_body": {"reasoning": {"enabled": False}}} if OPENROUTER else {}
+    return {"reasoning_effort": level}
+
+
+async def chat(messages: list, tools: list | None = None, cache: bool = False, **kwargs):
     """One model reply, each attempt bounded by CAP and all of them by UNTIL; raises TimeoutError when time is up.
-    An attempt without a reply after HEDGE_AFTER sends the same request again alongside it."""
+    An attempt without a reply after HEDGE_AFTER sends the same request again alongside it. `cache`: the request
+    carries CACHE (only where a later call reads the prompt back)."""
     for attempt in range(6):
         left = UNTIL.get() - time.time() - 1
         if left < 3:
@@ -92,7 +114,7 @@ async def chat(messages: list, tools: list | None = None, **kwargs):
         limit = min(CAP.get(), left)
         end = time.time() + limit
         twin_at = time.time() + HEDGE_AFTER
-        calls = [send(messages, tools, limit, kwargs)]
+        calls = [send(messages, tools, limit, kwargs, cache)]
         try:
             while True:
                 running = [c for c in calls if not c.done()]
@@ -109,7 +131,7 @@ async def chat(messages: list, tools: list | None = None, **kwargs):
                     raise TimeoutError(f"model call over {limit:.0f} s")
                 if len(calls) == 1 and not calls[0].done():
                     print(f"[llm] no reply after {HEDGE_AFTER} s: asking again alongside", flush=True)
-                    calls.append(send(messages, tools, end - time.time(), kwargs))
+                    calls.append(send(messages, tools, end - time.time(), kwargs, cache))
         except Exception as error:  # noqa: BLE001  the hosted model may hiccup: retry like any provider
             if attempt == 5:
                 raise
@@ -134,9 +156,8 @@ async def ask_json(system: str, user: str, effort: str | None = None) -> dict:
     times faster, while switching thinking off entirely made the model rewrite number formats. Sent without CACHE: no
     later call reads its prompt back, so a cache write would only add a quarter to its input price."""
     messages = [{"role": "system", "content": system}, {"role": "user", "content": user}]
-    extra = {"reasoning_effort": effort} if effort else {}
     for _ in range(3):
-        reply = await chat(messages, response_format={"type": "json_object"}, **extra)
+        reply = await chat(messages, response_format={"type": "json_object"}, **reasoning(effort))
         text = reply.choices[0].message.content or ""
         value = parse_object(text)
         if value is not None:
@@ -152,6 +173,10 @@ def _fn(name: str, description: str, properties: dict | None = None, required: l
 
 
 REF = {"ref": {"type": "integer", "description": "the number in [n:...] on the last page read"}}
+# Paginating a result set the model selected is code's job (rule 11): one call instead of one per page
+ALL_PAGES = {"all_pages": {"type": "boolean", "description": (
+    "true for a paged list (search results, messages, Q&A): its further pages, found by the list's own page links, "
+    "come in the same call (each kept on its own with save_evidence)")}}
 BROWSER_TOOLS = [
     _fn("read", "Read the current page again (text with [n:control] refs). The other page tools already return the "
         "page they lead to: read only to look again in a later turn, or with offset to continue a long page.",
@@ -181,13 +206,13 @@ BROWSER_TOOLS = [
             "ref": {"type": "integer"}}}}}, ["steps"]),
     _fn("fetch", "Read a same-site URL (e.g. a link's href, a document, a later results page) without leaving the "
         "current page. Faster than goto when you only need to read; returns text without refs; files and ZIPs are "
-        "opened.", {"url": {"type": "string"}}, ["url"]),
+        "opened.", {"url": {"type": "string"}, **ALL_PAGES}, ["url"]),
     _fn("save_evidence", "Keep a page as evidence for the bid, word for word (a message, a document, a requirements "
         "page, a Q&A page, a material record). Give its URL (a link target or results page) or leave it empty for the "
         "current page. The analyst reads exactly what you keep, so keep every page that holds facts the rules need, "
         "and nothing unrelated.", {"url": {"type": "string"}, "label": {"type": "string",
-                                   "description": "what the page is, e.g. 'approval message in archive'"}},
-        ["label"]),
+                                   "description": "what the page is, e.g. 'approval message in archive'"},
+                                   **ALL_PAGES}, ["label"]),
     _fn("note", "Save facts you have verified, so you keep them when old page reads are shortened. Be exact: "
         "copy ids, numbers, dates and wording.", {"text": {"type": "string"}}, ["text"]),
 ]
@@ -206,6 +231,12 @@ SHORTENED_KEPT = ("\n[older page read shortened; the page is kept word for word 
 PAGE_ACTIONS = {"goto", "click", "fill", "select", "check", "press", "back", "form"}
 SHOWN = ("Not read again: the result of {} above shows this page as it is now. Read it in a later turn to look again, "
          "or with an offset to continue a long page.")
+
+
+def fetched_status(text: str) -> int:
+    """The HTTP status a fetched page reports in its first line; 0 if it doesn't."""
+    match = HTTP_STATUS.match(text)
+    return int(match.group(1)) if match else 0
 
 
 def size(messages: list, tools: list) -> int:
@@ -234,7 +265,8 @@ async def investigate(tab, system: str, mission: str, finish_schema: dict, deadl
     The history only grows, so the prompt cache serves every call but its newest step; past COMPACT_AT the page reads
     older than KEEP_STEPS steps shrink at once."""
     tools = BROWSER_TOOLS + (extra_tools or []) + [_fn(
-        "finish", "Return your findings when the mission is done (or when told time is up: your best findings).",
+        "finish", "Return your findings when the mission is done (or when told time is up: your best findings). "
+        "Tools of one turn run in order, so call finish in the same turn as your last save_evidence calls.",
         {"result": finish_schema}, ["result"])]
     try:  # like every tool, the first read never outlasts TOOL_TIMEOUT: a page that never returns can't eat the stage
         page = await asyncio.wait_for(tab.read(), max(1.0, min(TOOL_TIMEOUT, deadline - time.time())))
@@ -251,29 +283,49 @@ async def investigate(tab, system: str, mission: str, finish_schema: dict, deadl
         stage.append(evidence)
 
     kept: dict[str, int] = {}  # page text -> evidence number, so a page kept twice reaches the analyst once
+    visited: list[str] = []  # the URLs this agent opened or read: a later agent on the same site may reuse them
+
+    def here() -> str:
+        return getattr(getattr(tab, "page", None), "url", "") or ""
+
+    def visit(url: str):
+        if url and url.startswith("http") and url not in visited:
+            visited.append(url)
+
+    def store(text: str, status: int, label: str, where: str) -> str:
+        """An error page is never evidence: the model is told it was not kept."""
+        if status >= 400:
+            log(tag, f"evidence not kept: HTTP {status} {where}")
+            return (f"Not kept: the page answered HTTP {status} (an error page, usually transient). Open it again and "
+                    f"keep it once it shows its content.\n{text[:1500]}")
+        if text in kept:
+            return f"Already kept as evidence #{kept[text]} (same content); not kept again."
+        evidence.append(f"### {label}\n{text}")
+        kept[text] = len(evidence)
+        return f"{KEPT_PREFIX}{len(evidence)}.\n{text}"
 
     async def keep(args):
-        """An error page is never evidence: retry a URL a few times, else tell the model it was not kept."""
-        url = (args.get("url") or "").strip()
+        """A URL that answers with an error page is retried a few times. all_pages: the list's further pages are kept
+        too, each as its own evidence."""
+        url, label = (args.get("url") or "").strip(), args.get("label", "")
+        if args.get("all_pages"):
+            pages, note = await tab.fetch_list(url or here())
+            kept_pages = [store(text, fetched_status(text), label + (f" (page {i})" if i > 1 else ""), where)
+                          for i, (where, text) in enumerate(pages, 1)]
+            return "\n\n".join(kept_pages + ([note] if note else []))
         for attempt in range(3):
             if url:
                 text = await tab.fetch(url)
-                match = HTTP_STATUS.match(text)
-                status = int(match.group(1)) if match else 0
+                status = fetched_status(text)
             else:
                 text, status = await tab.read(), await page_status(tab)
             if status < 400 or not url or attempt == 2:
                 break
             await asyncio.sleep(2 + 2 * attempt)
-        if status >= 400:
-            log(tag, f"evidence not kept: HTTP {status} {url or tab.page.url}")
-            return (f"Not kept: the page answered HTTP {status} (an error page, usually transient). Open it again and "
-                    f"keep it once it shows its content.\n{text[:1500]}")
-        if text in kept:
-            return f"Already kept as evidence #{kept[text]} (same content); not kept again."
-        evidence.append(f"### {args.get('label', '')}\n{text}")
-        kept[text] = len(evidence)
-        return f"{KEPT_PREFIX}{len(evidence)}.\n{text}"
+        return store(text, status, label, url or here())
+
+    def outcome(result: dict, forced: bool = False) -> dict:
+        return {**result, "evidence": evidence, "visited": visited, **({"forced": True} if forced else {})}
     warned = False
     for step in range(max_steps):
         left = deadline - time.time()
@@ -284,8 +336,7 @@ async def investigate(tab, system: str, mission: str, finish_schema: dict, deadl
             break
         try:
             with limits(deadline):  # a step never eats the grace the forced finish below needs
-                reply = await chat(messages, tools, **CACHE,
-                                   **({"reasoning_effort": STEP_EFFORT} if STEP_EFFORT else {}))
+                reply = await chat(messages, tools, cache=True, **reasoning(STEP_EFFORT))
         except Exception as error:  # noqa: BLE001  out of time or the model keeps failing: finish with what is kept
             log(tag, f"step failed: {type(error).__name__}: {str(error)[:200]}")
             break
@@ -330,11 +381,12 @@ async def investigate(tab, system: str, mission: str, finish_schema: dict, deadl
                         continue
                 if warned:  # told to stop: "best findings", not a finished mission (an ERP agent answered no_match
                     log(tag, "finish after the time warning: marked forced")  # for a search it never completed)
-                    return {**result, "evidence": evidence, "forced": True}
-                return {**result, "evidence": evidence}
+                    return outcome(result, forced=True)
+                return outcome(result)
             # a tool never outlasts the deadline, so the forced finish below still returns what was kept
             handler = handlers.get(name) if handlers else None
             limit = max(1.0, deadline - time.time() if handler else min(TOOL_TIMEOUT, deadline - time.time()))
+            began = time.time()
             try:
                 if name == "note":
                     output = "Saved."
@@ -357,6 +409,12 @@ async def investigate(tab, system: str, mission: str, finish_schema: dict, deadl
                     shown = name
                 except Exception:  # noqa: BLE001
                     pass
+            if (took := time.time() - began) > SLOW_TOOL:  # where a run's browser time goes
+                log(tag, f"{step}: {name} took {took:.0f} s")
+            if name in ("goto", "fetch", "save_evidence") and args.get("url"):
+                visit(urljoin(here(), str(args["url"])))
+            if name in PAGE_ACTIONS:
+                visit(here())
             entry = {"role": "tool", "tool_call_id": call.id, "content": output}
             messages.append(entry)
             results.append(entry)
@@ -370,12 +428,12 @@ async def investigate(tab, system: str, mission: str, finish_schema: dict, deadl
     messages.append({"role": "user", "content": "Stop now and call finish with your best findings."})
     log(tag, "finish forced (deadline or step limit)")
     try:
-        reply = await chat(messages, tools, tool_choice={"type": "function", "function": {"name": "finish"}}, **CACHE)
+        reply = await chat(messages, tools, cache=True, tool_choice={"type": "function", "function": {"name": "finish"}})
     except Exception as error:  # noqa: BLE001  out of time: what was kept still counts
         log(tag, f"forced finish failed: {type(error).__name__}")
-        return {"evidence": evidence, "forced": True}
+        return outcome({}, forced=True)
     for call in reply.choices[0].message.tool_calls or []:
         result = (parse_object(call.function.arguments or "{}") or {}).get("result")
         result = parse_object(result) if isinstance(result, str) else result
-        return {**(result if isinstance(result, dict) else {}), "evidence": evidence, "forced": True}
-    return {"evidence": evidence, "forced": True}
+        return outcome(result if isinstance(result, dict) else {}, forced=True)
+    return outcome({}, forced=True)

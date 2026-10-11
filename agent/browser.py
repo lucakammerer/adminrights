@@ -7,7 +7,7 @@ import re
 import zipfile
 from collections import Counter
 from pathlib import Path
-from urllib.parse import urljoin
+from urllib.parse import parse_qsl, urljoin, urlsplit, urlunsplit
 
 READER = (Path(__file__).parent / "reader.js").read_text()
 MAX_CHARS = 14000
@@ -75,6 +75,15 @@ RELOAD_TIMEOUT = 15  # seconds per reload of an error page (two at most)
 # the recorded sites). Controls always stay, so every ref remains usable; evidence and explicit reads stay complete.
 CHROME_SEEN = 2
 CONTROL = re.compile(r"\[\d+:")
+FETCHED = re.compile(r"Fetched (\S+) \(HTTP (\d+)\)")
+# Playwright's call log of a click that was dispatched and then timed out waiting for the navigation it started
+CLICKED = "click action done"
+ACTION_TIMEOUT = 10_000  # ms for any Playwright wait without its own timeout: its default of 30 s hid stalls
+PAGE_LINK = re.compile(r'\[(?:\d+:)?link "([^"\]]*)" -> ([^\]\s]+)\]')  # reader.js links, with or without a ref
+PAGE_LABEL = re.compile(r"^(\d{1,3}|(next|previous|prev)( page)?|weiter|zurück|(nächste|vorherige)( seite)?|[›»<>‹«]{1,2})$",
+                        re.I)
+LIST_PAGES = 10  # further pages one list brings in one call at most
+LIST_CHARS = 60_000  # characters of one list: it never fills the model's history in a single step
 
 
 class Tab:
@@ -98,6 +107,7 @@ class Tab:
 
     async def _track(self, page):
         try:
+            page.set_default_timeout(ACTION_TIMEOUT)
             await page.add_init_script(TRACK)
         except Exception:  # noqa: BLE001
             pass
@@ -258,8 +268,12 @@ class Tab:
         try:
             await loc.scroll_into_view_if_needed(timeout=1000)
             await loc.click(timeout=2000)
-        except Exception:  # noqa: BLE001  covered, off-screen in a scroll box, inert: click it in the DOM
-            await loc.evaluate("e => e.click()")
+        except Exception as error:  # noqa: BLE001
+            if CLICKED in str(error):  # it went through, only the page it opened is slow: the read after waits for it
+                return
+            # covered, off-screen in a scroll box, inert: click it in the DOM (a click repeated on a page that loaded
+            # slowly waited 30 s there for its button, gone with the old page, on 2026-10-11)
+            await loc.evaluate("e => e.click()", timeout=3000)
 
     async def locate(self, ref: int):
         for frame in self.page.frames:
@@ -278,6 +292,9 @@ class Tab:
         elif action == "press":
             await page.keyboard.press(args["key"])
         elif action == "fetch":
+            if args.get("all_pages"):
+                pages, note = await self.fetch_list(args["url"])
+                return "\n\n".join([text for _, text in pages] + ([note] if note else []))
             return await self.fetch(args["url"])
         elif action == "form":
             return await self.form(args.get("steps") or [])
@@ -322,8 +339,14 @@ class Tab:
                     loc = page.get_by_role("button", name=str(step["click"]))
                     if not await loc.count():
                         loc = page.get_by_role("link", name=str(step["click"]))
+                    if not await loc.count():  # fail now, not after Playwright's waits for a control that isn't there
+                        raise ValueError(f"no button or link {step['click']!r} on the page")
                     await loc.first.scroll_into_view_if_needed(timeout=3000)
-                    await loc.first.click(timeout=5000)
+                    try:
+                        await loc.first.click(timeout=5000)
+                    except Exception as error:  # noqa: BLE001  a click that went through to a slow page counts
+                        if CLICKED not in str(error):
+                            raise
                     await self.settle()
                     log.append(f"clicked {step['click']}")
                     continue
@@ -337,6 +360,8 @@ class Tab:
                     loc = page.get_by_label(label, exact=True)
                     if not await loc.count():
                         loc = page.get_by_label(label)
+                    if not await loc.count():  # Playwright would wait 30 s for it (a TAN search lost 30 s that way)
+                        raise ValueError(f"no field labelled {label!r} on the page; name it by ref instead")
                     loc = loc.first
                 await loc.evaluate(OPEN_DETAILS)  # a field in a collapsed section can't be filled
                 tag = await loc.evaluate("e => e.tagName + ':' + (e.type || '')")
@@ -379,6 +404,43 @@ class Tab:
         import base64
         return head + describe_file(url.rsplit("/", 1)[-1], base64.b64decode(result["b64"]))
 
+    async def fetch_list(self, url: str) -> tuple[list[tuple[str, str]], str]:
+        """A paged list the model chose (rule 11: code may paginate a model-selected result set): the page at `url`
+        and every further page its page links lead to, fetched in parallel rounds, at most LIST_PAGES more pages and
+        LIST_CHARS characters. Returns [(url, page)] and a note for the model on what was read or left out."""
+        first = await self.fetch(url)
+        head = FETCHED.match(first)
+        if not head or int(head.group(2)) >= 400:
+            return [(url, first)], ""
+        list_url = head.group(1)
+        pages, seen, bodies = [(list_url, first)], {list_url}, {first.split("\n", 1)[-1]}
+        queue, left, failed = page_links(list_url, list_url, first), [], []
+        while queue:
+            batch = [u for u in dict.fromkeys(queue) if u not in seen]
+            room = LIST_PAGES + 1 - len(pages)
+            if not batch:
+                break
+            if room <= 0 or sum(len(text) for _, text in pages) >= LIST_CHARS:
+                left += batch
+                break
+            seen.update(batch[:room])
+            left += batch[room:]
+            texts = await asyncio.gather(*(self.fetch(u) for u in batch[:room]))
+            queue = []
+            for page_url, text in zip(batch[:room], texts):
+                match, body = FETCHED.match(text), text.split("\n", 1)[-1]
+                if not match or int(match.group(2)) >= 400:
+                    failed.append(page_url)
+                elif body not in bodies:
+                    bodies.add(body)
+                    pages.append((page_url, text))
+                    queue += page_links(list_url, page_url, text)
+        if len(pages) == 1 and not failed:
+            return pages, "[no further pages of this list found by its page links: page on yourself if it has more]"
+        note = f"[this list: {len(pages)} pages read"
+        note += f"; not read, open them yourself: {', '.join(dict.fromkeys(left + failed))}]" if left or failed else "]"
+        return pages, note
+
     async def html_text(self, html: str, url: str) -> str:
         """A fetched page as text, laid out in a hidden script-free frame so its own style rules decide what is
         hidden; without a usable frame (no page document, a blocking policy), parsed without layout instead."""
@@ -406,6 +468,28 @@ class Tab:
                 }
                 return {status: r.status, url: r.url, type, html: await r.text()}
             }""", [urljoin(self.page.url, url), FETCH_ABORT * 1000])
+
+
+def page_links(list_url: str, page_url: str, text: str) -> list[str]:
+    """The links on a page of the list at `list_url` that lead to another page of the same list: labelled with a page
+    number, "next" or "previous", to the list's own path with exactly one query value set to another page number; any
+    other difference may only add a value (a mailbox keeps its open message in the URL). Links to records, other paths,
+    other searches or filters are never followed."""
+    base = urlsplit(list_url)
+    base_query = dict(parse_qsl(base.query, keep_blank_values=True))
+    found = []
+    for label, href in PAGE_LINK.findall(text):
+        if not PAGE_LABEL.match(" ".join(label.split())):
+            continue
+        part = urlsplit(urljoin(page_url, href))
+        query = dict(parse_qsl(part.query, keep_blank_values=True))
+        changed = [k for k in base_query.keys() | query.keys() if base_query.get(k) != query.get(k)]
+        numbered = [k for k in changed if query.get(k, "").isdigit()]
+        added = [k for k in changed if k not in base_query]
+        if (part.scheme, part.netloc) == (base.scheme, base.netloc) and part.path.rstrip("/") == \
+                base.path.rstrip("/") and len(numbered) == 1 and set(changed) <= set(numbered + added):
+            found.append(urlunsplit(part._replace(fragment="")))
+    return list(dict.fromkeys(found))
 
 
 def _js(value: str) -> str:

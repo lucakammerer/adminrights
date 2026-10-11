@@ -2,25 +2,57 @@
 import json
 import re
 import time
+from urllib.parse import urlsplit
 
 import llm
 from agents.common import BOOL, STR, SYSTEM, context, login_line, obj
 
 SIGN_BY = 180  # seconds before the deadline: stop entering, omit what is unfinished, sign (TAN look-up ~2 min)
+MAIL_URLS = 20  # mailbox pages of the webmail agent the TAN look-up is told about
 
 
 def german(value: float) -> str:
     return f"{value:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
 
-async def run(task, tab, mail_tab, answer: dict, omitted: list, specs: dict, contact: str, deadline):
+async def prepare(task, tab, contact: str, deadline) -> dict:
+    """The submission's first stage, while the bid is still being calculated: every step before the first page that
+    asks for bid values (I6). It saved the time those steps took after the answer (18 s on 2026-10-10)."""
+    mission = f"""{context(task)}
+
+{login_line(tab.site)}
+The bid is still being calculated and arrives in a few minutes. Your part now: get its submission ready on this tender
+portal, following the brief's Submission section, without the bid. Go through every step before the first page that
+asks for positions, materials, prices, discount or totals (e.g. an expression of interest, company data with the
+contact e-mail {contact or 'shown in the mailbox (unknown here)'}, the type of offer) and stop on that page. Enter
+nothing about positions, prices, discount or totals, never request a TAN and never submit. Finish with what you
+entered and the page you stopped on."""
+    return await llm.investigate(tab, SYSTEM, mission, obj(entered=STR, stopped_on=STR), deadline, "submit-prepare",
+                                 max_steps=15)
+
+
+def mailbox_urls(urls: list | None, site: dict) -> list[str]:
+    """The pages of this mailbox another agent opened earlier in the run: their shape (a search URL among them) gets
+    the TAN look-up to the TAN message without exploring the mailbox again."""
+    host = urlsplit(site.get("url", "")).netloc
+    return [u for u in urls or [] if isinstance(u, str) and urlsplit(u).netloc == host][:MAIL_URLS]
+
+
+async def run(task, tab, mail_tab, answer: dict, omitted: list, specs: dict, contact: str, deadline,
+              prepared: str = "", mail_urls: list | None = None):
+    seen = mailbox_urls(mail_urls, mail_tab.site)
+
     async def fetch_tan(args):
+        known = ("Earlier in this run the mailbox agent opened these pages of this mailbox; a search URL among them, "
+                 "with your search terms instead, gets you to the TAN message in one step:\n" + "\n".join(seen) + "\n"
+                 ) if seen else ""
         mission = f"""{login_line(mail_tab.site)}
 In this mailbox (you may already be logged in), find the newest signing-TAN message for tender
 {answer['tender_reference']}. The tender portal just said: "{args.get('portal_message', '')}". Search for it
 yourself: a list on the page may be left from an earlier search, and its newest message is not necessarily a TAN
 message. Pick only a message that gives a signing TAN for this tender, the one for that request (highest request
-number / newest), open it and finish with found true and the TAN exactly as written."""
+number / newest), open it and finish with found true and the TAN exactly as written.
+{known}"""
 
         async def check(result, _evidence):
             """A look-up that found no TAN keeps searching instead of handing the portal a non-TAN."""
@@ -80,8 +112,9 @@ order, so check which position each page is for. Each model step costs time: ent
 page, with one form call and end it with the page's next-step button. A configurator's dependent choices go into that
 same call, each followed by its apply button, without reading a choice's options first: the form tool waits for the
 page after every step and picks an option by its exact text, its beginning or any part of it, so a material number
-alone is enough where an option shows more after it. Once you know the labels of the configurator's choices (at the
-latest after the first position), enter every position in one call. Name each choice by its field label: refs are
+alone is enough where an option shows more after it. Once the first position is accepted, enter all remaining
+positions in a single form call: each position's choices with their apply buttons, its values, then the button that
+moves to the next position. Name each choice by its field label: refs are
 lost when a choice is applied, so a step by ref only works before the first apply of a call. A step that finds no
 matching option stops the call and lists the options the page offers (the page may word a value differently than the
 specification above): send the rest of that page again in one form call, with that step in the page's wording.
@@ -90,7 +123,8 @@ position unless it is listed to omit, never tick an option to add our own genera
 TAN, call verify_summary on the summary page and correct what it reports. When the form asks for the signing TAN,
 request it once, then call get_tan with the portal's message (the newest request wins; a new request invalidates the
 old TAN; a TAN is valid for five minutes). Review the summary, then submit bindingly; the run ends when the bid is accepted.
-If a value is rejected, read the message and fix it. Finish with what the portal confirmed."""
+If a value is rejected, read the message and fix it. Finish with what the portal confirmed.
+{f"Done on this tab while the bid was calculated: {prepared}. Continue from the page it shows now." if prepared else ""}"""
     tools = [llm._fn("get_tan", "After requesting a TAN: look up the newest signing TAN in the bidder's mailbox.",
                      {"portal_message": {"type": "string", "description": "what the portal said about the request"}}),
              llm._fn("verify_summary", "On the summary page before the TAN: compare it with the calculated bid.")]

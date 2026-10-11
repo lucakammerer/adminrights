@@ -100,6 +100,9 @@ For every tender position, work out:
   amendments (only those naming that revision and requirement, only the named attributes); if the stroke is a usable
   stroke, add twice the per-end reserve of its key from the latest technical release for that revision to get the
   nominal stroke.
+Every word you write delays the bid: keep the reasoning fields to their facts. quantity_reasoning lists each
+clarification as "number (date): change, withdrawn or not"; requirement_reasoning names the revision, the amendments
+and the reserve used, without further prose.
 JSON: {{"positions": [{{"position": "...", "final_quantity_pieces": 0, "quantity_reasoning": "...",
 "requirement": "the requirement id the position refers to", "bore_mm": 0, "stroke_mm": 0, "pressure_bar": 0, "mounting": "...", "certification": "...",
 "catalogue_group": "...", "requirement_reasoning": "..."}}]}}"""

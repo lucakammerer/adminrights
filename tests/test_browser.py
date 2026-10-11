@@ -6,22 +6,26 @@ Run from the repo root: uv run --project agent --no-sync python -m unittest disc
 import asyncio
 import sys
 import threading
+import time
 import unittest
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import parse_qs
+import html as markup
+import re
+from urllib.parse import parse_qs, parse_qsl, urlsplit
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "agent"))
 
 from playwright.async_api import async_playwright  # noqa: E402
 
-from browser import Tab  # noqa: E402
+from browser import Tab, page_links  # noqa: E402
 
 LOGIN = ('<form method="post" action="/login"><label>User <input name="user"></label>'
          '<label>Secret <input type="password" name="pw"></label><button>Sign in</button></form>')
 TAN = ('<form method="post" action="/sign"><label>Request <input name="request" value="7"></label>'
        '<label>Code <input type="password" name="code"></label><button>Sign</button></form>')
 COUNTS: dict[str, int] = {}
+MAIL_LIST = Path(__file__).resolve().parents[1] / "eval/fixtures/pages/mail-result-list.html"  # a recorded result list
 
 
 class Site(BaseHTTPRequestHandler):
@@ -59,6 +63,19 @@ class Site(BaseHTTPRequestHandler):
                              '<a href="/page1">Overview</a>'
                              f'<h1>Record {path[-1]}</h1><p>Amount {path[-1]}00 pieces</p>'
                              '<p>Imprint and privacy</p><p>All rights reserved</p>')
+        if path == "/list":  # a paged list: page links, plus links that are not pages of it
+            query = parse_qs(self.path.split("?", 1)[1] if "?" in self.path else "")
+            n = (query.get("page") or ["1"])[0]
+            return self.page(f'<p>Row {n}</p>' + "".join(f'<a href="?q=x&page={i}">{i}</a>' for i in (1, 2, 3)) +
+                             '<a href="/record/7">7</a><a href="?q=y&page=2">2</a><a href="?q=x&sort=d">Sort</a>')
+        if path == "/" and "folder=" in self.path and MAIL_LIST.exists():
+            data = MAIL_LIST.read_bytes()
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.end_headers()
+            return self.wfile.write(data)
+        if path == "/slowform":
+            return self.page('<form method="post" action="/slow"><button>Send</button></form>')
         if path == "/form":
             return self.page('<div style="position:relative"><button id="b" onclick="document.title=\'clicked\'">Go'
                              '</button><div style="position:absolute;inset:0;background:#fff"></div></div>'
@@ -70,6 +87,9 @@ class Site(BaseHTTPRequestHandler):
     def do_POST(self):
         body = parse_qs(self.rfile.read(int(self.headers.get("Content-Length") or 0)).decode())
         COUNTS["POST " + self.path] = COUNTS.get("POST " + self.path, 0) + 1
+        if self.path == "/slow":  # a submit whose next page takes longer than a click waits for it
+            time.sleep(3)
+            return self.page("<h1>Sent</h1>")
         if self.path == "/login" and body.get("pw") == ["s3cret"] and body.get("user") == ["agent"]:
             return self.page("", 302, {"Location": "/home", "Set-Cookie": "session=ok; Path=/"})
         return self.page("rejected", 403)
@@ -204,6 +224,73 @@ class TabAgainstLocalSite(unittest.TestCase):
         self.assertEqual(title, "clicked")
         self.assertEqual(value, "kept")
         self.assertNotIn("None", value)
+
+    def test_a_paged_list_comes_whole_in_one_fetch(self):
+        async def steps(tab):
+            pages, note = await tab.fetch_list("/list?q=x")
+            return pages, note, await tab.act("fetch", {"url": "/list?q=x", "all_pages": True})
+        pages, note, text = self.run_tab(steps)
+        rows = [line for _, page in pages for line in page.split("\n") if line.startswith("Row")]
+        self.assertEqual(sorted(rows), ["Row 1", "Row 2", "Row 3"])  # page 1 again under ?page=1 is not kept twice
+        self.assertIn("3 pages read", note)
+        self.assertNotIn("/record/7", COUNTS)  # a record link labelled with a number is not a page of the list
+        self.assertTrue(all(row in text for row in ("Row 1", "Row 2", "Row 3")))
+
+    def test_a_click_whose_page_loads_slowly_is_neither_repeated_nor_waited_out(self):
+        async def steps(tab):
+            await tab.act("goto", {"url": "/slowform"})
+            text = await tab.read()
+            ref = int(text.split('button "Send"')[0].rsplit("[", 1)[1].rstrip(":"))
+            loop = asyncio.get_running_loop()
+            started = loop.time()
+            page = await tab.act("click", {"ref": ref})
+            await tab.act("goto", {"url": "/slowform"})
+            form = await tab.form([{"click": "Send"}])
+            return page, form, loop.time() - started
+        page, form, took = self.run_tab(steps)
+        self.assertIn("Sent", page)
+        self.assertIn("clicked Send", form)
+        self.assertEqual(COUNTS.get("POST /slow"), 2)  # one per click: never sent twice
+        self.assertLess(took, 15)  # each click took 32 s, ending in an error: 30 s waiting for a button gone
+
+    @unittest.skipUnless(MAIL_LIST.exists(), "no recorded mailbox page")
+    def test_a_recorded_mailbox_list_leads_to_its_next_page(self):
+        """Its next-page link keeps the open message in the URL: one page number changed, one value added."""
+        next_page = markup.unescape(re.search(r'href="([^"]*)"[^>]*>\s*N\S*chste Seite', MAIL_LIST.read_text("utf-8"))
+                                    .group(1))
+        query = dict(parse_qsl(urlsplit(next_page).query))
+        list_url = "/?" + "&".join(f"{k}={query[k]}" for k in ("folder", "q"))
+        text = self.run_tab(lambda tab: tab.fetch(list_url))
+        self.assertEqual(page_links(self.url + list_url, self.url + list_url, text), [self.url + next_page])
+
+    def test_a_missing_form_field_or_button_fails_at_once(self):
+        async def steps(tab):
+            await tab.act("goto", {"url": "/form"})
+            loop = asyncio.get_running_loop()
+            started = loop.time()
+            field = await tab.form([{"field": "Nowhere", "value": "x"}])
+            button = await tab.form([{"click": "Nowhere"}])
+            return field, button, loop.time() - started
+        field, button, took = self.run_tab(steps)
+        self.assertIn("no field labelled 'Nowhere'", field)
+        self.assertIn("no button or link 'Nowhere'", button)
+        self.assertLess(took, 8)  # Playwright's own wait took 30 s for a missing field
+
+
+class PageLinks(unittest.TestCase):
+    def test_only_other_pages_of_the_same_list(self):
+        text = ('[link "2" -> ?q=x&page=2] [3:link "3" -> /list?q=x&page=3] [link "Next" -> ?q=x&page=2] '
+                '[link "7" -> /record/7] [link "2" -> ?q=y&page=2] [link "Sort" -> ?q=x&sort=d] '
+                '[link "4" -> https://other.example/list?q=x&page=4]')
+        base = "https://site.example/list?q=x"
+        self.assertEqual(page_links(base, base, text),
+                         ["https://site.example/list?q=x&page=2", "https://site.example/list?q=x&page=3"])
+
+    def test_an_added_value_is_state_a_changed_one_another_list(self):
+        text = ('[link "Nächste Seite" -> /?folder=archive&q=r&page=2&message=m-1] '
+                '[link "Subject" -> /?folder=archive&q=r&page=1&message=m-2] [link "2" -> /?folder=inbox&q=r&page=2]')
+        base = "https://mail.example/?folder=archive&q=r"
+        self.assertEqual(page_links(base, base, text), ["https://mail.example/?folder=archive&q=r&page=2&message=m-1"])
 
 
 if __name__ == "__main__":

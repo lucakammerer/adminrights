@@ -17,8 +17,8 @@ async def run(task, tab, deadline):
 {login_line(tab.site)}
 Your part: on this tender portal, find the tender in the brief (exact reference{f' {ref}' if ref else ''}).
 If its documents need an expression of interest (the brief's Submission section names that step), give it. Collect:
-1. the bill of quantities: every position with its id, description, quantity and unit exactly as written (pieces,
-   sets, ...);
+1. the bill of quantities: every position with its id, quantity and unit exactly as written (pieces, sets, ...) and
+   a short description (a few words and the requirement it refers to; the kept page has the full text);
 2. every bidder Q&A / clarification (all pages), kept with save_evidence so its full question and answer reach the
    analyst word for word: they change quantities, withdraw earlier answers, and assign keys (the condition groups,
    tariffs, delivery commitments, setup pools, project bonus the brief's rules name, technical amendments to
