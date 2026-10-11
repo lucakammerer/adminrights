@@ -40,6 +40,9 @@ match exactly, and keep every page holding its facts. If there is none, report t
 - `agent.py` `run`: the search steps end `FINISH_GRACE` (30 s) before the deadline and a forced finish by the deadline,
   so a search cut at its deadline still gets its kept pages read by `extract` before the stage cut (end − 6 min). If
   that read fails, the material and its kept pages still count.
+- `agent.py` `run`: a search cut by its 40-step limit with a material chosen but `REQUIRED` facts missing, and at
+  least `FOLLOW_UP_MIN` (120 s) before its search deadline, gets one follow-up of at most `FOLLOW_UP_STEPS` (12) on
+  the same tab: its mission is the material and `extract`'s list of what is missing; `extract` then reads all kept pages.
 - `agent/agent.py` `erp_search`: a `no_match` (it turns into `no_bid`) is confirmed by a second, independent agent in a
   fresh tab when at least 150 s remain before the ERP deadline; if that one finds a material, its result wins.
 - `agent.py` `run` `check`, no-match proof (rules 3, 8): a `no_match` finish is refused (`unproven`) when no page was

@@ -1,6 +1,7 @@
 """ERP agents: login, the material per requirement, its facts read from kept pages. See README.md."""
 import asyncio
 import json
+import time
 
 import llm
 from agents.common import BOOL, INT, NUM, RESOLVE, STR, arr, login_line, obj, system
@@ -16,6 +17,8 @@ RESULT = obj(
                         number_format=STR, scales=arr(obj(from_quantity=NUM, price_as_shown=STR))),
     other_relevant_facts=STR)
 FINISH_GRACE = 30  # seconds for a forced finish, which before ran to the stage cut and left the extract none
+FOLLOW_UP_MIN = 120  # seconds a search cut by its step limit needs left for a follow-up on its missing facts
+FOLLOW_UP_STEPS = 12
 NO_MATCH_REFUSALS = 2  # an unproven no_match goes back this often; then main's second agent confirms it
 CANDIDATES = arr(obj(material=STR, differs_in=STR, blocked=BOOL))
 REQUIRED = ("material_number", "available_stock_pieces", "lead_time_stock_weeks", "lead_time_production_weeks",
@@ -145,7 +148,25 @@ Finish with material_number and why; the facts are read from the pages you kept.
                                            news=news)
     if result.get("material_number") and not result.get("price_condition"):
         try:
-            result, _ = await extract(task, requirement, result, result.get("evidence", []))
+            data, problem = await extract(task, requirement, result, result.get("evidence", []))
         except Exception as error:  # noqa: BLE001  out of time: the material and its kept pages still count
             llm.log(tag, f"extract failed: {type(error).__name__}: {str(error)[:200]}")
+            return result
+        if problem and deadline - FINISH_GRACE - time.time() > FOLLOW_UP_MIN:
+            # cut by its step limit long before its deadline (run_28c8d1f903003c25: step 40, 9 min left, the price page
+            # unkept): a short follow-up on the same tab keeps the pages extract misses
+            llm.log(tag, f"facts missing after the step limit: follow-up for {data['material_number']}")
+            mission = f"""{login_line(tab.site)} (you should already be logged in)
+Your part: material {data['material_number']} was chosen for the requirement {json.dumps(requirement, ensure_ascii=False)}.
+{problem}"""
+            async with slots():
+                with llm.limits(deadline):
+                    more = await llm.investigate(tab, system(task), mission, obj(material_number=STR),
+                                                 deadline - FINISH_GRACE, tag, max_steps=FOLLOW_UP_STEPS)
+            pages = result.get("evidence", []) + more.get("evidence", [])
+            try:
+                data, _ = await extract(task, requirement, result, pages)
+            except Exception as error:  # noqa: BLE001  out of time: the first read still counts
+                llm.log(tag, f"extract failed: {type(error).__name__}: {str(error)[:200]}")
+        result = data
     return result
