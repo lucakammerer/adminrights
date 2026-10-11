@@ -5,6 +5,8 @@ logged answer scored by `eval/compare.py` (what the bid would have scored if sig
 
 | Date (UTC) | Run | Commit | Platform | Eval | Time | Cost | Outcome and top problem (owner) |
 | --- | --- | --- | --- | --- | --- | --- | --- |
+| 2026-10-10 23:51 | run_c7805bca216fa2e0 | luca/night-score@1fa269f | 100, eligible | – | 16 min (952 s) | $0.271 | Night baseline: main on the hosted Qwen, 257.8 $·s; 13 min of queue wait over 189 calls. |
+| 2026-10-10 23:49 | run_39d8950d739e2e2a | luca/night-score@1fa269f | 100, eligible | – | 15 min (900 s) | $0.292 | Night baseline, second run: 262 $·s. Resolvers alone 3:04→5:08 (5–7k reasoning tokens per call, 69–124 s). |
 | 2026-10-10 23:37 | run_8401b1c0a05bfe68 | luca/radical-speed@fb8bdf2 | 100, eligible | – | 10 min (579 s) | $0.136 | Second 100 on the same package (Haiku default): submission gate met, 78.5 $·s. |
 | 2026-10-10 23:37 | run_7e74cc89dbc1e845 | luca/radical-speed@fb8bdf2 | 100, eligible | – | 9 min (534 s) | $0.135 | Haiku as the code default, resolvers on Qwen: 71.8 $·s. |
 | 2026-10-10 22:22 | run_26e1618f43882dc7 | luca/radical-speed@4c594af, Haiku | 100, eligible | – | 10 min (580 s) | $0.116 | One webmail login before the fan-out: 67.3 $·s. Phase 1 slow this time (supplier 313 s); commercials on Qwen 121 s on the critical path (answer 471 s), submit + TAN 117 s after it (Luca). |

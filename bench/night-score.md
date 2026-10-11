@@ -28,6 +28,8 @@ Seen on the way: run_0b1441de63cf8acb (package fc98097b, not mine, all Haiku): 1
 
 ## Backlog
 
-- Qwen reasoning tokens: the requirements and commercials resolvers spend 2–3.5k output tokens (60–80 s each) at
-  effort medium; asked twice.
+- Qwen reasoning tokens: the requirements and commercials resolvers spend 5–7k output tokens (69–124 s each, at
+  ≈55 tok/s) at effort medium, asked twice; in run_39d8950d739e2e2a 3:04→5:08 was nothing but resolver calls. Try a
+  smaller question (only the evidence each part needs), or `low` with a code check that sends it back on a gap;
+  check with `tools/resolver_eval.py --repeat` before any test run.
 - Queue waits on the hosted Qwen: p50 4 s per call, 13 min summed in run_cd888fae0ebef8da; fewer, larger steps help.
