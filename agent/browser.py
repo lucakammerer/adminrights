@@ -324,6 +324,7 @@ class Tab:
     async def named(self, label: str, click: bool = False):
         """The field (or with click, the button or link) the model names, in the page or one of its frames. A field
         goes by any name the reader shows for it: its label, then its placeholder, title or name attribute."""
+        label = re.sub(r"\s*\(datetime: [^)]*\)", "", label).strip() or label  # the reader's note, not the page's name
         quoted = json.dumps(label, ensure_ascii=False)
         attribute = ", ".join(f"{t}[{a}={quoted}]" for a in ("title", "name")
                               for t in ("input:not([type=hidden])", "select", "textarea"))

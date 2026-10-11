@@ -67,7 +67,7 @@ def qa(number: int, utc: str, answer: str):
 
 
 def director(date: str, *subs: tuple[str, str]):
-    """Another director approval: a copy of the latest one, dated `date` (dd.mm.yyyy, hh:mm, Berlin time)."""
+    """Another director approval: a copy of the latest one, dated `date` (dd.mm.yyyy, hh:mm, Berlin time unless it names an offset)."""
     day, month = date[:2], date[3:5]
     return add("webmail", ("conditional-7571",), ("conditional-7571", "conditional-7599"),
                (r"24\.01\.2027, 17:00", date), (r"\(24\.01\.2027 17:00\) latest discount approval", f"({date})"),
@@ -92,6 +92,11 @@ CASES: list[Case] = [
          facts_set((("commercials", "discount_percent"), 7))),
     Case("director-future", "an approval dated after the scenario date (25.01 14:00 Berlin) never applies",
          [director("25.01.2027, 14:00", ("genehmige ich 5 %", "genehmige ich 9 %"))]),
+    Case("director-offset-future", "a newer approval stamped 06:30 at UTC-05:00 (11:30 UTC, after the scenario date) never applies",
+         [director("25.01.2027, 06:30 (UTC-05:00)", ("genehmige ich 5 %", "genehmige ich 9 %"))]),
+    Case("director-offset-past", "a newer approval stamped 15:30 at UTC+09:00 (06:30 UTC, before the scenario date) applies",
+         [director("25.01.2027, 15:30 (UTC+09:00)", ("genehmige ich 5 %", "genehmige ich 7 %"))],
+         facts_set((("commercials", "discount_percent"), 7))),
     Case("director-look-alike", "a newer approval for the look-alike reference VG-2027-7093-A never applies",
          [director("25.01.2027, 08:00", ("genehmige ich 5 %", "genehmige ich 9 %"), (r"VG-2027-7093(?!-)", "VG-2027-7093-A"))]),
     Case("director-wrong-sender", "a newer approval from a sender who may not approve never applies",

@@ -70,9 +70,14 @@
     let t = ""
     for (const n of el.childNodes) {
       if (n.nodeType === 3) t += n.textContent
-      else if (n.nodeType === 1 && !SKIP.has(n.tagName) && !hiddenWithin(n)) t += " " + textOf(n) + " "
+      else if (n.nodeType === 1 && !SKIP.has(n.tagName) && !hiddenWithin(n)) t += " " + textOf(n) + stamp(n) + " "
     }
     return t
+  }
+  // A <time> shown as "yesterday" or in a short local form keeps its exact moment only in its datetime attribute.
+  const stamp = (el) => {
+    const at = el.tagName === "TIME" ? clean(el.getAttribute("datetime")).trim() : ""
+    return at && !clean(textOf(el)).includes(at) ? ` (datetime: ${at}) ` : ""
   }
   const labelOf = (el) => {
     const doc = el.ownerDocument
@@ -236,6 +241,8 @@
     if (el.shadowRoot) for (const ch of el.shadowRoot.childNodes) walk(ch)
     for (const ch of el.childNodes) walk(ch)
     if (cell) inCell--
+    const at = stamp(el)
+    if (at) out.push(at)
     const after = generated(el, "::after")
     if (after) out.push(` ${after} `)
     const title = clean(el.getAttribute("title")).trim()

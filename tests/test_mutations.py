@@ -1,6 +1,6 @@
 """Mutation tests (I20, rule 19): recorded pages rewritten the way another site would show the same facts
 (tools/stress/mutations.js: synonym labels, hidden decoys, shuffled menus and table rows, swapped number formats,
-content moved into an extra frame, invisible characters inside identifiers; with widgets, tables as styled span rows and links as scripted elements) must give
+content moved into an extra frame, invisible characters inside identifiers, dates shown as weekday and time; with widgets, tables as styled span rows and links as scripted elements) must give
 the reader the same facts, a ref for every scripted link and none of the decoys. No website and no model: headless Chromium, network blocked.
 
 Run from the repo root: uv run --project agent --no-sync python -m unittest discover -s tests -v
@@ -23,7 +23,10 @@ MUTATIONS = (ROOT / "tools/stress/mutations.js").read_text()
 
 
 def facts(text: str) -> set[str]:
-    """Identifiers and numbers in the reader's text, number formats normalised (separators dropped)."""
+    """Identifiers and numbers in the reader's text, number formats normalised (separators dropped), dates as
+    yyyymmdd whether written dd.mm.yyyy or ISO."""
+    text = re.sub(r"\b(\d{2})\.(\d{2})\.(\d{4})\b", r"\3\2\1", text)
+    text = re.sub(r"\b(\d{4})-(\d{2})-(\d{2})(?=\b|T)", r"\1\2\3", text)
     ids = set(re.findall(r"\b[A-Z]{1,5}-\d[\d-]*\b", text))
     numbers = {re.sub(r"[.,]", "", n) for n in re.findall(r"\d[\d.,]*\d|\d", text) if len(re.sub(r"\D", "", n)) >= 2}
     return ids | numbers
@@ -58,6 +61,7 @@ class MutatedPages(unittest.TestCase):
 
     def test_facts_survive_and_decoys_stay_out(self):
         self.assertGreater(sum(stats.get("invisible", 0) for _, stats in self.read.values()), 0)
+        self.assertGreater(sum(stats.get("dates", 0) for _, stats in self.read.values()), 0)
         for path in PAGES:
             plain = facts(self.read[(path.name, None)][0])
             self.assertTrue(plain, path.name)

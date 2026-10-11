@@ -29,6 +29,8 @@ PAGE = """<!doctype html><html><head><style>
 <p class="gone">Quantity 999 decoy-class</p><p class="ghost">decoy-ghost</p>
 <p aria-hidden="true">decoy-aria</p><p style="display:none">decoy-inline</p>
 <span title="Received 2030-01-02 10:00">Date</span>
+<p>Sent <time datetime="2030-01-02T09:30:00+01:00">yesterday</time>, due <time datetime="2030-01-09">2030-01-09</time></p>
+<a href="/m/1">Offer <time datetime="2030-01-01T23:15:00Z">Tue 23:15</time></a>
 <canvas id="c1" aria-label="Receipt 4711"></canvas><canvas id="c2"></canvas>
 <span class="sr">screen reader value 17</span><div class="away">off page value 23</div>
 <p class="dot">listed</p>
@@ -118,6 +120,13 @@ class Reader(unittest.TestCase):
             self.assertIn("(tooltip: Received 2030-01-02 10:00)", text)
             self.assertIn("Receipt 4711", text)
             self.assertIn("canvas without text", text)
+
+    def test_a_time_keeps_its_exact_moment(self):
+        for text in (self.live, self.fetched):
+            self.assertIn("yesterday (datetime: 2030-01-02T09:30:00+01:00)", text)
+            self.assertIn("due 2030-01-09", text)
+            self.assertNotIn("(datetime: 2030-01-09)", text)  # shown in full already
+        self.assertRegex(self.live, r'link "Offer Tue 23:15 \(datetime: 2030-01-01T23:15:00Z\)"')
 
     def test_off_screen_text_is_kept_but_marked(self):
         for text in (self.live, self.fetched):
