@@ -153,6 +153,14 @@ class Parsing(unittest.TestCase):
                                  ("186,615", "de-DE", 186.615), ("1,0873", "", 1.0873)]:
             self.assertAlmostEqual(calc.number(text, fmt), value, msg=f"{text} {fmt}")
 
+    def test_number_reads_other_locales(self):
+        for text, fmt, value in [("1 234,50 €", "fr-FR", 1234.5), ("1\u202f234,50", "", 1234.5),
+                                 ("CHF 12'500.00", "", 12500), ("1234,50", "fr-FR", 1234.5),
+                                 ("1234.50", "de-CH", 1234.5), ("12,50", "1 234,56", 12.5),
+                                 ("186,615", "English", 186615)]:
+            self.assertAlmostEqual(calc.number(text, fmt), value, msg=f"{text} {fmt}")
+        self.assertAlmostEqual(calc.grams_to_kg("2 125 g"), 2.125)
+
     def test_rate_lookup_tolerates_key_spelling(self):
         rates = {"FX-1": 1.1, "FX-2": 0.9}
         self.assertEqual(calc.lookup(rates, "fx 2"), 0.9)

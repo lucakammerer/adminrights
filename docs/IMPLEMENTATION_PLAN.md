@@ -204,7 +204,7 @@ Every browser agent is the same loop; agents differ only in mission, result sche
   one TAN request). One `form` call per page or position, a configurator's dependent choices each followed by its
   apply button, named by field label (refs are lost when a choice is applied) and sent without reading their options
   first (`form` matches an option by text, beginning or part, and a step without a match stops with the page's
-  options).
+  options; a choice still disabled after one wait stops with "apply the earlier choice first").
   First watchdog slice: `SIGN_BY` (180 s) before its deadline the agent is told to omit what isn't entered, request the
   TAN and sign, instead of the generic "call finish" (which once ended a run unsigned with 4 positions entered).
 
@@ -316,9 +316,9 @@ on disagreement it logs both, re-asks once, then the rule wins.
 | 1b | Off-screen and screen-reader-only (clipped) text kept but marked `(off-screen text: …)` and counted: recorded pages showed no such hiding, and real values can live there (decided on the recordings) | ✅ I17 |
 | 2 | Reveal real values: image and canvas labels, tooltips (also `title` of plain elements), CSS-generated text (`::before`/`::after`), collapsed `<details>`, select options, input values; a canvas without text is marked; names, labels and tooltips skip hidden descendants (decoys inside them); a tooltip a control already names as its `(info: …)` is not repeated | ✅ I17 |
 | 3 | Normalize text: remove invisible characters; keep number-format hints verbatim | ✅ |
-| 4 | Controls as `[n:kind "label"]` refs the tools act on; links show their href | ✅ |
+| 4 | Controls as `[n:kind "label"]` refs the tools act on; links show their href. ARIA widgets (`role` link, checkbox, switch, radio, combobox, textbox), links without href and contenteditable fields count as controls when they hold none of their own; a plain element with a click handler attribute or a pointer cursor (the outermost one, around no control) is marked `[n:clickable]` and its content still read | ✅ |
 | 5 | Same-origin iframes inlined, nested ones too | ✅ |
-| 6 | Tables with cell separators, one line per row (line breaks inside cells folded in, so cells line up with their header); page indicators stay in the text | ✅ |
+| 6 | Tables with cell separators, one line per row (line breaks inside cells folded in, so cells line up with their header), also tables built from styled elements: ARIA cell roles and `display: table-cell` give a cell separator, block, flex and grid layout and the `row` role a line break (inside a table cell only a space, so a row stays on one line), `inline-*` layout a space, so values in adjacent spans never merge; page indicators stay in the text | ✅ |
 | 7 | Open dialogs marked; in-page dialogs closed on every settle; browser dialogs accepted and reported | ✅ |
 | 8 | Repeated page chrome (headers, banners) suppressed to save tokens: on the page shown after an action, lines without controls that earlier reads of the tab showed twice are left out at its top and bottom, with a note; controls, evidence and explicit reads stay complete (about 10 % less page text on the recordings) | ✅ I17 |
 | 9 | 14,000 characters per read, `offset` for the rest | ✅ |
@@ -333,12 +333,13 @@ on disagreement it logs both, re-asks once, then the rule wins.
 | Transient error pages | code reloads a 5xx page (GET only) twice and `fetch` retries twice before the model sees it; a `fetch` without an answer for 40 s returns as HTTP 504 (never kept as evidence), all inside `llm.TOOL_TIMEOUT`; the model is told | ✅ I13 |
 | Unlock gates | the model (`fill` on a slider, `check`) | — |
 | Look-alike controls | the model, guided by hrefs | — |
+| Forms on other software | `form` resolves a field by the name the reader shows (label, else placeholder, title or name attribute) and fields and buttons in every frame; an unknown name fails at once (was a 30 s timeout); `settle` also waits for frames (all together, at most 3 s; a frame that never loads, e.g. an ad or chat server, is not waited for again and no longer holds a read until the 60 s tool timeout), and a field step whose frame reloaded mid-step is tried once more | ✅ |
 | Settle on every read | waits while the page has short timers pending (delayed popups) or its DOM changed in the last 300 ms, at most 1.5 s; untracked pages keep the fixed wait | ✅ I13 |
 | Unanswered navigation | a main-frame request without an answer after 30 s is stopped (CDP `Page.stopLoading`) and the model told; until then the page runs no script for any tool. `agent.fresh` stops a start page that misses `OPEN_TIMEOUT` and opens it once more | ✅ |
 
 ### 5.3 Documents, numbers and dates
 
-- `fetch` and downloads: ZIP (recursive), CSV, TXT, HTML, PDF (`pypdf`) ✅. A fetched page is laid out in a hidden script-free frame, so its own style rules decide what is hidden (I17).
+- `fetch` and downloads: ZIP (recursive), CSV, TXT, HTML, PDF (`pypdf`) ✅; office files (`browser.office_text`: XLSX/ODS row by row with tab-separated cells, date cells as dates, hidden sheets and rows dropped; DOCX/ODT/PPTX paragraph by paragraph, hidden runs dropped) ✅; text in any byte-order mark, UTF-16, UTF-8, else Windows-1252 (`browser.decode`) ✅. A fetched page is laid out in a hidden script-free frame, so its own style rules decide what is hidden (I17).
 - Numbers are parsed by code with the stated format; ambiguous forms are refused, never guessed (I10, RULES 4.1).
 - Dates are compared in UTC; models report them as written, with their timezone and format hints (I18).
 
@@ -375,7 +376,7 @@ Same jobs and rules, different software, look, navigation, site names and data, 
 | Other navigation and labels | model navigation over page text; generic prompts ✅ |
 | Information on other sites | every gathering agent keeps rule-relevant records it finds on its site (`common.ALSO_KEEP`); resolvers get such pages by content (mail naming a position, pages naming a commercial record); gap sweep for open commercial facts during the ERP stage ✅ (I16) |
 | Other mail subjects | topics and senders from the brief, in several list shapes ✅ (I12) |
-| Other document formats | ZIP, CSV, TXT, HTML, PDF ✅ (I17) |
+| Other document formats | ZIP, CSV, TXT, HTML, PDF ✅ (I17); XLSX, ODS, DOCX, ODT, PPTX; UTF-16 and Windows-1252 text ✅ |
 | Other number and date conventions | strict parsing with hints (I10); UTC comparison |
 | More positions | at most 6 ERP searches at once (`erp.PARALLEL`); facts only some rules need are asked for once, not until the deadline |
 | An API submission target | the answer is posted by API when the run's `submission.kind` is `api` |
@@ -527,7 +528,8 @@ Stress levels:
 
 - **S1:** renamed and reordered site ids. Pass: no crash, same answer.
 - **S2:** live scouting pages rewritten during local runs (relabelled UI text, swapped number formats, extra iframes,
-  injected decoys, shuffled lists). Pass: signs and scores ≥ 95. Time-boxed to 2 h.
+  injected decoys, shuffled lists); `--widgets` adds framework-app markup (tables as styled span rows, every other
+  link a pointer element without href that a page script follows). Pass: signs and scores ≥ 95. Time-boxed to 2 h.
 - **S3:** a no-bid variant where the matching material shows as blocked. Pass: answers no_bid.
 - **S4 (stretch):** information moved between sites. Pass: the gap sweep (I16) finds it.
 

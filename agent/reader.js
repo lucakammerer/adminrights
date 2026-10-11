@@ -11,10 +11,17 @@
     "TR", "TABLE", "FORM", "FIELDSET", "DL", "DT", "DD", "H1", "H2", "H3", "H4", "H5", "H6", "BR", "HR", "PRE",
     "BLOCKQUOTE", "DETAILS", "SUMMARY", "DIALOG", "FIGURE", "CAPTION", "LEGEND", "OUTPUT", "LABEL"])
   const SKIP = new Set(["SCRIPT", "STYLE", "NOSCRIPT", "TEMPLATE", "HEAD", "META", "LINK"])
+  // Other software builds tables and rows from styled spans and divs: their layout, not their tag, separates values
+  const CELL = new Set(["cell", "gridcell", "columnheader", "rowheader"])
+  const BLOCKISH = /^(block|flex|grid|flow-root|list-item|table|table-row|table-row-group|table-header-group|table-footer-group|table-caption)$/
+  const TOGGLE_ROLES = new Set(["checkbox", "switch", "radio", "menuitemcheckbox", "menuitemradio"])
+  const TEXT_ROLES = new Set(["textbox", "searchbox", "combobox", "spinbutton"])
+  const CONTROLS = "a[href], button, input, select, textarea, summary, label, [role=button], [role=link], [role=tab], [role=menuitem], [role=option], [role=checkbox], [role=switch], [role=radio], [onclick]"
   const fetched = !!opts.doc || !!opts.root
   const styled = !opts.doc
   let next = opts.start || 1
   let marked = 0
+  let inCell = 0
   const out = []
   const told = new Set()  // tooltips already given as a control's (info: ...): shown once, not twice
 
@@ -124,11 +131,38 @@
       const opts = [...el.options].map((o) => (o.selected ? "*" : "") + clean(o.textContent).trim()).join(" | ")
       return `[${ref(el)}select "${labelOf(el)}" options: ${opts}${disabledMark(el)}]`
     }
+    // ARIA widgets and script-driven elements of other software; one around a control of its own is walked instead
+    const editor = el.isContentEditable && !(el.parentElement && el.parentElement.isContentEditable)
+    if (editor) return `[${ref(el)}input type=text "${labelOf(el)}" value="${clean(textOf(el)).trim()}"${disabledMark(el)}]`
+    if ((tag === "A" || role === "link" || TOGGLE_ROLES.has(role) || TEXT_ROLES.has(role)) && !el.querySelector(CONTROLS + ", [contenteditable]")) {
+      const name = clean(textOf(el)).trim()
+      if (TOGGLE_ROLES.has(role)) {
+        const kind = role === "radio" || role === "menuitemradio" ? "radio" : "checkbox"
+        return `[${ref(el)}${kind} "${name || labelOf(el)}" ${el.getAttribute("aria-checked") === "true" ? "checked" : "unchecked"}${disabledMark(el)}]`
+      }
+      if (TEXT_ROLES.has(role)) return `[${ref(el)}button "${[labelOf(el), name].filter(Boolean).join(": ")}"${disabledMark(el)}]`
+      if (name) return `[${ref(el)}link "${name}"]`
+    }
     if (tag === "SUMMARY") {
       const open = el.parentElement && el.parentElement.open
       return `[${ref(el)}summary${open ? "" : " (collapsed, content below)"}] `
     }
     return null
+  }
+
+  // A plain element the page reacts to clicks on (a handler attribute, or the pointer cursor scripts give it): the
+  // outermost one, not inside or around another control
+  const clickable = (el) => {
+    if (el === el.ownerDocument.body) return false
+    if (!el.hasAttribute("onclick")) {
+      if (!styled) return false
+      const view = el.ownerDocument.defaultView
+      if (view.getComputedStyle(el).cursor !== "pointer") return false
+      if (el.parentElement && view.getComputedStyle(el.parentElement).cursor === "pointer") return false
+    }
+    if (el.parentElement && el.parentElement.closest(CONTROLS) || el.querySelector(CONTROLS)) return false
+    return /\S/.test(textOf(el)) || !!(el.getAttribute("aria-label") || el.getAttribute("title") ||
+      el.querySelector("img[alt], [aria-label]"))
   }
 
   const walk = (node) => {
@@ -152,7 +186,10 @@
       out.push(`\n[iframe src=${el.getAttribute("src") || ""}]\n`)
       if (doc && doc.body) {
         doc.querySelectorAll("[data-aref]").forEach((e) => e.removeAttribute("data-aref"))
+        const cellAround = inCell
+        inCell = 0
         walk(doc.body)
+        inCell = cellAround
       }
       out.push("\n[/iframe]\n")
       return
@@ -177,24 +214,35 @@
     const c = control(el)
     if (c !== null) {
       out.push(` ${c} `)
-      if (tag === "SUMMARY" || tag === "A" || tag === "BUTTON" || tag === "SELECT" || tag === "TEXTAREA" || tag === "INPUT") return
+      const byRoleOnly = /^(button|menuitem|tab|option)$/.test(role) &&
+        !["A", "BUTTON", "INPUT", "SUMMARY"].includes(tag)  // as before: such an element's content is read as well
+      if (!byRoleOnly) return
     }
-    const block = BLOCK.has(tag)
     const row = out.length  // a table row becomes one line, its cells' own line breaks folded in
+    const display = styled ? el.ownerDocument.defaultView.getComputedStyle(el).display : ""
+    const cell = tag === "TD" || tag === "TH" || CELL.has(role) || display === "table-cell"
+    // inside a table cell, layout alone only spaces values apart, so a row stays on one line
+    const block = !cell && (BLOCK.has(tag) || role === "row" || BLOCKISH.test(display) && !inCell)
+    const spaced = !cell && !block && /^inline-|^(block|flex|grid|flow-root|list-item)$/.test(display)
     if (block) out.push("\n")
+    if (spaced) out.push(" ")
     if (/^H[1-6]$/.test(tag)) out.push("#".repeat(+tag[1]) + " ")
-    if (tag === "TD" || tag === "TH") out.push(" | ")
+    if (cell) out.push(" | ")
+    if (c === null && !fetched && clickable(el)) out.push(` [${ref(el)}clickable] `)
     const before = generated(el, "::before")
     if (before) out.push(` ${before} `)
     const start = out.length
+    if (cell) inCell++
     if (el.shadowRoot) for (const ch of el.shadowRoot.childNodes) walk(ch)
     for (const ch of el.childNodes) walk(ch)
+    if (cell) inCell--
     const after = generated(el, "::after")
     if (after) out.push(` ${after} `)
     const title = clean(el.getAttribute("title")).trim()
     if (title && c === null && !clean(out.slice(start).join("")).includes(title)) out.push(` (tooltip: ${title}) `)
     if (tag === "DIALOG") out.push("\n=== END DIALOG ===\n")
     if (block) out.push("\n")
+    if (spaced) out.push(" ")
     if (tag === "TR") out.push("\n" + out.splice(row).join("").replace(/\s*\n\s*/g, " ").trim() + "\n")
   }
 

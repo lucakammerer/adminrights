@@ -1,6 +1,7 @@
 """Resolvers: apply the brief's rules to the kept evidence, without a browser. See README.md."""
 import asyncio
 import json
+import time
 
 import llm
 from agents.common import (RESOLVE, commercial_records, context, evidence, mentions, names_position, routed,
@@ -13,6 +14,9 @@ ROLES = {
     "webmail": "the sales mailbox with the approvals and the signing TAN",
 }
 
+
+RETRY_MARGIN = 10  # seconds the second commercials answer leaves before the stage cut
+RETRY_MIN = 60  # seconds a second commercials answer needs to be worth asking for
 
 SITES_TIMEOUT = 60  # seconds per attempt, so one slow call still leaves room for the second before elimination
 

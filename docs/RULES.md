@@ -84,7 +84,9 @@ Status: ✅ in the code · ⚠️ in the code with a known gap · ❌ missing. "
 - **Times:** compare in UTC. Convert each site's local times with the timezone the site states; prefer an explicit
   UTC/ISO value when the page shows one. Date formats come with their order (day/month vs month/day): read the hint.
 - **Numbers:** parse by the format the page states (`de-DE` `12.345,67`, `en-US` `12,345.67`); a form like `12,345` or
-  `12.345` without a hint is ambiguous and MUST NOT be guessed.
+  `12.345` without a hint is ambiguous and MUST NOT be guessed; every other form shows its own format: grouping by
+  spaces or apostrophes (`1 234,56`, `1'234.56`), a lone separator before 1, 2 or 4+ digits (`calc.number`). A hint
+  is a locale (`fr-FR` has a decimal comma, `de-CH` a point) or a sample (`1 234,56`).
 - **`LATEST(subject, key)`**: among records of that subject (and key) that are for **exactly `T`**, come from the
   **authorized sender** (local part from the brief + `@D`) and are dated **≤ `S`**, the newest one. A newer record
   replaces older ones; a failed condition does not revive an older one; records for other references and future-dated

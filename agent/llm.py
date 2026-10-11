@@ -213,7 +213,7 @@ BROWSER_TOOLS = [
     _fn("read", "Read the current page again (text with [n:control] refs). Use offset to continue a long page.",
         {"offset": {"type": "integer"}, **ALL_PAGES}),
     _fn("goto", "Open a URL (absolute, or relative to the current page).", {"url": {"type": "string"}}, ["url"]),
-    _fn("click", "Click a link, button, summary, menu item or tab by its ref.", REF, ["ref"]),
+    _fn("click", "Click a link, button, summary, menu item, tab or clickable element by its ref.", REF, ["ref"]),
     _fn("fill", "Type text into an input or textarea by ref (replaces its value). For a slider, the value.",
         {**REF, "text": {"type": "string"}}, ["ref", "text"]),
     _fn("select", "Choose an option of a select by its visible label.", {**REF, "option": {"type": "string"}},

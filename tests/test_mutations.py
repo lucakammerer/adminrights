@@ -1,7 +1,7 @@
 """Mutation tests (I20, rule 19): recorded pages rewritten the way another site would show the same facts
 (tools/stress/mutations.js: synonym labels, hidden decoys, shuffled menus and table rows, swapped number formats,
-content moved into an extra frame) must give the
-reader the same facts and none of the decoys. No website and no model: headless Chromium, network blocked.
+content moved into an extra frame; with widgets, tables as styled span rows and links as scripted elements) must give
+the reader the same facts, a ref for every scripted link and none of the decoys. No website and no model: headless Chromium, network blocked.
 
 Run from the repo root: uv run --project agent --no-sync python -m unittest discover -s tests -v
 """
@@ -29,7 +29,8 @@ def facts(text: str) -> set[str]:
     return ids | numbers
 
 
-async def read_all(seeds: list[int | None]) -> dict:
+async def read_all(seeds: list) -> dict:
+    """seeds: None (unmutated), a seed, or (seed, "widgets") for the framework-app markup as well."""
     out = {}
     async with async_playwright() as p:
         browser = await p.chromium.launch(headless=True)
@@ -39,7 +40,8 @@ async def read_all(seeds: list[int | None]) -> dict:
         for path in PAGES:
             for seed in seeds:
                 await page.set_content(path.read_text(errors="ignore"), wait_until="domcontentloaded")
-                stats = await page.evaluate(f"({MUTATIONS})({{seed: {seed}}})") if seed else {}
+                number, widgets = seed if isinstance(seed, tuple) else (seed, False)
+                stats = await page.evaluate(MUTATIONS, {"seed": number, "widgets": bool(widgets)}) if seed else {}
                 await page.wait_for_function("[...document.querySelectorAll('iframe')].every(f => f.contentDocument &&"
                                              " f.contentDocument.readyState === 'complete')")  # the extra frame loaded
                 out[(path.name, seed)] = ((await page.evaluate(f"({READER})({{}})"))["text"], stats)
@@ -51,7 +53,7 @@ async def read_all(seeds: list[int | None]) -> dict:
 class MutatedPages(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.seeds = [3, 11]
+        cls.seeds = [3, 11, (3, "widgets")]
         cls.read = asyncio.run(read_all([None] + cls.seeds))
 
     def test_facts_survive_and_decoys_stay_out(self):
@@ -60,10 +62,14 @@ class MutatedPages(unittest.TestCase):
             self.assertTrue(plain, path.name)
             for seed in self.seeds:
                 text, stats = self.read[(path.name, seed)]
+                if isinstance(seed, tuple):  # a scripted link has no href: compare the page text without link targets
+                    plain = facts(re.sub(r" -> [^\]]*\]", "]", self.read[(path.name, None)][0]))
                 with self.subTest(page=path.name, seed=seed):
                     self.assertGreater(stats["decoys"], 0)
                     self.assertNotIn("S2DECOY", text)
                     self.assertEqual(plain - facts(text), set())
+                    links = self.read[(path.name, None)][0].count(':link "')
+                    self.assertEqual(text.count(':link "') + text.count(":clickable]"), links)  # every link still usable
 
 
 if __name__ == "__main__":

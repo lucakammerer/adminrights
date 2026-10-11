@@ -1,18 +1,25 @@
 """Generic browser tools for the model: read a page as text with control refs, act on a ref, read a URL without
 navigating, open downloaded files. Nothing here knows any website; the model decides where to go and what to do."""
 import asyncio
+import codecs
 import difflib
+import html
 import io
+import json
 import re
 import zipfile
+import xml.etree.ElementTree as ET
 from collections import Counter
+from datetime import datetime, timedelta
 from pathlib import Path
 from urllib.parse import urljoin
 
 READER = (Path(__file__).parent / "reader.js").read_text()
 MAX_CHARS = 14000
+DISABLED = "e => e.matches(':disabled') || e.getAttribute('aria-disabled') === 'true'"
 OPEN_DETAILS = "e => { for (let d = e.closest('details'); d; d = d.parentElement?.closest('details')) d.open = true }"
 SETTLE_MAX = 1.5  # seconds a read waits at most for the page to settle (popups appear up to that long after load)
+FRAME_WAIT = 3  # seconds a settle waits at most for the page's frames to load
 # Every page of the tab tracks its pending short timers and its last DOM change, so a read waits exactly as long as
 # something is still due (a delayed popup) instead of a fixed time.
 TRACK = """(() => { if (window.__arefTimers) return; const pending = new Set(), st = window.setTimeout, ct = window.clearTimeout;
@@ -94,6 +101,8 @@ class Tab:
         self.method = "GET"  # of the latest main-frame navigation: only a GET may be reloaded after a server error
         self.status = 0
         self.navigation = None  # the main-frame navigation request still waiting for its answer
+        self.stalled: set = set()  # frames that did not load within FRAME_WAIT: not waited for again
+        page.on("framenavigated", lambda frame: self.stalled.discard(frame))  # a reloaded frame may hold a form: wait for it again
         page.on("dialog", self._on_dialog)
         page.on("download", self._on_download)
         page.on("request", self._on_request)
@@ -171,11 +180,21 @@ class Tab:
             await asyncio.sleep(0.5)
         if waited < 0:  # a page loaded before this tab tracked it: popups appear a moment after load
             await asyncio.sleep(SETTLE_MAX)
-        for frame in self.page.frames:  # in-page popup dialogs only block the page; browser dialogs are accepted above
-            try:
-                await frame.evaluate("document.querySelectorAll('dialog[open]').forEach(d => d.close())")
-            except Exception:  # noqa: BLE001
-                pass
+        async def ready(frame):  # a form inside a frame reloads only that frame, by now under way
+            if frame != self.page.main_frame and frame not in self.stalled:
+                await frame.wait_for_load_state("domcontentloaded")
+            # in-page popup dialogs only block the page; browser dialogs are accepted above
+            await frame.evaluate("document.querySelectorAll('dialog[open]').forEach(d => d.close())")
+
+        frames = self.page.frames
+        tasks = [asyncio.ensure_future(ready(frame)) for frame in frames]
+        await asyncio.wait(tasks, timeout=FRAME_WAIT)
+        for frame, task in zip(frames, tasks):  # a frame that never loads (ads, chat) is waited for once
+            if not task.done():
+                self.stalled.add(frame)
+                task.cancel()
+            elif not task.cancelled():
+                task.exception()
 
     async def recover(self):
         """Before the model sees a page: reload a server error page (GET only) up to twice, and log in again when the
@@ -300,6 +319,33 @@ class Tab:
                 return loc.first
         raise ValueError(f"ref {ref} not on the page any more: read the page again")
 
+    async def named(self, label: str, click: bool = False):
+        """The field (or with click, the button or link) the model names, in the page or one of its frames. A field
+        goes by any name the reader shows for it: its label, then its placeholder, title or name attribute."""
+        quoted = json.dumps(label, ensure_ascii=False)
+        attribute = ", ".join(f"{t}[{a}={quoted}]" for a in ("title", "name")
+                              for t in ("input:not([type=hidden])", "select", "textarea"))
+        for attempt in range(2):  # a frame the last step reloaded may still be loading: wait for the page once
+            for exact in (True, False, None):  # None: by title or name attribute, after every label
+                for frame in self.page.frames:
+                    if click:
+                        found = [frame.get_by_role("button", name=label, exact=exact),
+                                 frame.get_by_role("link", name=label, exact=exact)] if exact is not None else []
+                    elif exact is None:
+                        found = [frame.locator(attribute)]
+                    else:
+                        found = [frame.get_by_label(label, exact=exact), frame.get_by_placeholder(label, exact=exact)]
+                    for loc in found:
+                        try:
+                            if await loc.count():
+                                return loc.first
+                        except Exception:  # noqa: BLE001  a frame detached while it was searched
+                            pass
+            if not attempt:
+                await self.settle()
+        kind = "button or link" if click else "field (by label, placeholder, title or name)"
+        raise ValueError(f"no {kind} {label!r} on this page: use the label the page shows, or its ref")
+
     async def act(self, action: str, args: dict) -> str:
         page = self.page
         if action == "goto":
@@ -335,62 +381,73 @@ class Tab:
 
     async def form(self, steps: list[dict]) -> str:
         """Fill fields and press buttons by their visible label, in order, waiting for the page after each step."""
-        page = self.page
         log = []
         for step in steps:
             try:
-                if step.get("field") and step.get("click"):  # both in one step: fill, then click
-                    steps_left = [{"field": step["field"], "value": step.get("value")}, {"click": step["click"]}]
-                    log.append((await self.form(steps_left)).split("\n", 1)[0].removeprefix("Form steps: "))
-                    continue
-                if step.get("ref") is not None and step.get("value") is None:
-                    loc = await self.locate(int(step["ref"]))
-                    await loc.evaluate(OPEN_DETAILS)
-                    await self.click(loc)
+                try:
+                    log.append(await self.step(step))
+                except Exception as error:  # noqa: BLE001
+                    # the last click reloaded a frame a moment after the wait: a field by label is found again
+                    if "context was destroyed" not in str(error) or step.get("ref") is not None or step.get("click"):
+                        raise
                     await self.settle()
-                    log.append(f"clicked ref {step['ref']}")
-                    continue
-                if step.get("click"):
-                    loc = page.get_by_role("button", name=str(step["click"]))
-                    if not await loc.count():
-                        loc = page.get_by_role("link", name=str(step["click"]))
-                    await loc.first.scroll_into_view_if_needed(timeout=3000)
-                    await loc.first.click(timeout=5000)
-                    await self.settle()
-                    log.append(f"clicked {step['click']}")
-                    continue
-                value = step.get("value")
-                if value is None:
-                    raise ValueError("no value given for this field")
-                if step.get("ref") is not None:
-                    label, loc = f"ref {step['ref']}", await self.locate(int(step["ref"]))
-                else:
-                    label = str(step["field"])
-                    loc = page.get_by_label(label, exact=True)
-                    if not await loc.count():
-                        loc = page.get_by_label(label)
-                    loc = loc.first
-                await loc.evaluate(OPEN_DETAILS)  # a field in a collapsed section can't be filled
-                tag = await loc.evaluate("e => e.tagName + ':' + (e.type || '')")
-                if tag.startswith("SELECT"):
-                    options = await loc.evaluate("e => [...e.options].map(o => [o.value, o.textContent.trim()])")
-                    want = str(value).strip()
-                    pick = next((v for v, t in options if t == want), None) or next(
-                        (v for v, t in options if v == want), None) or next(
-                        (v for v, t in options if t.startswith(want + " ") or t.startswith(want + " ")), None) or next(
-                        (v for v, t in options if want in t), None)
-                    if pick is None:
-                        raise ValueError(f"no option {want!r}; options: {[t for _, t in options][:40]}")
-                    await loc.select_option(value=pick, timeout=5000)
-                elif tag in ("INPUT:checkbox", "INPUT:radio"):
-                    await loc.set_checked(value not in (False, "false", "no", "0"), timeout=5000, force=True)
-                else:
-                    await loc.fill(await self.credential(loc, str(value)), timeout=5000)
-                log.append(f"set {label} = {value}")
+                    log.append(await self.step(step))
             except Exception as error:  # noqa: BLE001  stop at the first failing step, the model sees why
                 log.append(f"FAILED at {step}: {str(error)[:300]}")
                 break
         return "Form steps: " + "; ".join(log) + "\n\n" + await self.read(compact=True)
+
+    async def step(self, step: dict) -> str:
+        """One form step; returns what it did."""
+        if step.get("field") and step.get("click"):  # both in one step: fill, then click
+            steps_left = [{"field": step["field"], "value": step.get("value")}, {"click": step["click"]}]
+            return (await self.form(steps_left)).split("\n", 1)[0].removeprefix("Form steps: ")
+        if step.get("ref") is not None and step.get("value") is None:
+            loc = await self.locate(int(step["ref"]))
+            await loc.evaluate(OPEN_DETAILS)
+            await self.click(loc)
+            await self.settle()
+            return f"clicked ref {step['ref']}"
+        if step.get("click"):
+            loc = await self.named(str(step["click"]), click=True)
+            await loc.scroll_into_view_if_needed(timeout=3000)
+            await loc.click(timeout=5000)
+            await self.settle()
+            return f"clicked {step['click']}"
+        value = step.get("value")
+        if value is None:
+            raise ValueError("no value given for this field")
+        if step.get("ref") is not None:
+            label, loc = f"ref {step['ref']}", await self.locate(int(step["ref"]))
+        else:
+            label = str(step["field"])
+            loc = await self.named(label)
+        await loc.evaluate(OPEN_DETAILS)  # a field in a collapsed section can't be filled
+        if await loc.evaluate(DISABLED):  # a dependent choice a script may open a moment after the last step
+            await self.settle()
+            if await loc.evaluate(DISABLED):
+                raise ValueError(f"{label} is disabled: if it depends on an earlier choice, apply that choice first (its "
+                                 "apply or next button), then send this step again")
+        tag = await loc.evaluate("e => e.tagName + ':' + (e.type || '')")
+        if tag.startswith("SELECT"):
+            want = str(value).strip()
+            for attempt in range(2):  # options a script loads after the last step: wait for the page once
+                options = await loc.evaluate("e => [...e.options].map(o => [o.value, o.textContent.trim()])")
+                pick = next((v for v, t in options if t == want), None) or next(
+                    (v for v, t in options if v == want), None) or next(
+                    (v for v, t in options if t.startswith(want + " ") or t.startswith(want + " ")), None) or next(
+                    (v for v, t in options if want in t), None)
+                if pick is not None or attempt:
+                    break
+                await self.settle()
+            if pick is None:
+                raise ValueError(f"no option {want!r}; options: {[t for _, t in options][:40]}")
+            await loc.select_option(value=pick, timeout=5000)
+        elif tag in ("INPUT:checkbox", "INPUT:radio"):
+            await loc.set_checked(value not in (False, "false", "no", "0"), timeout=5000, force=True)
+        else:
+            await loc.fill(await self.credential(loc, str(value)), timeout=5000)
+        return f"set {label} = {value}"
 
     async def fetch(self, url: str) -> str:
         """Read a same-origin URL through the logged-in page without navigating: text only, no refs. A server error
@@ -446,23 +503,139 @@ def _js(value: str) -> str:
 
 
 def describe_file(name: str, data: bytes) -> str:
-    """Text of a downloaded document; ZIPs are opened and each member described."""
+    """Text of a downloaded document; ZIPs are opened and each member described, office files read as their text."""
     if data[:2] == b"PK":
-        parts = []
         with zipfile.ZipFile(io.BytesIO(data)) as archive:
-            for info in archive.infolist():
-                if not info.is_dir():
-                    parts.append(describe_file(info.filename, archive.read(info)))
+            try:
+                office = office_text(archive)
+            except Exception:  # noqa: BLE001  a broken or unknown office part: list the members instead
+                office = None
+            if office is not None:
+                return f"DOCUMENT {name}:\n" + office[:MAX_CHARS]
+            parts = [describe_file(info.filename, archive.read(info)) for info in archive.infolist() if not info.is_dir()]
         return f"ZIP {name}:\n" + "\n\n".join(parts)
     if data[:4] == b"%PDF":
         return f"PDF {name}:\n" + pdf_text(data)
-    text = data.decode("utf-8", errors="replace")
+    text = decode(data)
     if "<html" in text[:500].lower() or name.endswith((".htm", ".html")):
         text = re.sub(r"<(script|style)[\s\S]*?</\1>", " ", text)
         text = re.sub(r"<br\s*/?>|</(p|div|tr|li|h\d)>", "\n", text)
         text = re.sub(r"<[^>]+>", " ", text)
     text = re.sub(r"[​-‍⁠﻿]", "", text)
     return f"FILE {name}:\n" + re.sub(r"[ \t]+", " ", text)[:MAX_CHARS]
+
+
+def decode(data: bytes) -> str:
+    """Plain text in whatever encoding an export uses: a byte-order mark, UTF-16 without one, UTF-8, else Windows-1252."""
+    if data[:3] == codecs.BOM_UTF8:
+        return data[3:].decode("utf-8", errors="replace")
+    if data[:2] in (codecs.BOM_UTF16_LE, codecs.BOM_UTF16_BE):
+        return data.decode("utf-16", errors="replace")
+    head = data[:2000]
+    if len(head) > 1 and head.count(0) > len(head) // 4:
+        return data.decode("utf-16-le" if head[1::2].count(0) > head[::2].count(0) else "utf-16-be", errors="replace")
+    text = data.decode("utf-8", errors="ignore")
+    bad = len(data) - len(text.encode())  # bytes that are no UTF-8
+    if bad > sum(ch > "\x7f" for ch in text):
+        return data.decode("cp1252", errors="replace")
+    return data.decode("utf-8", errors="replace")
+
+
+# Office text that is not shown: hidden runs (the bounded, tempered gap keeps a hidden paragraph mark from eating the
+# next run), deleted or moved-away tracked changes, hidden or collapsed text, rows and slides.
+OFFICE_HIDDEN = re.compile(
+    r'<(\w+:)?vanish\b(?![^>]*val="(0|false|off)")[^>]*>((?!<(\w+:)?r[ >]|</(\w+:)?pPr>)[\s\S]){0,5000}?</(\w+:)?r>'
+    r"|<(\w+:)?(delText|moveFrom|hidden-text|hidden-paragraph)\b[^>]*?(/>|>[\s\S]*?</(\w+:)?\8>)"
+    r'|<(\w+:)?table-row\b[^>]*visibility="(collapse|filter)"[^>]*?(/>|>[\s\S]*?</(\w+:)?table-row>)')
+
+
+def office_text(archive: zipfile.ZipFile) -> str | None:
+    """Spreadsheets row by row with their cells tab-separated; text documents and slides paragraph by paragraph.
+    None for an archive that is no office file."""
+    names = set(archive.namelist())
+    if "xl/workbook.xml" in names:
+        return xlsx_text(archive, names)
+    parts = sorted((n for n in names if re.fullmatch(r"word/document\.xml|content\.xml|ppt/slides/slide\d+\.xml", n)),
+                   key=lambda n: [int(d) if d.isdigit() else d for d in re.split(r"(\d+)", n)])
+    if not parts or not ({"[Content_Types].xml", "mimetype"} & names):
+        return None
+    out = []
+    for part in parts:
+        xml = archive.read(part).decode("utf-8", errors="replace")
+        if re.search(r'<(\w+:)?sld\b[^>]*\bshow="(0|false)"', xml):
+            continue
+        xml = OFFICE_HIDDEN.sub("", xml)
+        xml = re.sub(r'<(\w+:)?(covered-)?table-cell\b([^>]*number-columns-repeated="(\d+)")?[^>]*/>',
+                     lambda m: "\t" * min(int(m.group(4) or 1), 50), xml)
+        xml = re.sub(r"</(\w+:)?(p|h|tr|table-row)>|<(\w+:)?(br|line-break)\b[^>]*/>", "\n", xml)
+        xml = re.sub(r"</(\w+:)?(tc|table-cell)>|<(\w+:)?tab\b[^>]*/>", "\t", xml)
+        text = html.unescape(re.sub(r"<[^>]+>", "", xml))
+        out.append(re.sub(r"\t+\n", "\n", re.sub(r"\n\t", "\t", text)))  # a cell's own paragraph end; empty cells at row end
+    return "\n".join(out)
+
+
+def xlsx_text(archive: zipfile.ZipFile, names: set[str]) -> str | None:
+    m = "{http://schemas.openxmlformats.org/spreadsheetml/2006/main}"
+    ns = {"m": m[1:-1], "p": "http://schemas.openxmlformats.org/package/2006/relationships"}
+    rid = "{http://schemas.openxmlformats.org/officeDocument/2006/relationships}id"
+    shared = []
+    if "xl/sharedStrings.xml" in names:
+        shared = ["".join(t.text or "" for t in si.findall("m:t", ns) + si.findall("m:r/m:t", ns))
+                  for si in ET.fromstring(archive.read("xl/sharedStrings.xml")).findall("m:si", ns)]
+    targets = {}
+    if "xl/_rels/workbook.xml.rels" in names:
+        for rel in ET.fromstring(archive.read("xl/_rels/workbook.xml.rels")).findall("p:Relationship", ns):
+            target = rel.get("Target", "").lstrip("/")
+            targets[rel.get("Id")] = target if target.startswith("xl/") else "xl/" + target
+    dated = set()  # style indexes whose number format shows a date
+    if "xl/styles.xml" in names:
+        styles = ET.fromstring(archive.read("xl/styles.xml"))
+        codes = {f.get("numFmtId"): f.get("formatCode", "") for f in styles.iter(f"{m}numFmt")}
+        xfs = styles.find("m:cellXfs", ns)
+        for i, xf in enumerate(xfs.findall("m:xf", ns) if xfs is not None else []):
+            fmt = xf.get("numFmtId", "0")
+            code = re.sub(r'"[^"]*"|\[[^]]*]|\\.', "", codes.get(fmt, ""))
+            if 14 <= int(fmt) <= 17 or fmt == "22" or re.search(r"[dy]", code, re.I):
+                dated.add(str(i))
+    workbook = ET.fromstring(archive.read("xl/workbook.xml"))
+    pr = workbook.find("m:workbookPr", ns)
+    epoch = datetime(1904, 1, 1) if pr is not None and pr.get("date1904") in ("1", "true") else datetime(1899, 12, 30)
+    sheets = list(workbook.iter(f"{m}sheet"))
+    if not sheets:  # another schema (strict): the member listing at least carries the data
+        return None
+    out = []
+    for sheet in sheets:
+        part = targets.get(sheet.get(rid))
+        if sheet.get("state") in ("hidden", "veryHidden") or part not in names:
+            continue
+        root = ET.fromstring(archive.read(part))
+        hidden = {k for col in root.iter(f"{m}col") if col.get("hidden") in ("1", "true")
+                  for k in range(int(col.get("min")) - 1, int(col.get("max")))}
+        rows = [f"Sheet {sheet.get('name')} (numbers as stored, with a decimal point):"]
+        for row in root.iter(f"{m}row"):
+            if row.get("hidden") in ("1", "true"):
+                continue
+            cells: dict[int, str] = {}
+            for i, c in enumerate(row.findall("m:c", ns)):
+                letters = re.match(r"[A-Z]*", c.get("r", "")).group()
+                col = sum((ord(ch) - 64) * 26 ** k for k, ch in enumerate(reversed(letters))) - 1 if letters else i
+                v = c.find("m:v", ns)
+                value = v.text if v is not None and v.text else ""
+                if col in hidden:
+                    continue
+                if c.get("t") == "s" and value:
+                    cells[col] = shared[int(value)]
+                elif c.get("t") == "inlineStr":
+                    cells[col] = "".join(t.text or "" for t in c.iter(f"{m}t"))
+                elif value and c.get("s") in dated and c.get("t") in (None, "n") and 0 <= float(value) < 2958466:
+                    day = epoch + timedelta(minutes=round(float(value) * 1440))
+                    cells[col] = day.strftime("%Y-%m-%d %H:%M" if day.hour or day.minute else "%Y-%m-%d")
+                elif value:
+                    cells[col] = value
+            if cells:
+                rows.append("\t".join(cells.get(k, "") for k in range(max(cells) + 1)))
+        out.append("\n".join(rows))
+    return "\n\n".join(out)
 
 
 def pdf_text(data: bytes) -> str:

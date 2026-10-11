@@ -73,6 +73,31 @@ class Site(BaseHTTPRequestHandler):
         if path == "/stuck":
             return self.page('<form method="post" action="/never"><label>Size <input name="s"></label>'
                              '<button>Apply</button></form>')
+        if path == "/config":  # a configurator whose dependent choice only opens once the first is applied
+            bore = parse_qs(self.path.partition("?")[2]).get("bore", [""])[0]
+            strokes = "".join(f"<option>{s}</option>" for s in ("200", "600")) if bore else ""
+            return self.page('<form action="/config"><label>Bore <select name="bore"><option value="">choose</option>'
+                             + "".join(f'<option{" selected" * (b == bore)}>{b}</option>' for b in ("50", "63"))
+                             + f'</select></label><label>Stroke <select name="stroke"{"" if bore else " disabled"}>'
+                             + f'<option value="">choose</option>{strokes}</select></label>'
+                             + '<button>Apply choice</button></form>')
+        if path == "/config-js":  # the same, opened by a script a moment after the first choice changes
+            return self.page('<label>Bore <select id="b"><option value="">choose</option><option>50</option></select>'
+                             '</label><label>Stroke <select id="s" disabled><option value="">choose</option></select>'
+                             '</label><script>document.getElementById("b").onchange = () => setTimeout(() => {'
+                             'const s = document.getElementById("s"); s.add(new Option("600")); s.disabled = false'
+                             '}, 600)</script>')
+        if path == "/plain":  # fields named only by placeholder or title, as some software ships them
+            return self.page('<input name="q" placeholder="Quantity"><input type="hidden" name="Quantity"><select name="p" title="Ø Pressure"><option>choose'
+                             '</option><option>16 bar</option></select><div role="button" onclick="document.title='
+                             '\'sent\'">Send</div>')
+        if path == "/stall":  # a frame source that never answers (an ad or chat server)
+            time.sleep(20)
+            return None
+        if path == "/stalled":
+            return self.page('<iframe src="/stall"></iframe><p>Main content</p>')
+        if path == "/framed":  # the configurator inside a frame of the page
+            return self.page('<h1>Order</h1><iframe src="/config" width="600" height="200"></iframe>')
         return self.page("start")
 
     def do_POST(self):
@@ -244,6 +269,61 @@ class TabAgainstLocalSite(unittest.TestCase):
                 agent.OPEN_TIMEOUT = open_timeout
             return await asyncio.wait_for(new.read(), 10)  # the pending load held every script to the tool timeout
         self.assertIn("URL:", self.run_tab(steps))
+
+    def test_a_disabled_dependent_choice_fails_fast_and_says_why(self):
+        async def steps(tab):
+            await tab.act("goto", {"url": "/config"})
+            loop = asyncio.get_running_loop()
+            started = loop.time()
+            unapplied = await tab.form([{"field": "Bore", "value": "50"}, {"field": "Stroke", "value": "600"}])
+            spent = loop.time() - started
+            applied = await tab.form([{"field": "Bore", "value": "50"}, {"click": "Apply choice"},
+                                      {"field": "Stroke", "value": "600"}])
+            await tab.act("goto", {"url": "/config-js"})
+            scripted = await tab.form([{"field": "Bore", "value": "50"}, {"field": "Stroke", "value": "600"}])
+            return unapplied, spent, applied, scripted
+        unapplied, spent, applied, scripted = self.run_tab(steps)
+        self.assertIn("FAILED", unapplied.split("\n", 1)[0])
+        self.assertIn("disabled", unapplied.split("\n", 1)[0])
+        self.assertLess(spent, 4.0)
+        self.assertNotIn("FAILED", applied.split("\n", 1)[0])
+        self.assertNotIn("FAILED", scripted.split("\n", 1)[0])
+
+    def test_a_frame_that_never_loads_does_not_hold_up_reads(self):
+        async def steps(tab):
+            await tab.page.goto(self.url + "/stalled", wait_until="commit")
+            loop = asyncio.get_running_loop()
+            started = loop.time()
+            first = await asyncio.wait_for(tab.read(), 30)
+            second = await tab.read()
+            return first, second, loop.time() - started
+        first, second, spent = self.run_tab(steps)
+        self.assertIn("Main content", first)
+        self.assertIn("Main content", second)
+        self.assertLess(spent, 10)
+
+    def test_form_finds_fields_by_the_reader_s_name_and_inside_frames(self):
+        async def steps(tab):
+            await tab.act("goto", {"url": "/plain"})
+            plain = await tab.form([{"field": "Quantity", "value": "7"}, {"field": "Ø Pressure", "value": "16 bar"},
+                                    {"click": "Send"}])
+            values = await tab.page.input_value("[name=q]"), await tab.page.input_value("[name=p]")
+            title = await tab.page.title()
+            loop = asyncio.get_running_loop()
+            started = loop.time()
+            missing = await tab.form([{"field": "Colour", "value": "red"}])
+            spent = loop.time() - started
+            await tab.act("goto", {"url": "/framed"})
+            framed = await tab.form([{"field": "Bore", "value": "50"}, {"click": "Apply choice"},
+                                     {"field": "Stroke", "value": "600"}])
+            return plain, values, title, missing, spent, framed
+        plain, values, title, missing, spent, framed = self.run_tab(steps)
+        self.assertNotIn("FAILED", plain.split("\n", 1)[0])
+        self.assertEqual(values, ("7", "16 bar"))
+        self.assertEqual(title, "sent")
+        self.assertIn("FAILED", missing.split("\n", 1)[0])
+        self.assertLess(spent, 4.0)
+        self.assertNotIn("FAILED", framed.split("\n", 1)[0])
 
 
 if __name__ == "__main__":
