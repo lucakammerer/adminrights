@@ -138,10 +138,31 @@ never fire (old code hangs to the test's 10 s guard, new one returns in < 2.5 s)
 clean, reviewer PASS (gap noted: if a tab is truly frozen rather than throttled, the dialog sweep after the loop has
 no bound; add one if stalls persist).
 
-Runs (3258746): run_590a955bd423bbac, run_01a5fe851c09aba6 (started 01:50 UTC). Judge by: any `read`/action on an
-idle tab taking > 30 s (submit's first read after the bid, `get_tan`), quality, signing.
+Runs (3258746): run_590a955bd423bbac 90.5 / 11:03 / $0.252 / 167 $·s (no stall; 01.01 quantity 26 instead of 25 from
+the requirements resolver, unrelated), run_01a5fe851c09aba6 100 / 14:49 / $0.273 / 242.8 $·s, **with** the stall on
+a busy tab: a `form` step clicked a configurator button at 572 s, then nothing until the model's `goto` at 721 s.
+Hypothesis refuted. The screenshot at 10:30 shows the tab's loading spinner: the button's form POST never got an
+answer. Reproduced locally (a POST the test server never answers): while it is pending, Playwright's
+`page.evaluate("1")` hangs (it waits for the new document), so every read, click fallback and form step on the tab
+waits out the tool timeout; the click itself fails after 5 s. `goto` or CDP `Page.stopLoading` free the page at once
+(stopLoading keeps typed inputs). Reverted 3258746 (74f20cd).
+
+Change 9d32034: `Tab` watches main-frame navigation requests; one without a response after 30 s (`goto`'s own
+limit) is stopped with `Page.stopLoading` and the model told (method, URL, "may not have taken effect: check the
+page"). Test: a form POST without an answer, then a click on it: < 14 s with the limit at 2 s (old code hung to the
+test's guard). Gate: check_release green, audit clean, reviewer PASS (accepted risk: a server slower than 30 s that
+still acts on the POST may get it twice; the tab was stuck anyway). Runs (9d32034): run_86571e2d5c35436b,
+run_3af67abb1c0fe79b (started 02:20 UTC). Judge by: `no answer to` events and what the model did after them, gaps
+over 60 s on the submit tab, quality, signing.
 
 ## Backlog
+
+- In-page `fetch` without an answer: `FETCH_ABORT` 40 s, then the model retries and gets through at once
+  (run_01a5fe851c09aba6, TAN look-up 824→864 s, retry 6 s). Try abort 20 s plus one automatic retry inside
+  `Tab.fetch` (same worst case, typical recovery ~20 s sooner); the timer only covers the time to the headers.
+- `Tab.click`: when Playwright's click times out because the click started a navigation that hasn't answered, the
+  DOM-click fallback clicks the same control again once the page is free: a second request. Seen only in the local
+  reproduction so far.
 
 - Frozen pages (see iteration 3 "Next idea"): 75-207 s per run in run_6038f546123323a1 and run_d0283ff8e1a3187d,
   both on the submit agent's tender-portal tab after the bid.
