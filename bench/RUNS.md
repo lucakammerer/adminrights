@@ -5,6 +5,8 @@ logged answer scored by `eval/compare.py` (what the bid would have scored if sig
 
 | Date (UTC) | Run | Commit | Platform | Eval | Time | Cost | Outcome and top problem (owner) |
 | --- | --- | --- | --- | --- | --- | --- | --- |
+| 2026-10-11 05:20 | run_4e307d86869b4141 | luca/night-score@b942b04 | 100, eligible | – | 6 min (372 s) | $0.156 | 58.1 $·s; 215 calls, up to 11 at once. |
+| 2026-10-11 05:20 | run_f63b9812b45ac269 | luca/night-score@b942b04 | 100, eligible | – | 7 min (430 s) | $0.133 | 57.3 $·s; 201 calls. |
 | 2026-10-11 05:11 | run_e36d97ed806dea22 | luca/night-score@b942b04 | 100, eligible | – | 6 min (345 s) | $0.135 | 46.7 $·s; one twin, it answered: the silent-twin retry did not fire. |
 | 2026-10-11 05:11 | run_f070cde80a0f6a81 | luca/night-score@b942b04 | 100, eligible | – | 8 min (469 s) | $0.142 | 66.4 $·s; no twin: the silent-twin retry did not fire. |
 | 2026-10-11 04:57 | run_aeaefa93edce1937 | luca/night-score@cd967a0 | 100, eligible | – | 5 min (320 s) | $0.121 | Same package: 38.8 $·s, best Qwen run of the night. |

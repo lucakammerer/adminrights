@@ -2,62 +2,46 @@
 
 ## Morning summary
 
-Best candidate: **b942b04**, the branch tip: cd967a0 + an insurance fix in `llm.chat` (a call dropped silent while
-its twin is silent too is asked again at once, ~10 s saved per such stall; fired in neither of its two runs:
-run_e36d97ed806dea22 100 / 5:45 / $0.135 / 46.7 $·s, run_f070cde80a0f6a81 100 / 7:49 / $0.142 / 66.4 $·s).
-Merging cd967a0 alone is equally fine if b942b04 looks unnecessary. Evidence for the code line below:
-cd967a0's own six runs, all 100 and signed: run_aeaefa93edce1937 5:20 / $0.121 / **38.8 $·s**, run_6fd78246ef5da521
-5:12 / $0.139 / 43.2 $·s, run_2bfbe16b551a62a3 5:17 / $0.144 / 45.6 $·s, run_f17b48d291a7d8fd 6:15 / $0.136 /
-51.1 $·s, run_abc7db6e7a9804f9 8:24 / $0.182 / 91.8 $·s, run_ddc02354bde271f3 10:41 / $0.160 / 102.6 $·s (slow model
-hour), median 48.4 $·s. With its unchanged predecessors (2c5dd5f, 38d5b42), 12 Qwen runs in a row at 100 and signed:
-38.8, 43.2, 45.6, 46.6, 49.6, 51.1, 61.3, 61.5, 79.0, 87.7, 91.8, 102.6 $·s, median 56.2. Our Haiku submission:
-70 $·s ($0.204, 5:43); rank 1: 25 $·s. The 2.6x spread is load and model wander, not the code. On Haiku the branch
-is untested tonight (OpenRouter path untouched). A submission is one run, so expect anything from ~39 to ~100 $·s on
-Qwen: 8 of 12 runs beat our 70 $·s submission, none reached rank 1's 25.
+State at 07:30 (2026-10-11). Leaderboard: our best submission (Haiku, 70 $·s, $0.204 / 5:43) has slipped to
+**rank 9**; rank 1 was about 25 $·s at the start of the night. No test run of mine is open.
 
-Previous best: **58f933b** (5c1668a + the night-gen merge 1920ba1 + the no-match check fix): run_92428b63f6b01b4e
-100 / 6:51 / $0.131 / **53.6 $·s**, run_28c8d1f903003c25 85.3 / 6:34 / $0.132 / 52.3 $·s (one ERP search hit its
-40-step limit before the price page). Cost × time is now below our Haiku submission's 70 $·s on Qwen, but quality
-is not yet steady: 2 of the last 4 runs missed 100. 5c1668a's pair: run_96d33dd7b340c037 100 / 6:34 / $0.142 / **56.1 $·s**
-(best Qwen run of the night, below our Haiku submission's 70 $·s; rank 1: 25 $·s) and run_7d633f73aa69af53 **5**: a
-no_bid from a bug in 5f858c2 (a changed requirement never reached the ERP no-match check), fixed in 58f933b.
-**Do not merge 5f858c2 without 58f933b.** Earlier pairs: 5f858c2 167.2 / 172.4 $·s, fcac256 167.2 / 147.6 $·s.
-Main-based night-gen runs on Qwen: 85.8 and 121.6 $·s, so the radical-speed structure on this branch is not shown
-to beat main on Qwen; single runs vary 2× with load.
-Merge to main, each worth it on its own:
-- cd967a0 (agent): the four start pages load side by side, each within `OPEN_TIMEOUT` (20 s), a missed one stopped.
-  Before, they loaded one after another with a 30 s goto timeout, and a hung mailbox start page held every agent
-  3→35 s in 2 of 6 runs (run_b5bfbb3ed5ed5292, run_28dc851b508f1f3c). Reviewer PASS. Insurance: it fired in neither
-  of its two runs.
-- 38d5b42 (llm): a `fetch` of a kept page whose content is unchanged gets "unchanged since you kept it as evidence
-  #n" appended (a search re-checked kept pages 14 times in run_0a26a180075ecc2c and hit its step limit). Its pair:
-  run_822da1971e1635d9 100 / 61.5 $·s, run_28dc851b508f1f3c 100 / 87.7 $·s (phase 1 slow); no refetch in either,
-  so insurance only. Address-only first version was rejected by the reviewer (false "kept" on hash routes and
-  state-dependent pages); the kept one matches address and content.
-- 2c5dd5f (erp): a search cut by its 40-step limit, a material chosen but required facts unkept, with >= 120 s left,
-  gets one follow-up of at most 12 steps on the same tab, driven by extract's gap list. Insurance, never fired live.
-- 58f933b (agent): goes with 5f858c2. The no-match check (a second ERP search) now gets the changed requirement
-  too; without it a no_match decided on the specification's values became a no_bid (run_7d633f73aa69af53: 5).
-- 5c1668a (agent): the first TAN look-up's mailbox tab opens when the submission starts. TAN look-up 13 s and
-  36 s in its two runs (was 16-161 s).
-- 5f858c2 (agent, llm, erp): early ERP searches start from the specification; when the final requirements carry an
-  amendment the specification lacked, main used to cancel that search and start over (the last search to finish,
-  ~110 s). Now the running search of the same catalogue group gets the new values as a message; one that had
-  already decided runs again. Fired in both runs, 2 reviews (the first found the decided-search gap, fixed).
-- 9d32034 + fcac256 (browser, agent): a navigation the site never answers locks the tab: Playwright runs no script
-  on it until the navigation ends, so every read and form step waits out the 60 s tool timeout. Seen live twice
-  (a configurator POST: 150 s; the mailbox start page in `fresh`: two TAN agents forced, 6.5 min), reproduced
-  locally, both now freed after 30 s (CDP `Page.stopLoading`) and the model told.
-- a4b9d2c (calc): the setup fee comes from the commercials; the ERP's per-material fee only when they lack the
-  position. Fixed an 84.8 (double count). Judgement call, see iteration 2.
-- c31d89a (submit): the TAN look-up opens a new tab of the mailbox (same login). The mail agents' idle tab hung
-  45-150 s in 5 of 10 runs, main included; with the change 37 s and 63 s.
-- 4d4a37f (llm): a streamed call without its first chunk after 10 s gets a twin. 6-10 calls a run sat silent for 30 s
-  before; in run_c13fd1a74d3ad98c 9 twins, each answered in ~2 s, the originals never reached the platform.
-- 7cb21db (submit `form` hold): insurance, never fired live.
-Distrust: 3258746 (reverted in 74f20cd), whose idle-tab throttling theory was wrong; f5e86da (radical-speed merge),
-not shown faster on Qwen, load noise dominates single runs. Next loss to fix: the TAN look-up (the mailbox start
-page not loading in a new tab, 50 s in 2 of ~8 runs; the TAN agent wandering), see iteration 5.
+**Candidate: b942b04, the branch tip.** On the hosted Qwen, 16 runs in a row on this code line scored 100 and signed
+(2c5dd5f → 38d5b42 → cd967a0 → b942b04, the later ones adding only insurance and the parallel start pages):
+38.8, 43.2, 45.6, 46.6, 46.7, 49.6, 51.1, 57.3, 58.1, 61.3, 61.5, 66.4, 79.0, 87.7, 91.8, 102.6 $·s, median 57.7.
+11 of 16 beat our 70 $·s submission, none reached 25. The 2.6x spread comes from model load and from phase 1 step
+counts, not from the code.
+- b942b04 itself (4 runs, all 100): run_e36d97ed806dea22 46.7, run_f070cde80a0f6a81 66.4, run_f63b9812b45ac269
+  57.3, run_4e307d86869b4141 58.1 $·s (median 57.7). Its own change (ask again when a dropped call's twin is silent
+  too) fired in none of them: insurance.
+- cd967a0 (6 runs, all 100): 38.8, 43.2, 45.6, 51.1, 91.8, 102.6 $·s (median 48.4). Merging cd967a0 without
+  b942b04 is equally defensible.
+
+**What to merge, in this order** (oldest first; each commit is reviewed, release check green, audit clean). Easiest:
+merge the branch tip b942b04 as a whole. If cherry-picking, keep these pairs together:
+1. 7cb21db, 4d4a37f, c31d89a, a4b9d2c: submit `form` hold, twin for a silent streamed call (10 s), TAN look-up in a
+   new mailbox tab, setup fee from the commercials (fixed an 84.8 double count; judgement call, iteration 2).
+2. 9d32034 + fcac256: a navigation the site never answers is stopped after 30 s (CDP `Page.stopLoading`) instead of
+   locking the tab for 60 s per tool call.
+3. 5f858c2 **+ 58f933b, never one without the other**: the running early ERP search gets an amended requirement as
+   a message instead of starting over (~110 s); 58f933b passes the changed requirement to the no-match check
+   (without it: a false no_bid, run_7d633f73aa69af53 scored 5).
+4. 5c1668a: the first TAN mailbox tab opens when the submission starts (TAN look-up 13-36 s, was 16-161 s).
+5. 2c5dd5f: one follow-up ERP search of at most 12 steps when a search hits its step limit with required facts
+   unkept (insurance; never fired).
+6. 38d5b42: a refetch of an unchanged kept page says it is already kept (insurance against step-limit loops).
+7. cd967a0: the four start pages load side by side, each within 20 s (a hung mailbox start page cost every agent
+   ~30 s in 2 of 6 runs before).
+8. b942b04: the silent-twin retry (insurance).
+
+**Unproven / distrust**
+- Everything ran on Qwen only. The OpenRouter (Haiku) path was left untouched but is untested on this branch: before
+  submitting on Haiku, one Haiku test run of the tip.
+- All runs are public-1. Every agent/ commit passed the adversarial generalization review, but none is measured on an
+  unseen site; run `tools/stress/` if time allows.
+- Insurance commits (7cb21db, 2c5dd5f, 38d5b42, b942b04) never fired live; they are kept for robustness, not speed.
+- 3258746 was wrong (reverted in 74f20cd). f5e86da (the radical-speed merge) is not shown faster than main on Qwen.
+- A submission is one run: on Qwen expect anything from ~39 to ~100 $·s. Rank 1 (25 $·s) needs a structural cut
+  (fewer resolver calls, phase 1 steps), not more tuning; see the backlog.
 
 ## Iterations
 
@@ -438,8 +422,12 @@ Verdict: keep as insurance. Not worse on quality or signing (14 Qwen runs in a r
 gain is only on the rare double-silent call and can't show in two runs. Next idea: phase 1 spread (generalization
 owner's area) is the largest remaining variance.
 
-One more pair of b942b04 for the morning decision, started 07:20, still to collect: run_f63b9812b45ac269,
-run_4e307d86869b4141.
+One more pair of b942b04 for the morning decision (07:20): run_f63b9812b45ac269 100 / 7:10 / $0.133 / 57.3 $·s,
+run_4e307d86869b4141 100 / 6:12 / $0.156 / 58.1 $·s, both signed. b942b04: 4 runs, all 100, median 57.7 $·s.
+
+### 13 · 07:28 · Final: collect, summarize
+
+No agent change, no run started. Collected the 07:20 pair above, rewrote the Morning summary.
 
 ## Backlog
 
