@@ -153,6 +153,35 @@ extra call, and a failed or late retry keeps the first answer.
 Next: measure the partial-answer rate with `tools/resolver_eval.py --repeat 8` once the local 429s stop; if it is
 more than rare, a hedged pair (`first` that accepts only answers with positions) would save the retry's 100 s.
 
+### 5 · 2026-10-11 03:45 · browser: office files and non-UTF-8 text in downloads
+
+Hypothesis: trap 8 says values may sit in downloaded files, and the private dataset "splits information differently".
+`describe_file` read only PDF, ZIP and UTF-8 text. Probes (old code): a UTF-16 export (Excel "Unicode text") came out
+as NUL-interleaved garbage, a Windows-1252 CSV lost `€` and umlauts, an XLSX came out as raw XML with every label in
+`sharedStrings.xml` cut off from its cell, dates as day serials, hidden sheets and rows included (decoys), and a DOCX
+as raw XML whose markup fills the 14k-char budget before the text ends. Any unseen portal that ships a price list
+as XLSX or a specification as DOCX would hand the model unusable text.
+
+Fix (`browser.describe_file`, new `decode`, `office_text`, `xlsx_text`, stdlib only): text by BOM, UTF-16 without
+BOM, UTF-8, else Windows-1252 (only when invalid sequences outnumber valid ones); XLSX/ODS row by row, cells
+tab-separated at their column, date-formatted cells as ISO dates (1900 and 1904 systems), hidden sheets, rows and
+columns dropped; DOCX/ODT/PPTX paragraph by paragraph, table cells tab-separated, hidden runs, deleted tracked changes,
+ODF hidden text, collapsed rows and hidden slides dropped. Anything that fails or is no office file falls back to the
+old member listing. Public-1 ships a ZIP of UTF-8 CSV/TXT: the office path is never taken and valid UTF-8 decodes
+identically, so its reading is unchanged by construction.
+
+Evidence: new test `test_office_files_and_other_encodings_are_read` fails on the old code, passes now; files written
+by openpyxl and python-docx read correctly (labels next to values, date as `2026-03-01`, hidden run dropped);
+malformed 2 MB part 0.44 s. 98 tests and `check_release.sh` green, audit clean. Adversarial review round 1 PASS with
+gaps (cp1252 fallback on one stray byte: a regression; tracked-change deletions, hidden columns/slides, ODF hidden
+text leaking; uncaught `TypeError`; empty text for Strict OOXML; 1904 dates; time formats as dates), all fixed.
+Round 2 PASS; two of its low edges fixed too (a literal `\ufffd` in valid UTF-8, moved-away text shown twice).
+Left by choice: style-based hiding (needs style resolution), multi-paragraph table cells split a row, hidden runs
+over 5000 chars (bound against slow matching on malformed XML), ODF conditional hidden text always dropped.
+
+Commit 0c59c29. Sandbox control `run_99fdafd5b89f1999` started 04:0x (public-1 cannot exercise the new path; it checks
+the branch head with all five changes for regressions).
+
 ## Backlog
 
 - Under a 429 burst the gathering agents lose whole stages (`gen-new-ctrl`: every commercial field). If the sandbox's
