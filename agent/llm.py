@@ -193,7 +193,7 @@ async def ask_json(system: str, user: str, effort: str | None = None) -> dict:
     messages = [{"role": "system", "content": system}, {"role": "user", "content": user}]
     extra = {"reasoning_effort": effort} if effort else {}
     for _ in range(3):
-        reply = await chat(messages, response_format={"type": "json_object"}, hosted=True, **extra)
+        reply = await chat(messages, response_format={"type": "json_object"}, **extra)
         text = reply.choices[0].message.content or ""
         value = parse_object(text)
         if value is not None:
