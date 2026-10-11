@@ -176,7 +176,9 @@ Every browser agent is the same loop; agents differ only in mission, result sche
   and typed the same login 40 times in every tab, its calls take 3-13 s and end at the silence limit unstreamed too), so that silence tells a stuck call from a slow one: an attempt that brings
   no byte for `SILENCE` (30 s; 60 s on a retry) is dropped and asked again. A healthy stream starts within seconds;
   stuck calls never reach the model and used to hold their stage to the cap (run_76abdc35df9c092b: six, among them
-  three of the four ERP searches' first calls).
+  three of the four ERP searches' first calls). A streamed attempt without its first chunk after `FIRST_CHUNK` (10 s)
+  gets a twin like an OpenRouter call and keeps running; the first answer wins (6-10 silent Qwen calls a run cost
+  30 s each before).
 - **Cut agents keep their evidence:** every `investigate` registers its evidence list in `llm.KEPT`, one per stage
   (`agent.start`); a stage that is cut or fails hands those pages on, marked `forced`.
 - **Shared system prompt** `agents/common.py` `SYSTEM`: the sites' traps in general terms, no site and no value.

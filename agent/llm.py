@@ -43,6 +43,10 @@ SILENCE = 30
 # An OpenRouter call without an answer after HEDGE seconds gets a twin, and the first answer wins: about one call in six
 # never came back (one held a tender agent's first step for 240 s), while answered calls took 3-13 s.
 HEDGE = 15
+# A streamed call without its first chunk after FIRST_CHUNK seconds gets a twin the same way, and keeps running: 6-10
+# hosted Qwen calls a run sat silent until SILENCE (run_ba99f2d4eb2f586e: three on the slowest ERP search), while the
+# platform's queue wait for answered calls was p95 1-14 s.
+FIRST_CHUNK = 10
 
 # The time by which every model call in this task must be over (set by agent.safe for each stage) and the longest
 # one call may take. chat enforces both on the wall clock: the HTTP timeout only bounds the silence between bytes, and
@@ -94,9 +98,11 @@ def client(fallback: bool = False) -> AsyncOpenAI:
     return _client
 
 
-async def reply(messages: list, tools: list | None, silence: float, fallback: bool = False, **kwargs):
-    """One streamed model reply, assembled like a non-streamed one; every read must bring a byte within `silence`. The
-    snapshot, not get_final_completion: that raises on a reply cut at its length limit, which counted before."""
+async def reply(messages: list, tools: list | None, silence: float, fallback: bool = False,
+                heard: asyncio.Event | None = None, **kwargs):
+    """One streamed model reply, assembled like a non-streamed one; every read must bring a byte within `silence`, and
+    `heard` is set at the first chunk. The snapshot, not get_final_completion: that raises on a reply cut at its length
+    limit, which counted before."""
     extra = {"extra_body": CACHE} if CACHE and not fallback else {}
     if OPENROUTER and not fallback:  # streamed, Haiku repeated the same login 40 times in every tab
         # (run_ac62aa59878278d0); unstreamed it worked (run_0bf3628e04112a0c). Its calls take 3-13 s, so a silent one
@@ -111,6 +117,8 @@ async def reply(messages: list, tools: list | None, silence: float, fallback: bo
         async for chunk in stream:
             state.handle_chunk(chunk)
             chunks += 1
+            if heard:
+                heard.set()
     if not chunks or not state.current_completion_snapshot.choices:
         raise ValueError("the reply stream brought no message")
     return state.current_completion_snapshot
@@ -127,19 +135,22 @@ async def chat(messages: list, tools: list | None = None, hosted: bool = False, 
         limit = min(CAP.get(), left)
         began = time.time()
         fallback = OPENROUTER and (hosted or attempt >= 3) and "QWEN_BASE_URL" in os.environ
-        hedge = OPENROUTER and not fallback
+        heard = asyncio.Event()  # never set for an unstreamed OpenRouter reply: its twin waits for the answer
 
-        def ask() -> asyncio.Future:
+        def ask(heard: asyncio.Event) -> asyncio.Future:
             call = asyncio.ensure_future(reply(messages, tools, min(SILENCE * (2 if attempt else 1), limit), fallback,
-                                               **kwargs))
+                                               heard, **kwargs))
             call.add_done_callback(lambda c: c.cancelled() or c.exception())  # a dropped call's failure stays quiet
             return call
-        calls = [ask()]
+        calls = [ask(heard)]
+        listening = asyncio.ensure_future(heard.wait())
         try:
             # asyncio.wait, not wait_for: wait_for waits until the cancelled call has stopped, a cut never does
-            await asyncio.wait(calls, timeout=min(HEDGE, limit) if hedge else limit)
-            if hedge and not calls[0].done():
-                calls.append(ask())
+            await asyncio.wait([calls[0], listening], return_when=asyncio.FIRST_COMPLETED,
+                               timeout=min(HEDGE if OPENROUTER and not fallback else FIRST_CHUNK, limit))
+            if not calls[0].done() and not heard.is_set():
+                print(f"[llm] twin after {time.time() - began:.0f} s without a reply", flush=True)
+                calls.append(ask(asyncio.Event()))
             while True:
                 answered = [c for c in calls if c.done() and not c.cancelled() and c.exception() is None]
                 if answered:
@@ -158,6 +169,7 @@ async def chat(messages: list, tools: list | None = None, hosted: bool = False, 
                   flush=True)
             await asyncio.sleep(min(2 + 3 * attempt, max(0.0, UNTIL.get() - time.time() - 5)))
         finally:
+            listening.cancel()
             for call in calls:
                 call.cancel()  # no-op once done; frees the connection of a call over its time or of a cut stage
 

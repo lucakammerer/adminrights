@@ -146,6 +146,17 @@ class StuckCallAskedAgain(unittest.TestCase):
         self.assertEqual((call.id, call.function.name), ("c1", "finish"))
         self.assertEqual(json.loads(call.function.arguments), {"result": {"material_number": "M-1"}})
 
+    def test_call_without_a_first_chunk_gets_a_twin(self):
+        serve, requests = streaming([None, TOOL_STREAM], silent_first=True)
+        real, llm.FIRST_CHUNK = llm.FIRST_CHUNK, 0.3
+        try:
+            reply, seconds = ask(serve)  # the silent call alone would be dropped only after 30 s
+        finally:
+            llm.FIRST_CHUNK = real
+        self.assertEqual(len(requests), 2)
+        self.assertLess(seconds, 5)
+        self.assertEqual(reply.choices[0].message.tool_calls[0].function.name, "finish")
+
     def test_streamed_reply_reads_like_a_plain_one(self):
         serve, _ = streaming([[chunk({"role": "assistant", "content": "{\"a\""}), chunk({"content": ": 1}"}, "length")]])
         reply, _ = ask(serve)
