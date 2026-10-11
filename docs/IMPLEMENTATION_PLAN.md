@@ -163,7 +163,7 @@ Every browser agent is the same loop; agents differ only in mission, result sche
   one TAN request). One `form` call per page or position, a configurator's dependent choices each followed by its
   apply button, named by field label (refs are lost when a choice is applied) and sent without reading their options
   first (`form` matches an option by text, beginning or part, and a step without a match stops with the page's
-  options).
+  options; a choice still disabled after one wait stops with "apply the earlier choice first").
   First watchdog slice: `SIGN_BY` (180 s) before its deadline the agent is told to omit what isn't entered, request the
   TAN and sign, instead of the generic "call finish" (which once ended a run unsigned with 4 positions entered).
 

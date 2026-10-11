@@ -11,6 +11,7 @@ from urllib.parse import urljoin
 
 READER = (Path(__file__).parent / "reader.js").read_text()
 MAX_CHARS = 14000
+DISABLED = "e => e.matches(':disabled') || e.getAttribute('aria-disabled') === 'true'"
 OPEN_DETAILS = "e => { for (let d = e.closest('details'); d; d = d.parentElement?.closest('details')) d.open = true }"
 SETTLE_MAX = 1.5  # seconds a read waits at most for the page to settle (popups appear up to that long after load)
 # Every page of the tab tracks its pending short timers and its last DOM change, so a read waits exactly as long as
@@ -339,14 +340,23 @@ class Tab:
                         loc = page.get_by_label(label)
                     loc = loc.first
                 await loc.evaluate(OPEN_DETAILS)  # a field in a collapsed section can't be filled
+                if await loc.evaluate(DISABLED):  # a dependent choice a script may open a moment after the last step
+                    await self.settle()
+                    if await loc.evaluate(DISABLED):
+                        raise ValueError(f"{label} is disabled: if it depends on an earlier choice, apply that choice first (its "
+                                         "apply or next button), then send this step again")
                 tag = await loc.evaluate("e => e.tagName + ':' + (e.type || '')")
                 if tag.startswith("SELECT"):
-                    options = await loc.evaluate("e => [...e.options].map(o => [o.value, o.textContent.trim()])")
                     want = str(value).strip()
-                    pick = next((v for v, t in options if t == want), None) or next(
-                        (v for v, t in options if v == want), None) or next(
-                        (v for v, t in options if t.startswith(want + " ") or t.startswith(want + " ")), None) or next(
-                        (v for v, t in options if want in t), None)
+                    for attempt in range(2):  # options a script loads after the last step: wait for the page once
+                        options = await loc.evaluate("e => [...e.options].map(o => [o.value, o.textContent.trim()])")
+                        pick = next((v for v, t in options if t == want), None) or next(
+                            (v for v, t in options if v == want), None) or next(
+                            (v for v, t in options if t.startswith(want + " ") or t.startswith(want + " ")), None) or next(
+                            (v for v, t in options if want in t), None)
+                        if pick is not None or attempt:
+                            break
+                        await self.settle()
                     if pick is None:
                         raise ValueError(f"no option {want!r}; options: {[t for _, t in options][:40]}")
                     await loc.select_option(value=pick, timeout=5000)

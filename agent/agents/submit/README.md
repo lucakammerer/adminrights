@@ -22,7 +22,10 @@ bindingly. Without a submission the run scores 0.
   dependent choices each followed by its apply button; `form` opens collapsed sections around a field itself.
 - One `form` call per position: the mission sends the configurator's choices without reading their options first,
   because `form` picks an option by its exact text, its beginning or any part of it, and a step without a matching
-  option stops the call and lists the page's options. Test runs filled the configurator one choice per model call,
+  option stops the call and lists the page's options. A choice that is still disabled (or still lacks the option) gets
+  one wait for the page; if it stays disabled, the step stops and says an earlier choice must be applied first, not
+  that the option is missing (before, a closed choice without options read as "no option", which invites rewording the
+  value; one test run set every choice before one apply and lost 9 minutes on the closed choice). Test runs filled the configurator one choice per model call,
   which was most of the submit agent's time. Where a configurator narrows its materials by the earlier choices, a
   wrong choice shows up as a material step without a match; `verify_summary` still checks prices and total.
   Choices are named by field label: refs are `data-aref` attributes written by `read`, so a re-render after an apply

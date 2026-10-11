@@ -65,6 +65,20 @@ class Site(BaseHTTPRequestHandler):
                              '<label>Note <input id="n" value="kept"></label>'
                              '<label class="fancy"><input type="checkbox" id="c" style="opacity:0;position:absolute">'
                              '<span style="position:relative;z-index:2;background:#eee">Accept</span></label>')
+        if path == "/config":  # a configurator whose dependent choice only opens once the first is applied
+            bore = parse_qs(self.path.partition("?")[2]).get("bore", [""])[0]
+            strokes = "".join(f"<option>{s}</option>" for s in ("200", "600")) if bore else ""
+            return self.page('<form action="/config"><label>Bore <select name="bore"><option value="">choose</option>'
+                             + "".join(f'<option{" selected" * (b == bore)}>{b}</option>' for b in ("50", "63"))
+                             + f'</select></label><label>Stroke <select name="stroke"{"" if bore else " disabled"}>'
+                             + f'<option value="">choose</option>{strokes}</select></label>'
+                             + '<button>Apply choice</button></form>')
+        if path == "/config-js":  # the same, opened by a script a moment after the first choice changes
+            return self.page('<label>Bore <select id="b"><option value="">choose</option><option>50</option></select>'
+                             '</label><label>Stroke <select id="s" disabled><option value="">choose</option></select>'
+                             '</label><script>document.getElementById("b").onchange = () => setTimeout(() => {'
+                             'const s = document.getElementById("s"); s.add(new Option("600")); s.disabled = false'
+                             '}, 600)</script>')
         return self.page("start")
 
     def do_POST(self):
@@ -204,6 +218,25 @@ class TabAgainstLocalSite(unittest.TestCase):
         self.assertEqual(title, "clicked")
         self.assertEqual(value, "kept")
         self.assertNotIn("None", value)
+
+    def test_a_disabled_dependent_choice_fails_fast_and_says_why(self):
+        async def steps(tab):
+            await tab.act("goto", {"url": "/config"})
+            loop = asyncio.get_running_loop()
+            started = loop.time()
+            unapplied = await tab.form([{"field": "Bore", "value": "50"}, {"field": "Stroke", "value": "600"}])
+            spent = loop.time() - started
+            applied = await tab.form([{"field": "Bore", "value": "50"}, {"click": "Apply choice"},
+                                      {"field": "Stroke", "value": "600"}])
+            await tab.act("goto", {"url": "/config-js"})
+            scripted = await tab.form([{"field": "Bore", "value": "50"}, {"field": "Stroke", "value": "600"}])
+            return unapplied, spent, applied, scripted
+        unapplied, spent, applied, scripted = self.run_tab(steps)
+        self.assertIn("FAILED", unapplied.split("\n", 1)[0])
+        self.assertIn("disabled", unapplied.split("\n", 1)[0])
+        self.assertLess(spent, 4.0)
+        self.assertNotIn("FAILED", applied.split("\n", 1)[0])
+        self.assertNotIn("FAILED", scripted.split("\n", 1)[0])
 
 
 if __name__ == "__main__":
