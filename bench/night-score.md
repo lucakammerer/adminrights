@@ -3,12 +3,14 @@
 ## Morning summary
 
 Best candidate: **cd967a0**, the branch tip's code (2c5dd5f + 38d5b42 + the start pages loaded side by side).
-cd967a0's own four runs, all 100 and signed: run_6fd78246ef5da521 5:12 / $0.139 / **43.2 $·s**, run_2bfbe16b551a62a3
-5:17 / $0.144 / 45.6 $·s, run_f17b48d291a7d8fd 6:15 / $0.136 / 51.1 $·s, run_ddc02354bde271f3 10:41 / $0.160 /
-102.6 $·s (a slow model hour), median 48.4 $·s. With its unchanged predecessors (2c5dd5f, 38d5b42), 10 Qwen runs in a
-row at 100 and signed: 43.2, 45.6, 46.6, 49.6, 51.1, 61.3, 61.5, 79.0, 87.7, 102.6 $·s, median 56.2. Our Haiku
-submission: 70 $·s; rank 1: 25 $·s. The 2x spread is load and model wander, not the code. On Haiku the branch is
-untested tonight (OpenRouter path untouched). A submission is one run, so expect anything from ~43 to ~100 $·s on Qwen.
+cd967a0's own six runs, all 100 and signed: run_aeaefa93edce1937 5:20 / $0.121 / **38.8 $·s**, run_6fd78246ef5da521
+5:12 / $0.139 / 43.2 $·s, run_2bfbe16b551a62a3 5:17 / $0.144 / 45.6 $·s, run_f17b48d291a7d8fd 6:15 / $0.136 /
+51.1 $·s, run_abc7db6e7a9804f9 8:24 / $0.182 / 91.8 $·s, run_ddc02354bde271f3 10:41 / $0.160 / 102.6 $·s (slow model
+hour), median 48.4 $·s. With its unchanged predecessors (2c5dd5f, 38d5b42), 12 Qwen runs in a row at 100 and signed:
+38.8, 43.2, 45.6, 46.6, 49.6, 51.1, 61.3, 61.5, 79.0, 87.7, 91.8, 102.6 $·s, median 56.2. Our Haiku submission:
+70 $·s ($0.204, 5:43); rank 1: 25 $·s. The 2.6x spread is load and model wander, not the code. On Haiku the branch
+is untested tonight (OpenRouter path untouched). A submission is one run, so expect anything from ~39 to ~100 $·s on
+Qwen: 7 of 12 runs beat our 70 $·s submission, none reached rank 1's 25.
 
 Previous best: **58f933b** (5c1668a + the night-gen merge 1920ba1 + the no-match check fix): run_92428b63f6b01b4e
 100 / 6:51 / $0.131 / **53.6 $·s**, run_28c8d1f903003c25 85.3 / 6:34 / $0.132 / 52.3 $·s (one ERP search hit its
@@ -407,8 +409,20 @@ A saving of ~15 s can't be told apart from the 2x run spread in two runs.
 Instead one more pair of the unchanged tip cd967a0 for the morning decision: run_abc7db6e7a9804f9,
 run_aeaefa93edce1937 (started 06:57).
 
+Results (cd967a0): run_aeaefa93edce1937 100 / 5:20 / $0.121 / **38.8 $·s** (best Qwen run of the night),
+run_abc7db6e7a9804f9 100 / 8:24 / $0.182 / 91.8 $·s. run_abc7: 265 model calls (the fast runs make far fewer, so
+the model wandered more), and one stall of 43 s at 6:07: a submit step's call got its twin at 10 s, both stayed silent
+and the twin timed out at 40 s before the retry answered (1 of 4 twins that run; none in the other two runs looked
+at). cd967a0 now 6 runs, all 100 and signed: 38.8, 43.2, 45.6, 51.1, 91.8, 102.6 $·s, median 48.4.
+
+Verdict: no code change; the tip holds. Next idea: when the original call ends silent at SILENCE while its twin is
+still waiting, retry right away instead of waiting out the twin's own SILENCE (would have saved ~10 s here); rare,
+so insurance only.
+
 ## Backlog
 
+- Both a call and its twin silent (run_abc7db6e7a9804f9, 43 s): retry as soon as the original is dropped at SILENCE
+  instead of waiting out the twin; rare (1 of ~4 twins in one run of 3).
 - `specs` at effort low (iteration 11: 17 s at medium in a slow run, not on the critical path; low priority): it only starts the early ERP searches and `requirements` corrects it, yet at medium it took
   60 s and timed out into the low backup in run_b4c23813dd122d18 (early searches ~60 s later). Measure low vs medium
   offline first (`/tmp`-style script calling `resolvers.specs` on `eval/fixtures/resolvers`); at 05:30 the local

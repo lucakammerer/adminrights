@@ -5,6 +5,8 @@ logged answer scored by `eval/compare.py` (what the bid would have scored if sig
 
 | Date (UTC) | Run | Commit | Platform | Eval | Time | Cost | Outcome and top problem (owner) |
 | --- | --- | --- | --- | --- | --- | --- | --- |
+| 2026-10-11 04:57 | run_aeaefa93edce1937 | luca/night-score@cd967a0 | 100, eligible | – | 5 min (320 s) | $0.121 | Same package: 38.8 $·s, best Qwen run of the night. |
+| 2026-10-11 04:57 | run_abc7db6e7a9804f9 | luca/night-score@cd967a0 | 100, eligible | – | 8 min (504 s) | $0.182 | Same package, 91.8 $·s: 265 calls (busy 1-5 min); one submit step's call and its twin both silent, timed out at 40 s (43 s stall at 6:07). |
 | 2026-10-11 04:45 | run_6fd78246ef5da521 | luca/night-score@cd967a0 | 100, eligible | – | 5 min (312 s) | $0.139 | Same package: 43.2 $·s, best Qwen run of the night; no start page hung. |
 | 2026-10-11 04:45 | run_2bfbe16b551a62a3 | luca/night-score@cd967a0 | 100, eligible | – | 5 min (317 s) | $0.144 | Same package: 45.6 $·s; no start page hung. |
 | 2026-10-11 04:33 | run_ddc02354bde271f3 | luca/night-score@cd967a0 | 100, eligible | – | 11 min (641 s) | $0.160 | Same package, 102.6 $·s: slow model (~40 tok/s, calls up to 65 s), requirements answer at 362 s with an amendment told to the running search (bid 467 s), one 50 s submit step. |
