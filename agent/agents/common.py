@@ -61,9 +61,12 @@ def system(task: dict) -> str:
 
 def reference(brief: str) -> str:
     """The tender reference: the first identifier the brief puts in parentheses (no spaces, with a digit), preferring
-    one with letters or separators over a bare number such as a year."""
-    found = re.findall(r"\(([A-Za-z0-9][\w./-]*\d[\w./-]*)\)", brief or "")
-    return next((f for f in found if not f.isdigit()), found[0] if found else "")
+    one with letters or separators over a bare number such as a year. One behind a short label word (an abbreviation
+    for "reference") counts only with letters and a separator, so a cited rule, version or standard number does not."""
+    found = re.findall(r"\((?:([^\W\d_]{1,12}\.?:?)\s+)?([A-Za-z0-9][\w./-]*\d[\w./-]*)\)", brief or "")
+    bare = [f for label, f in found if not label]
+    labelled = [f for label, f in found if label and re.search(r"[A-Za-z]", f) and re.search(r"[./-]", f)]
+    return next((f for f in bare if not f.isdigit()), next(iter(labelled + bare), ""))
 
 
 # What the brief says about mail records, read from this run's brief: never typed into a mission.

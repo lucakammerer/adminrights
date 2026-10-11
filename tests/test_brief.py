@@ -72,6 +72,9 @@ class SyntheticBrief(unittest.TestCase):
         self.assertEqual(reference(SYNTHETIC), "TX-0001-0042")
         self.assertEqual(reference("Framework (2030) for pumps (TX-0001-0042)."), "TX-0001-0042")  # a year is no reference
         self.assertEqual(reference("Order (4711)."), "4711")  # a bare number when there is nothing else
+        self.assertEqual(reference("Tender (2030) for pumps (Ref. TX-0001-0042)."), "TX-0001-0042")  # behind a label word
+        self.assertEqual(reference("Weld to (EN 1090-2). Tender (TX-0001-0042)."), "TX-0001-0042")  # unlabelled first
+        self.assertEqual(reference("See (rule 4.2) and (Annex A3). Order (482913)."), "482913")  # a cited number is no label
 
 
 # The same rules in other list shapes a private brief may use.
