@@ -142,21 +142,41 @@ def compute(facts: dict) -> dict:
             "omitted": omitted, "trace": "\n".join(trace + [f"omitted (unfinished): {omitted}"] * bool(omitted))}
 
 
+SPACE = r"[\s\u00a0\u202f\u2009'’]"  # grouping as in 1 234,50 or 1'234.50
+COMMA_LANGUAGES = "de fr es it nl pt pl cs sk sl hr ru uk sv da fi nb nn no tr hu ro bg el id lt lv et".split()
+
+
+def hinted_decimal(fmt: str) -> str | None:
+    """The decimal separator a format hint names: a sample ("1 234,56", "1.234,56"), a locale tag, or words."""
+    fmt = (fmt or "").strip()
+    sample = re.search(rf"\d{{1,3}}(?:(?:{SPACE}|[.,])\d{{3}})+[.,]\d+", fmt)
+    if sample:
+        return re.search(r"([.,])\d+$", sample.group(0)).group(1)
+    tag = re.match(r"([a-z]{2})(?:[-_]([a-z]{2})(?![a-z])|(?=[.;)]?$))", fmt, re.I)  # "de-DE format", not "no grouping"
+    if tag:
+        regions = ("CH", "LI", "MX", "US")  # their languages write a decimal comma elsewhere, a point here
+        return "," if tag[1].lower() in COMMA_LANGUAGES and (tag[2] or "").upper() not in regions else "."
+    if re.search(r"german|deutsch|decimal comma|comma decimal|dezimalkomma", fmt, re.I):
+        return ","
+    return "." if fmt else None
+
+
 def number(text, fmt: str = "") -> float:
-    """A number as shown. When the number itself shows its format (both separators, or one repeated), that wins;
-    a single separator follows the format hint (de-DE: decimal comma), else a lone comma is decimal."""
-    match = re.search(r"-?\d[\d.,]*", str(text))
+    """A number as shown. When the number itself shows its format, that wins: both separators, one repeated,
+    grouping by spaces or apostrophes, a lone separator not followed by exactly three digits, or a leading 0. Only
+    "12,345" and "12.345" follow the format hint, else a lone comma is decimal."""
+    match = re.search(rf"-?\d{{1,3}}(?:{SPACE}\d{{3}})+(?:[.,]\d+)?(?!\d)|-?\d[\d.,]*", str(text))
     if not match:
         return 0.0
-    s = match.group(0).rstrip(".,")
+    s = re.sub(SPACE, "", match.group(0)).rstrip(".,")
     if "," in s and "." in s:
         decimal = "," if s.rfind(",") > s.rfind(".") else "."
     elif s.count(",") > 1 or s.count(".") > 1:
         decimal = ""
-    elif fmt:
-        decimal = "," if re.search(r"\bde[-_]de\b|^de\b", fmt.strip(), re.I) else "."
-    else:
+    elif s != match.group(0).rstrip(".,") or not re.search(r"[.,]\d{3}$", s) or re.match(r"-?0[.,]", s):
         decimal = "," if "," in s else "."
+    else:
+        decimal = hinted_decimal(fmt) or ("," if "," in s else ".")
     if decimal == ",":
         return float(s.replace(".", "").replace(",", "."))
     return float(s.replace(",", "") if decimal == "." else s.replace(",", "").replace(".", ""))
