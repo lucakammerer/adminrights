@@ -113,11 +113,12 @@ GAP = _gap()
 
 def loose(label: str) -> re.Pattern | None:
     """The label as a case-insensitive pattern that lets invisible characters sit between its characters, as on a page
-    whose names the reader shows cleaned."""
+    whose names the reader shows cleaned, and lets its words run together, as in a control made of several icons whose
+    text alternatives the reader shows apart."""
     words = INVISIBLE.sub("", label).split()
     # a slash would end the pattern early in Playwright's /.../ selector syntax
     chars = [GAP.join(re.escape(c).replace("/", r"\/") for c in w) for w in words]
-    return re.compile((GAP + r"\s+" + GAP).join(chars), re.I) if words else None
+    return re.compile((GAP + r"\s*" + GAP).join(chars), re.I) if words else None
 
 
 class Tab:
@@ -361,7 +362,7 @@ class Tab:
                               for t in ("input:not([type=hidden])", "select", "textarea"))
         wrapped = None
         for attempt in range(2):  # a frame the last step reloaded may still be loading: wait for the page once
-            # exact, then partial, then with invisible characters between its letters; None: by title or name attribute
+            # exact, partial, loose (invisible characters between letters, spaces optional); None: title or name
             for exact in (True, False, "loose", None):
                 name = loose(label) if exact == "loose" else label
                 if not name:

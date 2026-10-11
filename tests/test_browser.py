@@ -97,7 +97,8 @@ class Site(BaseHTTPRequestHandler):
                              'placeholder="Re\u00adference/No"><button onclick="document.title=\'sent\'">Se\u200bnd</button>')
         if path == "/icons":  # labels and buttons named only by an icon's text alternative
             return self.page('<label for="r"><span role="img" aria-label="Receipt number"></span></label><input id="r">'
-                             '<button onclick="document.title=\'sent\'"><img src="data:," alt="Send"></button>')
+                             '<button onclick="document.title=\'sent\'"><img src="data:," alt="Send">'
+                             '<i aria-label="Mail"></i></button>')
         if path == "/stall":  # a frame source that never answers (an ad or chat server)
             time.sleep(20)
             return None
@@ -348,11 +349,11 @@ class TabAgainstLocalSite(unittest.TestCase):
         async def steps(tab):
             await tab.act("goto", {"url": "/icons"})
             text = await tab.read()
-            log = await tab.form([{"field": "Receipt number", "value": "64"}, {"click": "Send"}])
+            log = await tab.form([{"field": "Receipt number", "value": "64"}, {"click": "Send Mail"}])
             return text, log, await tab.page.input_value("#r"), await tab.page.title()
         text, log, value, title = self.run_tab(steps)
         self.assertRegex(text, r'input type=text "Receipt number"')
-        self.assertRegex(text, r'button "Send"')
+        self.assertRegex(text, r'button "Send Mail"')
         self.assertNotIn("FAILED", log.split("\n", 1)[0])
         self.assertEqual((value, title), ("64", "sent"))
 
