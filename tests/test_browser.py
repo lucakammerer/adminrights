@@ -92,6 +92,9 @@ class Site(BaseHTTPRequestHandler):
             return self.page('<input name="q" placeholder="Quantity"><input type="hidden" name="Quantity"><select name="p" title="Ø Pressure"><option>choose'
                              '</option><option>16 bar</option></select><div role="button" onclick="document.title='
                              '\'sent\'">Send</div>')
+        if path == "/marked":  # names with invisible marks inside, which the reader shows cleaned
+            return self.page('<label>Deli\u200eve\u2063ry\u2060 date <input name="d"></label><input name="n" '
+                             'placeholder="Re\u00adference/No"><button onclick="document.title=\'sent\'">Se\u200bnd</button>')
         if path == "/stall":  # a frame source that never answers (an ad or chat server)
             time.sleep(20)
             return None
@@ -325,6 +328,17 @@ class TabAgainstLocalSite(unittest.TestCase):
         self.assertIn("FAILED", missing.split("\n", 1)[0])
         self.assertLess(spent, 4.0)
         self.assertNotIn("FAILED", framed.split("\n", 1)[0])
+
+    def test_form_finds_names_with_invisible_marks_inside(self):
+        async def steps(tab):
+            await tab.act("goto", {"url": "/marked"})
+            log = await tab.form([{"field": "Delivery date", "value": "2027-02-01"},
+                                  {"field": "Reference/No", "value": "X-1"}, {"click": "Send"}])
+            return log, await tab.page.input_value("[name=d]"), await tab.page.input_value("[name=n]"), \
+                await tab.page.title()
+        log, date, ref, title = self.run_tab(steps)
+        self.assertNotIn("FAILED", log.split("\n", 1)[0])
+        self.assertEqual((date, ref, title), ("2027-02-01", "X-1", "sent"))
 
 
 if __name__ == "__main__":

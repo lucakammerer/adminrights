@@ -89,6 +89,32 @@ CHROME_SEEN = 2
 CONTROL = re.compile(r"\[\d+:")
 
 
+def _gap() -> str:
+    """Any run of invisible format characters, as a regex both Python and JavaScript (without the u flag) read:
+    characters beyond the BMP as their surrogate pairs."""
+    bmp, astral = [], {}
+    for c in INVISIBLE.pattern[1:-1]:
+        if ord(c) < 0x10000:
+            bmp.append(f"\\u{ord(c):04x}")
+        else:
+            high, low = divmod(ord(c) - 0x10000, 0x400)
+            astral.setdefault(0xD800 + high, []).append(f"\\u{0xDC00 + low:04x}")
+    pairs = [f"\\u{high:04x}[{''.join(lows)}]" for high, lows in astral.items()]
+    return "(?:" + "|".join([f"[{''.join(bmp)}]"] + pairs) + ")*"
+
+
+GAP = _gap()
+
+
+def loose(label: str) -> re.Pattern | None:
+    """The label as a case-insensitive pattern that lets invisible characters sit between its characters, as on a page
+    whose names the reader shows cleaned."""
+    words = INVISIBLE.sub("", label).split()
+    # a slash would end the pattern early in Playwright's /.../ selector syntax
+    chars = [GAP.join(re.escape(c).replace("/", r"\/") for c in w) for w in words]
+    return re.compile((GAP + r"\s+" + GAP).join(chars), re.I) if words else None
+
+
 class Tab:
     def __init__(self, page, site: dict):
         self.page = page
@@ -329,15 +355,20 @@ class Tab:
         attribute = ", ".join(f"{t}[{a}={quoted}]" for a in ("title", "name")
                               for t in ("input:not([type=hidden])", "select", "textarea"))
         for attempt in range(2):  # a frame the last step reloaded may still be loading: wait for the page once
-            for exact in (True, False, None):  # None: by title or name attribute, after every label
+            # exact, then partial, then with invisible characters between its letters; None: by title or name attribute
+            for exact in (True, False, "loose", None):
+                name = loose(label) if exact == "loose" else label
+                if not name:
+                    continue
                 for frame in self.page.frames:
                     if click:
-                        found = [frame.get_by_role("button", name=label, exact=exact),
-                                 frame.get_by_role("link", name=label, exact=exact)] if exact is not None else []
+                        found = [frame.get_by_role("button", name=name, exact=exact is True),
+                                 frame.get_by_role("link", name=name, exact=exact is True)] if exact is not None else []
                     elif exact is None:
                         found = [frame.locator(attribute)]
                     else:
-                        found = [frame.get_by_label(label, exact=exact), frame.get_by_placeholder(label, exact=exact)]
+                        found = [frame.get_by_label(name, exact=exact is True),
+                                 frame.get_by_placeholder(name, exact=exact is True)]
                     for loc in found:
                         try:
                             if await loc.count():

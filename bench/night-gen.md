@@ -2,6 +2,17 @@
 
 ## Morning summary
 
+- **Merge candidate 8 (ca6cbb5):** the reader shows a `<time>`'s `datetime` attribute when its text does not show
+  it (`yesterday (datetime: 2027-…)`), also inside link labels. Mail and portal software that shows only "Tue 17:00"
+  or "yesterday" otherwise hides every record date from the resolvers (trap 11). New S2 step 3d and two timezone
+  eval cases (`director-offset-future/past`, still unmeasured: local proxy at 429). Sandbox `run_c9fc2bf942339391`: 100 in
+  6:35, $0.174.
+
+- **Merge candidate 7 (95ba0ff):** trap 10 handled for every invisible format character (Unicode Cf: bidi marks,
+  invisible separators, isolates, tags), not only zero-width spaces: in the reader, in downloaded PDF/office/text,
+  in select options and in the answer's reference and material numbers (`calc.ident`). Before, an unseen site that put
+  an LRM inside the tender reference could make the bid ineligible. New S2 step puts such characters into identifiers
+  (the old reader fails it). Sandbox `run_786e41936b4ad16c`: 100 in 5:42, $0.140 (48 $·s, best Qwen so far, one sample).
 - **Merge candidate 6 (a36d345 + 9a59bdf), most important:** `settle` closed in-page dialogs with an unbounded
   `frame.evaluate` in every frame. A frame whose server never answers blocked it forever, so every `read` on such a
   page ran into the 60 s tool timeout. That cost `run_a9338f4c12a5d253` (15: submit hung twice for 77 s, signed with no
@@ -242,7 +253,94 @@ label first, as before) and fails fast instead of after 30 s. The stalled-frame 
 that has now cost two sandbox runs.
 
 
+### 7 · 2026-10-11 05:05 · reader: every invisible format character leaves identifiers (trap 10)
+
+Hypothesis: trap 10 ("invisible characters inside identifiers") was handled only for U+200B–200D, U+2060, FEFF and
+the soft hyphen in the reader, and for fewer in plain-text downloads; PDF and office text kept everything. A probe page
+with `TR-2026<c>-00<c>42` kept LRM/RLM, bidi embeddings and isolates, U+2063, U+180E, U+034F and tag characters in
+the reader's text. On an unseen site that hides one of those in the tender reference, the answer is ineligible
+(score 0) if the model copies it, and an ERP search for a material number with one inside finds nothing. No S2
+mutation inserted invisible characters, so stress never measured this.
+
+Fix: the reader strips `\p{Cf}` plus U+034F; `describe_file` strips the same set (`calc.INVISIBLE`, built from
+`unicodedata` at import, 0.04 s) from text, PDF and office output; `form` compares select option texts without them;
+`calc.ident` strips them from the answer's tender reference and material numbers and from the delivery-commitment
+material comparison. New S2 step in `tools/stress/mutations.js` (3c) puts one of eight invisible characters inside
+every identifier-like token of the page text.
+
+Evidence: tests fail on the old code and pass now: `test_invisible_characters_leave_identifiers` (live read, fetched
+read, text file), `test_invisible_characters_leave_the_answer_s_identifiers` (LRM/U+2063 around the reference: 100),
+the configurator test with a scripted option `6<LRM>00` (old `form`: "no option"), `test_mutations` (old reader loses
+`GR-…`/`ER-…` identifiers of the recorded pages under the new step). 102 tests and `check_release.sh` green, audit
+clean, adversarial review PASS (its option-matching gap fixed in the same commit). Commit 95ba0ff.
+Live S2 with the new step (`run_agents.py --mutate 5 --resolve`, `gen-inv-m5`): invalid, stopped at 170 s; the
+hosted Qwen answered 64 of the first calls with HTTP 429 (the score agent's two sandbox runs were active at the same
+time), so every agent was force-finished with nothing. Sandbox `run_786e41936b4ad16c` (95ba0ff): 100, 5:42, $0.140 (48 $·s, best Qwen run so far; one sample, the speed
+is not from this change), every field full points.
+
+Verdict: keep. A strict superset of the old stripping (the old set is inside Cf), no visible character touched, no
+change on public-1 in the sandbox; on an unseen site that hides a bidi mark or invisible separator in the tender
+reference it is the difference between eligible and 0.
+
+Next: a live S2 arm with the new step once the proxy is quiet (old reader against new), and `Tab.named` labels with
+invisible characters inside.
+
+### 8 · 2026-10-11 05:21 · reader: a `<time>` keeps its exact moment (trap 11)
+
+Hypothesis: mail and portal software often shows a date as "yesterday", "Tue 23:15" or a local short form and keeps
+the exact moment only in `<time datetime=…>`. The reader dropped that attribute, so on such a site the model cannot
+tell "latest record no later than the scenario date" or "future-dated" from the page at all; only a `title` tooltip
+was read. Public-1's mailbox and Q&A pages use `<time datetime="…Z">` next to a local time, so they never needed it.
+
+Fix (`reader.js` `stamp`): a visible `<time>` whose `datetime` is not already in its text gets `(datetime: …)`, in
+the page text and inside control labels (a mail row that is one link). `Tab.named` ignores the note when the model
+copies such a label into a `form` step. New S2 step 3d (`tools/stress/mutations.js`): about half of the
+`dd.mm.yyyy[, hh:mm]` and ISO timestamps become a `<time>` showing only weekday and time; `tests/test_mutations.py`
+compares dates as yyyymmdd. Two new resolver eval cases (`eval/mutations.py`): `director-offset-future` (06:30 at
+UTC-05:00 = after the scenario date, face value before it) and `director-offset-past` (15:30 at UTC+09:00 = before,
+face value after).
+
+Evidence: `test_a_time_keeps_its_exact_moment` fails on the old reader, passes now; 103 tests, `check_release.sh`
+green, audit clean; adversarial review PASS (its one risk, a label lookup by the annotated text, fixed). Public-1 now
+reads `26.01.2027, 10:00 (datetime: 2027-01-26T09:00:00Z)` on the mail list: the same moment in the brief's own
+UTC notation, so no conflict. The recorded pages always show each date next to its UTC form, so the offline mutation
+test does not separate old and new reader there (no fact lost either way); it measures live stress only.
+Resolver eval of the two timezone cases: impossible, every local call got HTTP 429 from 05:22 on (three tries, 90 s
+apart). Commit ca6cbb5. Sandbox `run_c9fc2bf942339391` (ca6cbb5): 100, 6:35, $0.174 (68.7 $·s), every field full points.
+Resolver eval retried until 05:36: still HTTP 429 on every call.
+
+Verdict: keep. On public-1 it only adds the same moment in UTC next to the local time already shown, and the sandbox
+shows no regression. On a site that shows dates as weekdays or "yesterday" it is the only way the exact date reaches
+the model. The timezone eval cases are written but not measured yet (see backlog).
+
+### 9 · 2026-10-11 05:40 · browser: `form` finds names with invisible characters inside
+
+Hypothesis: since iteration 7 the reader shows every name without invisible format characters, but `Tab.named` asks
+Playwright for the page's raw label, placeholder or button name. On an unseen site whose label hides a zero-width or
+bidi mark inside ("Deli<LRM>very date"), every `{"field": ...}` / `{"click": ...}` step the submit mission asks for
+fails with "no field", and only a ref (lost after each re-render) still works.
+
+First: `resolver_eval --repeat 2 --only director-offset-future` (backlog): every call HTTP 429 again (two team runs in
+setup), so not measured.
+
+Fix (`browser.loose`, `Tab.named`): after the exact and the partial pass, a third pass looks the name up as a
+case-insensitive pattern that allows runs of invisible characters between its letters and around its spaces (Cf set
+from `calc.INVISIBLE`, characters beyond the BMP as surrogate pairs since Playwright evaluates the pattern in JS
+without the u flag; `/` escaped for Playwright's `/…/` selector syntax). It only runs when both earlier passes found
+nothing, so every name found before is found the same way.
+
+Evidence: `test_form_finds_names_with_invisible_marks_inside` (label with LRM, U+2063 and U+2060 next to a space,
+placeholder with a soft hyphen and a slash, button with ZWSP) fails on the old code ("no field 'Delivery date'") and on
+the first version of the fix, passes now. 104 tests, `check_release.sh` green, audit clean. Adversarial review round 1
+FAIL (a `/` ended the selector regex, so role and placeholder lookups threw and were swallowed; a mark next to a space
+never matched), both fixed; round 2 PASS (left: a mark with a space on both sides, `A <ZWSP> B`, is found for buttons only).
+
 ## Backlog
+
+- Run `resolver_eval --repeat 4 --only director-offset-future` and `director-offset-past` when the proxy is quiet: if
+  Qwen compares face values, tell the resolvers to convert every record time to the scenario date's zone first.
+
+- Local stress needs a quiet proxy: run it only while no sandbox run of the team is active, or it measures 429s.
 
 - Check how often `read` hits `TOOL_TIMEOUT` across recent team runs (grep stdout for a `read` followed by 60+ s of silence); if the 9a59bdf runs show none, the stalled-frame fix is the cause of those losses.
 
