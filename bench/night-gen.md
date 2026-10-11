@@ -2,6 +2,9 @@
 
 ## Morning summary
 
+- **Merge candidate 4 (a140f33):** the commercials resolver asks once more when Qwen's answer stops after the
+  discount (no positions), bounded by the stage deadline. In run_cf4790f7da25d77b that one answer cost about 40
+  points (FX, metal, cartons, commitments all empty). Sandbox check: see iteration 4.
 - **Merge candidate 3 (eec30f0):** `form` reports a dependent choice that is still closed as "disabled: apply the
   earlier choice first" instead of "no option ...; options: ['choose']", after one wait. The old message plausibly
   caused the 9-minute configurator loss in run_dba11642f54df6c6. Sandbox run_cf4790f7da25d77b submitted cleanly
@@ -122,6 +125,30 @@ Next: commercials on Qwen is now the largest single loss seen on this branch (a 
 Worth checking with `tools/resolver_eval.py --repeat N` on recorded evidence whether Qwen often leaves commercials
 fields empty, and whether its result could be validated (records kept but values empty means ask again while time
 allows). That touches resolvers (Luca's) and llm (Finn's), so measure first.
+
+### 4 · 2026-10-11 03:30 · resolvers: a commercials answer without positions is asked once more
+
+Hypothesis: in `run_cf4790f7da25d77b` (56.9) the commercials call (18.7k tokens in, 4.1k out, 105 s) returned valid
+JSON with only `tender_reference` and `discount`. `parse_object` accepted it, every per-position and rate fact
+(FX, metal index, cartons, commitments) became empty, and the sweep never noticed: `sweep.gaps` checks FX and metal
+only against ERP results (none yet) and cartons only for listed positions (none listed). On any dataset, one lazy
+Qwen answer empties a whole stage.
+
+Fix (`resolvers.commercials`): when the tender lists positions and the answer has none, ask once more if at least
+`RETRY_MIN` (60 s) is left before the stage cut, bounded by `wait_for` to end `RETRY_MARGIN` (10 s) before it; keep
+the second answer only if it has positions; a failed second call keeps the first. Normal path unchanged (one call).
+
+Evidence: unit test (`tests/test_sites.py` `CommercialsTest`): complete answer = 1 call; partial then full = full;
+partial twice = partial; partial then timeout = partial. Check release green, audit clean. Adversarial review round
+1 FAIL (a late retry that timed out or hit the stage cut dropped the first answer, so `safe` returned `{}`), fixed;
+round 2 PASS. Local measurement of how often Qwen answers without positions (`resolver_eval --repeat 8`) impossible:
+every local call got HTTP 429 from 03:35 on (same as iteration 1). Commit a140f33. Sandbox `run_2bc252ed46c457d7`
+started 03:50 (normal-path regression check; the retry itself fires rarely).
+
+Verdict: pending the sandbox run.
+
+Next: measure the partial-answer rate with `tools/resolver_eval.py --repeat 8` once the local 429s stop; if it is
+more than rare, a hedged pair (`first` that accepts only answers with positions) would save the retry's 100 s.
 
 ## Backlog
 
