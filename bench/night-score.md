@@ -2,14 +2,13 @@
 
 ## Morning summary
 
-Best candidate: **cd967a0**, the branch tip's code (2c5dd5f + 38d5b42 + the start pages loaded side by side). Its
-family, unchanged except for insurance that fired in none of them, has 8 Qwen runs, **all 100 and signed**:
-46.6, 49.6, 51.1, 61.3, 61.5, 79.0, 87.7, 102.6 $·s, median ~61 $·s (best run_4b06a64ace34d51f 100 / 5:35 / $0.139).
-cd967a0 itself: run_f17b48d291a7d8fd 100 / 6:15 / $0.136 / 51.1 $·s, run_ddc02354bde271f3 100 / 10:41 / $0.160 /
-102.6 $·s (a slow model hour). Our Haiku submission: 70 $·s; rank 1: 25 $·s. The spread (2x) is load and model
-wander, not the code. A last pair (run_2bfbe16b551a62a3, run_6fd78246ef5da521) was started at 06:45; check them
-before deciding. On Qwen the tip beats our submission's 70 $·s at the median only narrowly; on Haiku it is untested
-tonight (OpenRouter path untouched).
+Best candidate: **cd967a0**, the branch tip's code (2c5dd5f + 38d5b42 + the start pages loaded side by side).
+cd967a0's own four runs, all 100 and signed: run_6fd78246ef5da521 5:12 / $0.139 / **43.2 $·s**, run_2bfbe16b551a62a3
+5:17 / $0.144 / 45.6 $·s, run_f17b48d291a7d8fd 6:15 / $0.136 / 51.1 $·s, run_ddc02354bde271f3 10:41 / $0.160 /
+102.6 $·s (a slow model hour), median 48.4 $·s. With its unchanged predecessors (2c5dd5f, 38d5b42), 10 Qwen runs in a
+row at 100 and signed: 43.2, 45.6, 46.6, 49.6, 51.1, 61.3, 61.5, 79.0, 87.7, 102.6 $·s, median 56.2. Our Haiku
+submission: 70 $·s; rank 1: 25 $·s. The 2x spread is load and model wander, not the code. On Haiku the branch is
+untested tonight (OpenRouter path untouched). A submission is one run, so expect anything from ~43 to ~100 $·s on Qwen.
 
 Previous best: **58f933b** (5c1668a + the night-gen merge 1920ba1 + the no-match check fix): run_92428b63f6b01b4e
 100 / 6:51 / $0.131 / **53.6 $·s**, run_28c8d1f903003c25 85.3 / 6:34 / $0.132 / 52.3 $·s (one ERP search hit its
@@ -390,8 +389,8 @@ Results (cd967a0): run_f17b48d291a7d8fd 100 / 6:15 / $0.136 / 51.1 $·s, run_ddc
 102.6 $·s. Agents started at 7 s in both, no `first load failed`: no start page hung, so the change had nothing to
 catch. run_ddc0's 10:41 is load (Qwen ~40 tok/s, calls up to 65 s; requirements at 362 s; one 50 s submit step).
 Verdict: keep cd967a0 as insurance (2/2 at 100 and signed, reviewer PASS, removes a 30 s stall seen in 2 of 6 runs;
-its catch is not yet shown live). One more pair started for evidence: run_2bfbe16b551a62a3, run_6fd78246ef5da521
-(06:45).
+its catch is not yet shown live). One more pair for evidence: run_6fd78246ef5da521 100 / 5:12 / $0.139 / 43.2 $·s,
+run_2bfbe16b551a62a3 100 / 5:17 / $0.144 / 45.6 $·s, the two best Qwen runs of the night (no start page hung).
 
 Next idea: the requirements resolver is the gate to the bid in slow runs (362 s here); the backlog's "smaller
 question or effort low" is the next lever, measured offline with `tools/resolver_eval.py --repeat` first.

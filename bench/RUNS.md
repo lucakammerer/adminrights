@@ -5,6 +5,8 @@ logged answer scored by `eval/compare.py` (what the bid would have scored if sig
 
 | Date (UTC) | Run | Commit | Platform | Eval | Time | Cost | Outcome and top problem (owner) |
 | --- | --- | --- | --- | --- | --- | --- | --- |
+| 2026-10-11 04:45 | run_6fd78246ef5da521 | luca/night-score@cd967a0 | 100, eligible | – | 5 min (312 s) | $0.139 | Same package: 43.2 $·s, best Qwen run of the night; no start page hung. |
+| 2026-10-11 04:45 | run_2bfbe16b551a62a3 | luca/night-score@cd967a0 | 100, eligible | – | 5 min (317 s) | $0.144 | Same package: 45.6 $·s; no start page hung. |
 | 2026-10-11 04:33 | run_ddc02354bde271f3 | luca/night-score@cd967a0 | 100, eligible | – | 11 min (641 s) | $0.160 | Same package, 102.6 $·s: slow model (~40 tok/s, calls up to 65 s), requirements answer at 362 s with an amendment told to the running search (bid 467 s), one 50 s submit step. |
 | 2026-10-11 04:33 | run_f17b48d291a7d8fd | luca/night-score@cd967a0 | 100, eligible | – | 6 min (375 s) | $0.136 | Start pages side by side: agents at 7 s, no start page hung (change inert), 51.1 $·s. |
 | 2026-10-11 04:19 | run_b5bfbb3ed5ed5292 | luca/night-score@38d5b42 | 100, eligible | – | 7 min (436 s) | $0.141 | Branch tip unchanged, 61.3 $·s. 3→35 s nothing ran: the four start pages load one after another and one waited out the 30 s goto timeout (also in run_28dc851b508f1f3c); fixed in cd967a0 (Luca). |
