@@ -2,8 +2,10 @@
 
 ## Morning summary
 
-Best candidate: **58f933b** (5c1668a + the night-gen merge 1920ba1 + the no-match check fix); its runs are pending
-(run_28c8d1f903003c25, run_92428b63f6b01b4e). 5c1668a's pair: run_96d33dd7b340c037 100 / 6:34 / $0.142 / **56.1 $·s**
+Best candidate: **58f933b** (5c1668a + the night-gen merge 1920ba1 + the no-match check fix): run_92428b63f6b01b4e
+100 / 6:51 / $0.131 / **53.6 $·s**, run_28c8d1f903003c25 85.3 / 6:34 / $0.132 / 52.3 $·s (one ERP search hit its
+40-step limit before the price page). Cost × time is now below our Haiku submission's 70 $·s on Qwen, but quality
+is not yet steady: 2 of the last 4 runs missed 100. 5c1668a's pair: run_96d33dd7b340c037 100 / 6:34 / $0.142 / **56.1 $·s**
 (best Qwen run of the night, below our Haiku submission's 70 $·s; rank 1: 25 $·s) and run_7d633f73aa69af53 **5**: a
 no_bid from a bug in 5f858c2 (a changed requirement never reached the ERP no-match check), fixed in 58f933b.
 **Do not merge 5f858c2 without 58f933b.** Earlier pairs: 5f858c2 167.2 / 172.4 $·s, fcac256 167.2 / 147.6 $·s.
@@ -271,8 +273,21 @@ moved it to just before the check, which is the reviewer's suggested fix. Runs (
 merge): run_28c8d1f903003c25, run_92428b63f6b01b4e (started ~05:43). Judge by: quality, signing, time, and whether
 the night-gen merge holds the 6:34 pace.
 
+Results (58f933b): run_92428b63f6b01b4e 100 / 6:51 / $0.131 / 53.6 $·s; run_28c8d1f903003c25 85.3 / 6:34 / $0.132 /
+52.3 $·s. Neither had a no_match, so the fix's path did not fire live (the unit test shows it). The 85.3: the
+search on the ERP login tab spent ~30 of its 40 steps retrying the search form (fills on three refs, a `form`, URL
+guesses) before a `fetch` with the query worked at step 31; at step 40 (264 s, the stage deadline ~9 min away) it was
+forced before the price page, so 01.04 had no base price and the rebates and total were off. The other searches
+went straight through. Verdict: keep 58f933b (a correctness fix; pace held at ~53 $·s with the night-gen merge).
+
+Next idea: a search stopped by its step limit long before its deadline, with required facts missing, loses points
+that a few more steps would have saved. Give it one extension when time is plentiful (generic: a cost guard, not a
+site assumption), or let the forced finish's `extract` gap list drive a short follow-up on the chosen material.
+
 ## Backlog
 
+- ERP step limit (iteration 7): a search forced at 40 steps with the stage deadline minutes away and the price
+  missing. One extension when time is plentiful, or a follow-up driven by `extract`'s gap list.
 - `specs` at effort low: it only starts the early ERP searches and `requirements` corrects it, yet at medium it took
   60 s and timed out into the low backup in run_b4c23813dd122d18 (early searches ~60 s later). Measure low vs medium
   offline first (`/tmp`-style script calling `resolvers.specs` on `eval/fixtures/resolvers`); at 05:30 the local
