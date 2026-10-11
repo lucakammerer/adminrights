@@ -18,6 +18,11 @@ no_bid from a bug in 5f858c2 (a changed requirement never reached the ERP no-mat
 Main-based night-gen runs on Qwen: 85.8 and 121.6 $·s, so the radical-speed structure on this branch is not shown
 to beat main on Qwen; single runs vary 2× with load.
 Merge to main, each worth it on its own:
+- 38d5b42 (llm): a `fetch` of a kept page whose content is unchanged gets "unchanged since you kept it as evidence
+  #n" appended (a search re-checked kept pages 14 times in run_0a26a180075ecc2c and hit its step limit). Its pair:
+  run_822da1971e1635d9 100 / 61.5 $·s, run_28dc851b508f1f3c 100 / 87.7 $·s (phase 1 slow); no refetch in either,
+  so insurance only. Address-only first version was rejected by the reviewer (false "kept" on hash routes and
+  state-dependent pages); the kept one matches address and content.
 - 2c5dd5f (erp): a search cut by its 40-step limit, a material chosen but required facts unkept, with >= 120 s left,
   gets one follow-up of at most 12 steps on the same tab, driven by extract's gap list. Insurance, never fired live.
 - 58f933b (agent): goes with 5f858c2. The no-match check (a second ERP search) now gets the changed requirement
