@@ -25,8 +25,14 @@ TRACK = """(() => { if (window.__arefTimers) return; const pending = new Set(), 
   window.clearTimeout = function (id) { pending.delete(id); return ct.call(this, id) };
   new MutationObserver(() => { window.__arefChanged = Date.now() }).observe(document,
     {subtree: true, childList: true, attributes: true, characterData: true}) })()"""
-# Polled from Python, never through a timer of the page: a background tab's timers may fire only once a minute.
-QUIET = """() => window.__arefTimers ? [Date.now() - window.__arefChanged, window.__arefTimers.size] : null"""
+QUIET = """(max) => new Promise((resolve) => {
+  if (!window.__arefTimers) return resolve(-1);
+  const start = Date.now(), wait = window.__arefSetTimeout;
+  const tick = () => {
+    const quiet = Date.now() - window.__arefChanged >= 300 && window.__arefTimers.size === 0;
+    if (quiet || Date.now() - start >= max) return resolve(Date.now() - start);
+    wait(tick, 50) };
+  tick() })"""
 # A login form: one password field and exactly one other text field in the same form, nothing else to type into.
 # Returns its signature (action path and field names): only the very form the tab got past is filled in again.
 LOGIN_FORM = """() => {
@@ -126,19 +132,13 @@ class Tab:
             await self.page.wait_for_load_state("domcontentloaded", timeout=15000)
         except Exception:  # noqa: BLE001
             pass
-        loop = asyncio.get_running_loop()
-        end = loop.time() + SETTLE_MAX
-        while loop.time() < end:  # until no short timer is pending and the DOM was quiet for 300 ms, at most SETTLE_MAX
-            try:
-                state = await asyncio.wait_for(self.page.evaluate(QUIET), max(0.1, end - loop.time()))
-            except Exception:  # noqa: BLE001  navigated while waiting, or the page doesn't answer
-                state = [0, 1]
-            if state is None:  # a page loaded before this tab tracked it: popups appear a moment after load
-                await asyncio.sleep(max(0.0, end - loop.time()))
-                break
-            if state[0] >= 300 and state[1] == 0:
-                break
-            await asyncio.sleep(0.05)
+        try:  # until no short timer is pending and the DOM was quiet for 300 ms, at most SETTLE_MAX
+            waited = await self.page.evaluate(QUIET, int(SETTLE_MAX * 1000))
+        except Exception:  # noqa: BLE001  navigated while waiting
+            waited = 500
+            await asyncio.sleep(0.5)
+        if waited < 0:  # a page loaded before this tab tracked it: popups appear a moment after load
+            await asyncio.sleep(SETTLE_MAX)
         for frame in self.page.frames:  # in-page popup dialogs only block the page; browser dialogs are accepted above
             try:
                 await frame.evaluate("document.querySelectorAll('dialog[open]').forEach(d => d.close())")
