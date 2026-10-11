@@ -213,7 +213,9 @@ def facts(tender, requirements, commercials, erp: dict) -> dict:
             "fx_eur_per_currency_unit": fx,
             "surcharge_mass_kg_per_piece": grams_to_kg(e.get("surcharge_mass") or 0),
             "metal_index_eur_per_kg": index or 0,
-            "setup_fee": float(d(c.get("setup_fee")) + d(e.get("setup_fee"))),
+            # a position's ordinary setup comes from the tender (commercials); a material's ERP fee only stands in when
+            # the commercials lack the position: added, it counted twice and reached every position of that material
+            "setup_fee": float(d(c["setup_fee"] if c.get("setup_fee") is not None else e.get("setup_fee"))),
             "discount_applies_to": c.get("discount_applies_to") or "base",
             "stock": e.get("available_stock_pieces") or 0,
             "lead_time_stock_weeks": e.get("lead_time_stock_weeks") or 0,

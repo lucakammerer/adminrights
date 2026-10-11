@@ -13,7 +13,7 @@ through `d`/`number`, so text like "7 pieces" or "3 weeks" cannot crash the run,
 Per position, from requirement, commercial terms and ERP: quantity, material, scales (`number`: a number that shows
 its own format, with both separators or one repeated, wins over the condition's format hint), price unit, currency and
 rate (`lookup`: FX key first, then currency), surcharge mass in kg (`grams_to_kg`) × metal index (`lookup` by index
-key), setup fee from mail and ERP, discount rule, stock, lead times, delivery commitment, carton size and price, pool
+key), setup fee from the commercials (the ERP's only when they give none: a material's fee is not a position's), discount rule, stock, lead times, delivery commitment, carton size and price, pool
 and bonus membership, allocation mass. Plus reference, discount, pool fee, bonus bands.
 
 ## compute

@@ -112,6 +112,17 @@ class NoMatch(unittest.TestCase):
         self.assertEqual(shown["answer"]["decision"], "no_bid")
 
 
+class Setup(unittest.TestCase):
+    def test_a_materials_erp_setup_fee_never_adds_to_the_positions_own(self):
+        """run_cf57141fcf4352a0: the ERP's fee for a material shared by two positions was added to both."""
+        requirements = {"positions": [{"position": "1", "final_quantity_pieces": 10},
+                                      {"position": "2", "final_quantity_pieces": 10}]}
+        commercials = {"positions": [{"position": "1", "setup_fee": 0}, {"position": "2", "setup_fee": 85}]}
+        erp = {"1": {"setup_fee": "85"}, "2": {"setup_fee": "85"}}
+        fees = [p["setup_fee"] for p in calc.facts({}, requirements, commercials, erp)["positions"]]
+        self.assertEqual(fees, [0.0, 85.0])
+
+
 class Shapes(unittest.TestCase):
     def test_model_output_in_other_shapes_never_crashes(self):
         """facts and compute run outside `safe`: a crash there loses an answer the run already found."""
