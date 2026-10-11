@@ -10,7 +10,7 @@ hour), median 48.4 $·s. With its unchanged predecessors (2c5dd5f, 38d5b42), 12 
 38.8, 43.2, 45.6, 46.6, 49.6, 51.1, 61.3, 61.5, 79.0, 87.7, 91.8, 102.6 $·s, median 56.2. Our Haiku submission:
 70 $·s ($0.204, 5:43); rank 1: 25 $·s. The 2.6x spread is load and model wander, not the code. On Haiku the branch
 is untested tonight (OpenRouter path untouched). A submission is one run, so expect anything from ~39 to ~100 $·s on
-Qwen: 7 of 12 runs beat our 70 $·s submission, none reached rank 1's 25.
+Qwen: 8 of 12 runs beat our 70 $·s submission, none reached rank 1's 25.
 
 Previous best: **58f933b** (5c1668a + the night-gen merge 1920ba1 + the no-match check fix): run_92428b63f6b01b4e
 100 / 6:51 / $0.131 / **53.6 $·s**, run_28c8d1f903003c25 85.3 / 6:34 / $0.132 / 52.3 $·s (one ERP search hit its
