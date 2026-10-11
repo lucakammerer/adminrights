@@ -104,6 +104,8 @@ class Site(BaseHTTPRequestHandler):
             return None
         if path == "/stalled":
             return self.page('<iframe src="/stall"></iframe><p>Main content</p>')
+        if path == "/slowform":
+            return self.page('<form method="post" action="/slow"><button>Send</button></form>')
         if path == "/framed":  # the configurator inside a frame of the page
             return self.page('<h1>Order</h1><iframe src="/config" width="600" height="200"></iframe>')
         return self.page("start")
@@ -114,6 +116,9 @@ class Site(BaseHTTPRequestHandler):
             return
         body = parse_qs(self.rfile.read(int(self.headers.get("Content-Length") or 0)).decode())
         COUNTS["POST " + self.path] = COUNTS.get("POST " + self.path, 0) + 1
+        if self.path == "/slow":  # a submit whose next page takes longer than a click waits for it
+            time.sleep(3)
+            return self.page("<h1>Sent</h1>")
         if self.path == "/login" and body.get("pw") == ["s3cret"] and body.get("user") == ["agent"]:
             return self.page("", 302, {"Location": "/home", "Set-Cookie": "session=ok; Path=/"})
         return self.page("rejected", 403)
@@ -356,6 +361,25 @@ class TabAgainstLocalSite(unittest.TestCase):
         self.assertRegex(text, r'button "Send Mail"')
         self.assertNotIn("FAILED", log.split("\n", 1)[0])
         self.assertEqual((value, title), ("64", "sent"))
+
+    def test_a_click_whose_page_loads_slowly_is_neither_repeated_nor_waited_out(self):
+        """2026-10-11: four clicks took 32 s each in one run and ended in an error, though each had gone through:
+        the click gave up on its slow page after 2 s, then the DOM-click fallback waited 30 s for its button."""
+        async def steps(tab):
+            await tab.act("goto", {"url": "/slowform"})
+            text = await tab.read()
+            ref = int(text.split('button "Send"')[0].rsplit("[", 1)[1].rstrip(":"))
+            loop = asyncio.get_running_loop()
+            started = loop.time()
+            page = await tab.act("click", {"ref": ref})
+            await tab.act("goto", {"url": "/slowform"})
+            form = await tab.form([{"click": "Send"}])
+            return page, form, loop.time() - started
+        page, form, took = self.run_tab(steps)
+        self.assertIn("Sent", page)
+        self.assertIn("clicked Send", form)
+        self.assertEqual(COUNTS.get("POST /slow"), 2)  # one per click: never sent twice
+        self.assertLess(took, 15)
 
 
 if __name__ == "__main__":

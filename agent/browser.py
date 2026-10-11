@@ -87,6 +87,9 @@ RELOAD_TIMEOUT = 15  # seconds per reload of an error page (two at most)
 # Seconds a navigation may go unanswered (goto's own limit) before code stops it: until it ends, the page runs no
 # script for us, so every read, click and form step on the tab would wait out the tool timeout.
 NAVIGATION_TIMEOUT = 30
+# Playwright's call log of a click that was dispatched and then timed out waiting for the navigation it started
+CLICKED = "click action done"
+ACTION_TIMEOUT = 10_000  # ms for any Playwright wait without its own timeout: its default of 30 s hid stalls
 # Page chrome: a line without a control that earlier reads of this tab showed at least this often. At the top and the
 # bottom of the page shown after an action it is left out (the model saw it before; it is 9-28 % of a page's text on
 # the recorded sites). Controls always stay, so every ref remains usable; evidence and explicit reads stay complete.
@@ -146,6 +149,7 @@ class Tab:
 
     async def _track(self, page):
         try:
+            page.set_default_timeout(ACTION_TIMEOUT)
             await page.add_init_script(TRACK)
         except Exception:  # noqa: BLE001
             pass
@@ -343,8 +347,12 @@ class Tab:
         try:
             await loc.scroll_into_view_if_needed(timeout=1000)
             await loc.click(timeout=2000)
-        except Exception:  # noqa: BLE001  covered, off-screen in a scroll box, inert: click it in the DOM
-            await loc.evaluate("e => e.click()")
+        except Exception as error:  # noqa: BLE001
+            if CLICKED in str(error):  # it went through, only the page it opened is slow: the read after waits for it
+                return
+            # covered, off-screen in a scroll box, inert: click it in the DOM (a click repeated after a slow page took
+            # 32 s on 2026-10-11, ending in an error: Playwright waited 30 s for the button, gone with the old page)
+            await loc.evaluate("e => e.click()", timeout=3000)
 
     async def locate(self, ref: int):
         for frame in self.page.frames:
@@ -457,7 +465,11 @@ class Tab:
         if step.get("click"):
             loc = await self.named(str(step["click"]), click=True)
             await loc.scroll_into_view_if_needed(timeout=3000)
-            await loc.click(timeout=5000)
+            try:
+                await loc.click(timeout=5000)
+            except Exception as error:  # noqa: BLE001  a click that went through to a slow page counts
+                if CLICKED not in str(error):
+                    raise
             await self.settle()
             return f"clicked {step['click']}"
         value = step.get("value")

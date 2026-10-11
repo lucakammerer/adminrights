@@ -170,7 +170,10 @@ Every browser agent is the same loop; agents differ only in mission, result sche
   attempts at a call go to the hosted Qwen (`llm.FALLBACK`, with a plain-text system message), which `agent.json` keeps warm at no cost in time; a credit refusal (402) sends that call there at
   once, a spent key (403) every later call of the run (each refused attempt cost 15 s a call); a call
   without an answer after `HEDGE` (15 s) gets a twin and the first answer wins (about one OpenRouter call in six never
-  came back); `ask_json` (resolvers, ERP extract) runs on the same model. Browser steps run
+  came back); `ask_json` (resolvers, ERP extract) runs on the same model. Every OpenRouter call asks for the provider
+  with the lowest latency (`llm.ROUTE`, `PROVIDER_SORT`; a Haiku call took 1.65 s plus 3.3 s per 1,000 output tokens,
+  so the fixed part is half of all call time; sticky routing keeps a conversation, and its cache, on one provider).
+  Browser steps run
   with low reasoning effort (`STEP_EFFORT`): without thinking a step took a fifth of the time, but a webmail agent kept
   its only record after 12 steps and then searched on to its step limit of 60 (it never judged itself done);
   `chat` tries up to 6 times, each attempt at most `CALL_TIMEOUT` (180 s; no SDK-internal retries) and all of them
@@ -191,7 +194,9 @@ Every browser agent is the same loop; agents differ only in mission, result sche
 
 ### 3.4 Resolvers, calculator, submission
 
-- **Resolvers** (`agents/resolvers`): one `ask_json` call each (JSON mode, up to 3 attempts). `sites`: which website
+- **Resolvers** (`agents/resolvers`): one `ask_json` call each (JSON mode, up to 3 attempts; `requirements` asks
+  twice at once only on the hosted Qwen, where one call in a few hangs). Their reasoning fields are terse: every word
+  is output time. `sites`: which website
   plays which role, from the brief. `specs`: the governing requirements from the specification and the technical
   mail alone, so the ERP searches start early; `requirements`: final quantities and governing requirements; `commercials`:
   discount, clauses, tariffs, commitments, pool and bonus membership, setup fees, FX rates, metal indices, pool fee,
@@ -207,7 +212,8 @@ Every browser agent is the same loop; agents differ only in mission, result sche
   `verify_summary` checks unit prices and total on the summary page in code; `get_tan`
   runs in a new tab of the mailbox (same login) from its start page, not the mail agents' idle tab (it hung 45-150 s
   in 5 of 10 runs); the first one opens when the submission starts, so its start page loads before the bid; and a finish without a TAN is refused while time allows; guardrails in the mission (no extra positions, omit only listed ones, never tick our own terms,
-  one TAN request). One `form` call per page or position, a configurator's dependent choices each followed by its
+  one TAN request). One `form` call per page, the first position and then all remaining positions in a single call,
+  a configurator's dependent choices each followed by its
   apply button, named by field label (refs are lost when a choice is applied) and sent without reading their options
   first (`form` matches an option by text, beginning or part, and a step without a match stops with the page's
   options; a choice still disabled after one wait stops with "apply the earlier choice first").
@@ -220,7 +226,8 @@ Every line goes through `llm.log` as `[tag  123s] ...` (seconds since start). `m
 (`sites`, `specs`, `tender-portal`, `supplier-portal`, `webmail`, `requirements`, `commercials`, `erp`, `facts`, `calc`,
 `answer`,
 `submit`); every agent step
-appears as `[tag  123s] n: tool {args}`.
+appears as `[tag  123s] n: tool {args}`, and a tool that took over `llm.SLOW_TOOL` (5 s) adds
+`[tag  123s] n: tool took 32 s`: where a run's browser time goes.
 
 ---
 
@@ -478,7 +485,7 @@ Every item has exactly one owner. When it touches a file someone else owns (§14
 | I10 | Strict numbers: a number's own format beats the hint ✅, thousands separators in grams ✅, text values ✅ (`tests/test_calc.py`); remaining: ambiguous forms refused (the agent re-reads); `Decimal` end to end | `numbers.py`, `calc.py` | parser tests | 4, 22 | L |
 | I11 | ERP no-match needs proof on kept pages ✅ (`erp.unproven`: result pages kept, every candidate listed with its difference, `tests/test_erp_no_match.py`); ERP match check in code ✅ (`validate.material_mismatch` in the ERP `check`, `tests/test_validate.py`); no-bid gate ✅ (`main` `erp_search`: a `no_match` with ≥ 150 s left gets a second agent in a fresh tab; a material it finds wins); remaining: answer schema validated before signing | `agents/erp`, `validate.py`, `agents/submit` | tests with look-alike and blocked candidates | T1.6, 3, 7, 8 | L |
 | I12 | ✅ Mail topics and senders parsed from the brief (`common.mail_records`, `tests/test_brief.py`); approval found by sender and meaning; technical release for `requirements` from the brief | `agents/webmail`, `agents/common.py`, `agents/resolvers` | no public mail subject in prompts | T0.11, 5, 10, 21 | Y |
-| I13 | ✅ Code-side retry of transient error pages; auto re-login; adaptive settle; `form` ref click falls back to a DOM click, a null value is never typed (`tests/test_browser.py`) | `browser.py` | fewer model turns on the ERP in the dry-run log | T3.2 | Y |
+| I13 | ✅ Code-side retry of transient error pages; auto re-login; adaptive settle; `form` ref click falls back to a DOM click, a null value is never typed; a click that went through to a slow page counts and is never repeated (it took 32 s and ended in an error: 2 s, then 30 s waiting for its button, gone with the old page), and no Playwright wait without its own timeout is longer than `ACTION_TIMEOUT` (`tests/test_browser.py`) | `browser.py` | fewer model turns on the ERP in the dry-run log | T3.2 | Y |
 | I14 | ✅ Calculator tests (`tests/test_calc.py`): golden test, values written as text, allocation ties, band edges, inclusive ceilings and thresholds, shared stock | `tests/` | green | 4–9, 12, 15–18, 22–27 | L |
 | I15 | Loud failures instead of silent fallbacks (FX, metal index): tolerant key match and `MISSING` in the trace ✅; omitted positions per rule 9 ✅ (also when all are omitted); a material without prices is submitted with its other fields ✅ | `calc.py` | tests | 9, 22, 28 | L |
 | I23 | Cost: cache-friendly loop (append-only history; when it grows too long, restart from the notes and kept evidence); measure Clef against Qwen for yes/no and pick decisions, then use it or drop it | `llm.py` | cached share of input up; cost per run ≤ $0.10 | T3.4 | F |

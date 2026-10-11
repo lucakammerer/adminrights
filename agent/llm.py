@@ -19,6 +19,11 @@ MODEL = os.environ.get("AGENT_MODEL", "anthropic/claude-haiku-5.5")
 OPENROUTER = "/" in MODEL
 # Anthropic models cache only behind a breakpoint; this top-level one moves with the conversation
 CACHE = {"cache_control": {"type": "ephemeral"}} if MODEL.startswith("anthropic/") else {}
+# OpenRouter tries the provider with the lowest latency first instead of balancing load across providers (a Haiku call
+# took 1.65 s plus 3.3 s per 1,000 output tokens on 2026-10-10, so the fixed part is half of all call time). Its sticky
+# routing keeps a conversation on one provider, so the cache still hits. PROVIDER_SORT=throughput or none switches it.
+PROVIDER_SORT = os.environ.get("PROVIDER_SORT", "latency")
+ROUTE = {"provider": {"sort": PROVIDER_SORT}} if OPENROUTER and PROVIDER_SORT not in ("", "none") else {}
 STEP_EFFORT = os.environ.get("STEP_EFFORT", "low")  # reasoning per browser step; latency is mostly thinking tokens
 KEEP_STEPS = 4  # tool results of the latest steps stay in full; older page reads shrink so the context stays small
 # Older reads shrink in batches, not every step: a shortened read changes the history, so the prompt cache only covers
@@ -35,6 +40,7 @@ CALL_TIMEOUT = 180  # one model call; a slower one is retried while its deadline
 # a tender finish 132 s: a cut call starts over, so the cap sits above the slowest calls seen)
 CHECK_TIMEOUT = 60  # one model call inside a finish check (ERP extract: 13-21 s); one hung call cost a position
 TOOL_TIMEOUT = 60  # one browser tool; a fetch that hung 109 s held the tender agent to its cut, its kept pages lost
+SLOW_TOOL = 5  # seconds after which a tool's time is logged: four clicks took 32 s each in one run on 2026-10-11
 # A call that brings no byte for this long is stuck and asked again (a retry waits twice as long, in case the service is
 # only slow). Replies are streamed, so a healthy one sends its first chunk within seconds and then one every <1 s; a
 # stuck call never reaches the model (none of the 6 in run_76abdc35df9c092b shows in the platform's calls) and held
@@ -107,7 +113,8 @@ async def reply(messages: list, tools: list | None, silence: float, fallback: bo
     `heard` is set at the first chunk. The snapshot, not get_final_completion: that raises on a reply cut at its length
     limit, which counted before. cache=False for a prompt no later call reads back: a request with the breakpoint has every
     uncached token written to the cache at 1.25x the input price."""
-    extra = {"extra_body": CACHE} if CACHE and cache and not fallback else {}
+    body = {} if fallback else {**ROUTE, **(CACHE if cache else {})}
+    extra = {"extra_body": body} if body else {}
     if fallback:  # the hosted Qwen gets plain text where Claude's system message carries its cache breakpoint
         messages = [{**m, "content": m["content"][0]["text"]} if m.get("role") == "system" and
                     isinstance(m.get("content"), list) else m for m in messages]
@@ -462,6 +469,7 @@ async def investigate(tab, system: str, mission: str, finish_schema: dict, deadl
             reopened = kept_at.get(address(args["url"])) if name == "fetch" and args.get("url") else None
             limit = max(1.0, deadline - time.time() if handler else
                         min(TOOL_TIMEOUT * (2 if listed else 1), deadline - time.time()))
+            tool_began = time.time()
             try:
                 if name == "note":
                     output = "Saved."
@@ -481,6 +489,8 @@ async def investigate(tab, system: str, mission: str, finish_schema: dict, deadl
                     output += "\n\n" + await asyncio.wait_for(tab.read(), 15)
                 except Exception:  # noqa: BLE001
                     pass
+            if (took := time.time() - tool_began) > SLOW_TOOL:  # where a run's browser time goes
+                log(tag, f"{step}: {name} took {took:.0f} s")
             quiet = QUIET_READ.match(output) if name in PAGE_ACTIONS and i < last_action else None
             if quiet:  # a later action of this turn shows the page
                 output = ((quiet.group(1) or f"Done: {name}.").rstrip() +

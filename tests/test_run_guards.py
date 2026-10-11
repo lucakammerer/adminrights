@@ -167,6 +167,31 @@ class HedgedCall(unittest.TestCase):
         self.assertLess(seconds, 2)
 
 
+class Request(unittest.TestCase):
+    """What an OpenRouter request carries: the provider routing always, the cache breakpoint only where asked, and
+    neither on the hosted Qwen it falls back to."""
+
+    def test_routing_and_cache_share_one_body(self):
+        sent = []
+
+        async def create(**kwargs):
+            sent.append(kwargs)
+            return "reply"
+
+        async def scenario():
+            real = llm._client, llm.ROUTE, llm.CACHE, llm.OPENROUTER
+            llm._client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create)))
+            llm.ROUTE, llm.CACHE, llm.OPENROUTER = {"provider": {"sort": "latency"}}, {"cache_control": {"x": 1}}, True
+            try:
+                await llm.reply([], None, 5)
+                await llm.reply([], None, 5, cache=False)
+            finally:
+                llm._client, llm.ROUTE, llm.CACHE, llm.OPENROUTER = real
+        asyncio.run(scenario())
+        self.assertEqual(sent[0]["extra_body"], {"provider": {"sort": "latency"}, "cache_control": {"x": 1}})
+        self.assertEqual(sent[1]["extra_body"], {"provider": {"sort": "latency"}})
+
+
 class StuckCallAskedAgain(unittest.TestCase):
     def test_silent_call_is_asked_again(self):
         serve, requests = streaming([None, TOOL_STREAM], silent=1)
@@ -345,6 +370,23 @@ class Requirements(unittest.TestCase):
             return await (medium() if effort == "medium" else low())
         agent.resolvers.requirements = requirements
         return asyncio.run(agent.resolve_requirements((), time.time() + seconds))
+
+    def test_requirements_ask_once_on_openrouter_twice_on_the_hosted_qwen(self):
+        """On OpenRouter both copies answered within a second and both were billed; chat sends a twin after HEDGE."""
+        asked = []
+
+        async def ask_json(system, question, effort=None):
+            asked.append(question)
+            return {"positions": []}
+        real = llm.ask_json, llm.OPENROUTER
+        try:
+            llm.ask_json = ask_json
+            for openrouter, copies in ((True, 1), (False, 2)):
+                llm.OPENROUTER, asked[:] = openrouter, []
+                asyncio.run(self.real[0]({"brief": "# Task"}, {}, {}, {}))
+                self.assertEqual(len(asked), copies)
+        finally:
+            llm.ask_json, llm.OPENROUTER = real
 
     def test_backup_counts_when_the_first_attempt_hangs(self):
         async def hangs():

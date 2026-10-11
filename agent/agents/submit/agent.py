@@ -172,8 +172,9 @@ order, so check which position each page is for. Each model step costs time: ent
 page, with one form call and end it with the page's next-step button. A configurator's dependent choices go into that
 same call, each followed by its apply button, without reading a choice's options first: the form tool waits for the
 page after every step and picks an option by its exact text, its beginning or any part of it, so a material number
-alone is enough where an option shows more after it. Once you know the labels of the configurator's choices (at the
-latest after the first position), enter every position in one call. Name each choice by its field label: refs are
+alone is enough where an option shows more after it. Once the first position is accepted, enter all remaining
+positions in a single form call: each position's choices with their apply buttons, its values, then the button that
+moves to the next position. Name each choice by its field label: refs are
 lost when a choice is applied, so a step by ref only works before the first apply of a call. A step that finds no
 matching option stops the call and lists the options the page offers (the page may word a value differently than the
 specification bid_values gives): send the rest of that page again in one form call, with that step in the page's wording.
