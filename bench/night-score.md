@@ -419,10 +419,19 @@ Verdict: no code change; the tip holds. Next idea: when the original call ends s
 still waiting, retry right away instead of waiting out the twin's own SILENCE (would have saved ~10 s here); rare,
 so insurance only.
 
+### 12 · 07:07 · Ask again at once when a dropped call's twin is silent too
+
+Hypothesis (backlog): in run_abc7db6e7a9804f9 a submit step's call and its twin both stayed silent; the original was
+dropped at `SILENCE` (30 s) but the twin, started at 10 s, was waited out to 40 s before the retry. Retry as soon as
+the original is dropped while the streamed twin has not sent a chunk (OpenRouter's unstreamed path unchanged).
+Commit b942b04 (`llm.chat`, test fails on the old code at 3.95 s, passes on the new; doc line in
+IMPLEMENTATION_PLAN). Gate: release check green, audit clean, adversarial reviewer PASS (worst case: a twin that would
+have started streaming between 30 and 40 s is asked again). Insurance: saves ~10 s on a rare stall.
+
+Runs (b942b04, started 07:11): run_f070cde80a0f6a81, run_e36d97ed806dea22.
+
 ## Backlog
 
-- Both a call and its twin silent (run_abc7db6e7a9804f9, 43 s): retry as soon as the original is dropped at SILENCE
-  instead of waiting out the twin; rare (1 of ~4 twins in one run of 3).
 - `specs` at effort low (iteration 11: 17 s at medium in a slow run, not on the critical path; low priority): it only starts the early ERP searches and `requirements` corrects it, yet at medium it took
   60 s and timed out into the low backup in run_b4c23813dd122d18 (early searches ~60 s later). Measure low vs medium
   offline first (`/tmp`-style script calling `resolvers.specs` on `eval/fixtures/resolvers`); at 05:30 the local
