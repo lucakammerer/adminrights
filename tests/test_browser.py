@@ -6,6 +6,7 @@ Run from the repo root: uv run --project agent --no-sync python -m unittest disc
 import asyncio
 import sys
 import threading
+import time
 import unittest
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -15,6 +16,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "agent"))
 
 from playwright.async_api import async_playwright  # noqa: E402
 
+import browser  # noqa: E402
 from browser import Tab  # noqa: E402
 
 LOGIN = ('<form method="post" action="/login"><label>User <input name="user"></label>'
@@ -65,9 +67,15 @@ class Site(BaseHTTPRequestHandler):
                              '<label>Note <input id="n" value="kept"></label>'
                              '<label class="fancy"><input type="checkbox" id="c" style="opacity:0;position:absolute">'
                              '<span style="position:relative;z-index:2;background:#eee">Accept</span></label>')
+        if path == "/stuck":
+            return self.page('<form method="post" action="/never"><label>Size <input name="s"></label>'
+                             '<button>Apply</button></form>')
         return self.page("start")
 
     def do_POST(self):
+        if self.path == "/never":  # a request the site never answers
+            time.sleep(20)
+            return
         body = parse_qs(self.rfile.read(int(self.headers.get("Content-Length") or 0)).decode())
         COUNTS["POST " + self.path] = COUNTS.get("POST " + self.path, 0) + 1
         if self.path == "/login" and body.get("pw") == ["s3cret"] and body.get("user") == ["agent"]:
@@ -204,6 +212,23 @@ class TabAgainstLocalSite(unittest.TestCase):
         self.assertEqual(title, "clicked")
         self.assertEqual(value, "kept")
         self.assertNotIn("None", value)
+
+    def test_a_navigation_without_answer_is_stopped(self):
+        async def steps(tab):
+            await tab.act("goto", {"url": "/stuck"})
+            loop = asyncio.get_running_loop()
+            started = loop.time()
+            shown = await asyncio.wait_for(tab.form([{"field": "Size", "value": "5"}, {"click": "Apply"}]), 15)
+            shown += await asyncio.wait_for(tab.act("click", {"ref": 2}), 15)  # its DOM-click fallback waited too
+            return loop.time() - started, shown
+        timeout, browser.NAVIGATION_TIMEOUT = browser.NAVIGATION_TIMEOUT, 2
+        try:
+            took, shown = self.run_tab(steps)
+        finally:
+            browser.NAVIGATION_TIMEOUT = timeout
+        self.assertLess(took, 14)  # every script on the page waited for the answer, a read until the tool timeout
+        self.assertIn("no answer to POST", shown)
+        self.assertIn('value="5"', shown)  # stopped, not reloaded: what was typed is still there
 
 
 if __name__ == "__main__":

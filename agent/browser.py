@@ -70,6 +70,9 @@ RELOGINS = 3  # automatic logins per tab at most, so a rejected login never loop
 FETCH_ABORT = 40  # seconds without an answer before one in-page request is aborted
 FETCH_BUDGET = 45  # seconds after which a 5xx is no longer retried
 RELOAD_TIMEOUT = 15  # seconds per reload of an error page (two at most)
+# Seconds a navigation may go unanswered (goto's own limit) before code stops it: until it ends, the page runs no
+# script for us, so every read, click and form step on the tab would wait out the tool timeout.
+NAVIGATION_TIMEOUT = 30
 # Page chrome: a line without a control that earlier reads of this tab showed at least this often. At the top and the
 # bottom of the page shown after an action it is left out (the model saw it before; it is 9-28 % of a page's text on
 # the recorded sites). Controls always stay, so every ref remains usable; evidence and explicit reads stay complete.
@@ -90,10 +93,12 @@ class Tab:
         self.lines: Counter = Counter()  # lines without controls -> how many reads of this tab showed them
         self.method = "GET"  # of the latest main-frame navigation: only a GET may be reloaded after a server error
         self.status = 0
+        self.navigation = None  # the main-frame navigation request still waiting for its answer
         page.on("dialog", self._on_dialog)
         page.on("download", self._on_download)
         page.on("request", self._on_request)
         page.on("response", self._on_response)
+        page.on("requestfailed", self._on_failed)
         self._tracking = asyncio.ensure_future(self._track(page))
 
     async def _track(self, page):
@@ -106,13 +111,35 @@ class Tab:
         try:
             if request.is_navigation_request() and request.frame == self.page.main_frame:
                 self.method = request.method
+                self.navigation = request
+                asyncio.ensure_future(self._stop_unanswered(request))
         except Exception:  # noqa: BLE001  a request without a frame (service worker)
+            pass
+
+    def _on_failed(self, request):
+        if request is self.navigation:
+            self.navigation = None
+
+    async def _stop_unanswered(self, request):
+        await asyncio.sleep(NAVIGATION_TIMEOUT)
+        if request is not self.navigation:
+            return
+        self.navigation = None
+        try:
+            session = await self.page.context.new_cdp_session(self.page)
+            await session.send("Page.stopLoading")
+            self.events.append(f"The site sent no answer to {request.method} {request.url} within {NAVIGATION_TIMEOUT}"
+                               " s; code stopped waiting for it. The last action may not have taken effect: check the page.")
+            await session.detach()
+        except Exception:  # noqa: BLE001  the page closed meanwhile
             pass
 
     def _on_response(self, response):
         try:
             if response.request.is_navigation_request() and response.frame == self.page.main_frame:
                 self.status = response.status
+                if response.request is self.navigation:
+                    self.navigation = None
         except Exception:  # noqa: BLE001
             pass
 
