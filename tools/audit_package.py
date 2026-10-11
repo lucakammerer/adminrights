@@ -14,6 +14,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 IDS = r"\b[A-Z]{1,4}-\d{3,}(?:-\d+)?\b"
+MODEL_HOSTS = {"openrouter.ai"}  # named by the model API's own errors in run logs, not a site
 
 
 def public_values(logs: list[str]) -> set[str]:
@@ -35,7 +36,7 @@ def public_values(logs: list[str]) -> set[str]:
     for log in logs:
         text = Path(log).read_text(errors="ignore")
         found |= set(re.findall(IDS, text))
-        found |= {host for host in re.findall(r"https?://([\w.-]+)", text) if "." in host}
+        found |= {host for host in re.findall(r"https?://([\w.-]+)", text) if "." in host} - MODEL_HOSTS
         found |= set(re.findall(r"[\w.+-]+@[\w-]+\.[\w.]+", text))
         paths = re.findall(r"https?://[\w.-]+(/[^\s\"'?#]*)", text)
         found |= {seg for path in paths for seg in path.split("/") if re.search(r"\d|-", seg)}  # mm03, x-content
