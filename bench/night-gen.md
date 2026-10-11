@@ -2,6 +2,10 @@
 
 ## Morning summary
 
+- **Merge candidate 5 (0c59c29):** downloads in office formats and other encodings. XLSX/ODS row by row with labels
+  next to values, dates as dates, hidden sheets/rows/columns dropped; DOCX/ODT/PPTX as paragraphs, hidden runs and
+  tracked deletions dropped; UTF-16 and Windows-1252 text decoded. Before: raw XML or NUL-interleaved garbage. Public-1
+  path unchanged; sandbox run_99fdafd5b89f1999 100 in 9:43 (121.6 $·s, best Qwen so far).
 - **Merge candidate 4 (a140f33):** the commercials resolver asks once more when Qwen's answer stops after the
   discount (no positions), bounded by the stage deadline. In run_cf4790f7da25d77b that one answer cost about 40
   points (FX, metal, cartons, commitments all empty). Sandbox run_2bc252ed46c457d7: 100 in 9:28 on the normal path (retry not
@@ -179,10 +183,19 @@ Round 2 PASS; two of its low edges fixed too (a literal `\ufffd` in valid UTF-8,
 Left by choice: style-based hiding (needs style resolution), multi-paragraph table cells split a row, hidden runs
 over 5000 chars (bound against slow matching on malformed XML), ODF conditional hidden text always dropped.
 
-Commit 0c59c29. Sandbox control `run_99fdafd5b89f1999` started 04:0x (public-1 cannot exercise the new path; it checks
-the branch head with all five changes for regressions).
+Commit 0c59c29. Sandbox control `run_99fdafd5b89f1999` (public-1 cannot exercise the new path; it checks the branch
+head for regressions): 100, 9:43, $0.208 (121.6 $·s, best Qwen value so far), every field full points.
+
+Verdict: keep. Unchanged reading on public-1 by construction and in the sandbox; on unseen software a price list in
+XLSX, a specification in DOCX or an export in UTF-16/Windows-1252 now reaches the model as readable text with
+decoys dropped instead of raw XML or garbage.
+
+Next: a stress variant that serves the tender documents as XLSX/DOCX (or UTF-16 CSV) instead of the public-1 files
+would measure this end to end; `run_agents.py` mutates only HTML today.
 
 ## Backlog
+
+- Stress: serve the tender documents as XLSX/DOCX/UTF-16 CSV (needs a file mutation in `run_agents.py`).
 
 - Under a 429 burst the gathering agents lose whole stages (`gen-new-ctrl`: every commercial field). If the sandbox's
   run proxy ever limits the same way, a run scores near 0: worth a backoff that waits out a 429 within the stage's
@@ -190,7 +203,7 @@ the branch head with all five changes for regressions).
 
 - A stress mutation whose links have no href at all on result lists (all record links scripted), so URL guessing is
   impossible: would separate the reader arms on points.
-- Hidden assumptions to check: `extract` cuts the brief at `## Rules`, `context` drops `## Site access`: harmless if
-  absent, but verify nothing else depends on brief headings.
+- Checked (iteration 5): `common.context` and `common.reference` strip `## Site access` only if present; nothing else
+  depends on brief headings.
 - `common.reference` takes the brief's first parenthesised identifier; a brief that writes the reference otherwise
   gives the tender agent no hint (the answer's reference still comes from the resolvers).
