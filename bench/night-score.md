@@ -438,6 +438,9 @@ Verdict: keep as insurance. Not worse on quality or signing (14 Qwen runs in a r
 gain is only on the rare double-silent call and can't show in two runs. Next idea: phase 1 spread (generalization
 owner's area) is the largest remaining variance.
 
+One more pair of b942b04 for the morning decision, started 07:20, still to collect: run_f63b9812b45ac269,
+run_4e307d86869b4141.
+
 ## Backlog
 
 - `specs` at effort low (iteration 11: 17 s at medium in a slow run, not on the critical path; low priority): it only starts the early ERP searches and `requirements` corrects it, yet at medium it took
