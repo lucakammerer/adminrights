@@ -2,18 +2,20 @@
 
 ## Morning summary
 
-Best candidate so far: **a4b9d2c** (f5e86da + two fixes): 100 / 11:20 / $0.230 / 156.2 $·s (run_bd99f53d4d7d5c7f),
-100 / 12:52 / $0.235 / 181.6 $·s (run_ba99f2d4eb2f586e). Main on Qwen tonight: 122.6–262 $·s.
-- a4b9d2c fixes a quality loss that main has too: `calc.facts` added the ERP's per-material setup fee to the
-  commercials' per-position one (run_cf57141fcf4352a0: 84.8). Now the commercials' value, the ERP's only when the
-  commercials lack the position. Judgement call: the brief doesn't say where the ordinary setup fee lives; public-1
-  has it in the Q&A, and the ERP shows a per-material fee as a decoy. Worth merging to main on its own.
-- 7cb21db: the submit agent's `form` call is held once when it types a position's unit price without one of its
-  non-zero breakdown values (a bonus typed as 0 cost ~110 s of walking back in run_a65e32634be4efce, and a wrong
-  value in run_c086c4a6429b3bd9).
-- The radical-speed merge (f5e86da) is **not** shown faster on Qwen: merge 132.8 / 197 / 232.9 $·s vs main
-  257.8 / 262 / 122.6 $·s; the one paired pair went to main (122.6 vs 232.9). Load noise dominates.
-Our submission 70 $·s (Haiku), rank 1 25 $·s. No Qwen run is a submit candidate on $·s yet.
+Best candidate: **c31d89a** (a4b9d2c + a twin for stuck Qwen calls + the TAN look-up in a new mailbox tab). Its runs:
+100 / 11:52 / $0.296 / 210.8 $·s (run_c13fd1a74d3ad98c), 100 / 15:21 / $0.261 / 240 $·s (run_d0283ff8e1a3187d). On
+$·s, a4b9d2c's runs are still the best: 156.2 (run_bd99f53d4d7d5c7f) and 181.6 (run_ba99f2d4eb2f586e). Main on Qwen
+tonight: 122.6-262 $·s. Our submission: 70 $·s (Haiku). Rank 1: 25 $·s. No Qwen run is a submit candidate on $·s.
+Merge to main, each worth it on its own:
+- a4b9d2c (calc): the setup fee comes from the commercials; the ERP's per-material fee only when they lack the
+  position. Fixed an 84.8 (double count). Judgement call, see iteration 2.
+- c31d89a (submit): the TAN look-up opens a new tab of the mailbox (same login). The mail agents' idle tab hung
+  45-150 s in 5 of 10 runs, main included; with the change 37 s and 63 s.
+- 4d4a37f (llm): a streamed call without its first chunk after 10 s gets a twin. 6-10 calls a run sat silent for 30 s
+  before; in run_c13fd1a74d3ad98c 9 twins, each answered in ~2 s, the originals never reached the platform.
+- 7cb21db (submit `form` hold): insurance, never fired live.
+Distrust: f5e86da (radical-speed merge) is not shown faster on Qwen; load noise dominates single runs. Next loss to
+fix: browser pages that stop answering (75-207 s per run, see backlog).
 
 ## Iterations
 
@@ -105,7 +107,23 @@ instead of the mail agents' idle tab. Gate: green, audit clean, reviewer PASS (a
 need a new login; the mission carries the login line). Runs (c31d89a): run_c13fd1a74d3ad98c, run_d0283ff8e1a3187d
 (started 01:20 UTC). Judge by: time from `get_tan` to the TAN agent's finish, quality, signing.
 
+Results (c31d89a): run_c13fd1a74d3ad98c 100 / 11:52 / $0.296 / 210.8 $·s, run_d0283ff8e1a3187d 100 / 15:21 / $0.261 /
+240 $·s. TAN look-up 37 s and 63 s, no stall (was 75-150 s in 5 of 10 runs). The twin fired 9 times in run_c13fd: each
+original never shows in the platform's calls (stuck before the model), each twin answered in ~2 s; no 30 s timeout.
+Total $·s is not better: phase 1 ran to 446 s in run_d0283ff8e1a3187d and a submit `read` on the tender portal hung
+75 s there (as in run_6038f546123323a1: 3 hung tools, 207 s). Verdict: keep both 4d4a37f and c31d89a; their mechanism
+is shown, the $·s gain is hidden by load and the next loss, the frozen page.
+
+Next idea: a browser tool that times out means the page stopped answering (TimeoutError after `TOOL_TIMEOUT`, then
+`investigate` waits 15 s more on a `tab.read()` of the same page; the model then reads again, another 75 s). Give
+`Tab` a way to reopen its current address in a new page of the same browser (handlers re-registered, old page closed
+without waiting) and do it in `investigate`'s error path for a timeout, telling the model. Generic web mechanics;
+check the submit agent's `form` handler too (its own `wait_for`).
+
 ## Backlog
+
+- Frozen pages (see iteration 3 "Next idea"): 75-207 s per run in run_6038f546123323a1 and run_d0283ff8e1a3187d,
+  both on the submit agent's tender-portal tab after the bid.
 
 - ERP: "its requirement differs from the early searches: searching it now" at 252–268 s in both a4b9d2c runs; why
   does the early search miss that requirement, and how long does the late search take?

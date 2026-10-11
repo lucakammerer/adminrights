@@ -5,6 +5,8 @@ logged answer scored by `eval/compare.py` (what the bid would have scored if sig
 
 | Date (UTC) | Run | Commit | Platform | Eval | Time | Cost | Outcome and top problem (owner) |
 | --- | --- | --- | --- | --- | --- | --- | --- |
+| 2026-10-11 01:19 | run_c13fd1a74d3ad98c | luca/night-score@c31d89a | 100, eligible | – | 12 min (712 s) | $0.296 | TAN look-up in a new mailbox tab: `get_tan` 675 s → signed 712 s; 9 twins sent, each for a call the platform never received, answered in ~2 s; no 30 s timeout. 210.8 $·s; bid only at 520 s. |
+| 2026-10-11 01:19 | run_d0283ff8e1a3187d | luca/night-score@c31d89a | 100, eligible | – | 15 min (921 s) | $0.261 | Same package: 240 $·s. Phase 1 to 446 s (webmail-2), answer 603 s, then a submit `read` on the portal hung 75 s before the bid values; `get_tan` 858 s → signed 921 s. |
 | 2026-10-11 00:59 | run_840f0cd20f29dc8c | luca/night-score@4d4a37f | 100, eligible | – | 12 min (713 s) | $0.213 | Twin for a call without a first chunk: never fired (no stuck call this run), 151.8 $·s. Bid at 381 s; the TAN look-up's mailbox tab hung 517→667 s (start page timeout, then a fetch to the cut), the second look-up got through at once (Luca: c31d89a). |
 | 2026-10-11 00:59 | run_6038f546123323a1 | luca/night-score@4d4a37f | 100, eligible | – | 14 min (850 s) | $0.265 | Same package, 225.4 $·s; no twin. Bid at 415 s; a submit click and two reads on the tender portal hung 479→686 s (no model call), a `goto` recovered it. |
 | 2026-10-11 00:41 | run_bd99f53d4d7d5c7f | luca/night-score@a4b9d2c | 100, eligible | – | 11 min (680 s) | $0.230 | Setup fee from the commercials and the submit `form` hold: 156.2 $·s. Bid at 350 s, verify_summary matched first time at 475 s; no hold needed. |
