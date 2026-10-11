@@ -152,8 +152,21 @@ limit) is stopped with `Page.stopLoading` and the model told (method, URL, "may 
 page"). Test: a form POST without an answer, then a click on it: < 14 s with the limit at 2 s (old code hung to the
 test's guard). Gate: check_release green, audit clean, reviewer PASS (accepted risk: a server slower than 30 s that
 still acts on the POST may get it twice; the tab was stuck anyway). Runs (9d32034): run_86571e2d5c35436b,
-run_3af67abb1c0fe79b (started 02:20 UTC). Judge by: `no answer to` events and what the model did after them, gaps
-over 60 s on the submit tab, quality, signing.
+run_3af67abb1c0fe79b (started 02:07 UTC).
+
+Results (9d32034): run_86571e2d5c35436b 100 / 17:20 / $0.246 / 255.6 $·s, run_3af67abb1c0fe79b 100 / 13:26 / $0.269 /
+216.8 $·s. No submit-tab stall in either (the watcher never had to fire). run_86571 lost 6.5 min in the TAN look-up:
+twice `fresh` hit `start page not loaded` on the mailbox (20 s), then the TAN agent's first read hung 60 s and its
+fetches hung on: the same pending-navigation lock, in `fresh`, which navigates before a `Tab` exists. Both TAN
+agents were forced off (~160 s each); the third look-up got through. run_3af67 lost no time to the browser (TAN agent
+wandered 72 s; bid at 552 s after a forced ERP search).
+
+Change fcac256: `fresh` creates the `Tab` first; a start page that misses `OPEN_TIMEOUT` is stopped (`Tab.stop`,
+shared with the watcher) and opened once more with twice the time, then stopped again (worst 60 s, was 20 s + a
+locked tab). Test: a start page that never answers, then a read returns (old code: locked to the test's 10 s
+guard). Gate: green, audit clean, reviewer PASS (slow-but-working start pages: hence the longer second attempt).
+Runs (fcac256): run_26b1c884ae47eb49, run_2ec4765202c21efd (started ~02:35 UTC). Judge by: `start page not loaded`
+followed by a TAN/agent that works at once, quality, signing.
 
 ## Backlog
 
