@@ -48,3 +48,7 @@ Seen on the way: run_0b1441de63cf8acb (package fc98097b, not mine, all Haiku): 1
   smaller question (only the evidence each part needs), or `low` with a code check that sends it back on a gap;
   check with `tools/resolver_eval.py --repeat` before any test run.
 - Queue waits on the hosted Qwen: p50 4 s per call, 13 min summed in run_cd888fae0ebef8da; fewer, larger steps help.
+- ERP searches are the critical path after the merge (264→448 s in run_364ee0e5b5151237): see how many steps each
+  search takes and whether the extract call waits on anything; never cut a search's own budget for it.
+- Submit: 22 sequential steps after the bid arrives (5 min in run_a65e32634be4efce); fewer, fuller `form` calls per
+  position, wording kept abstract.
