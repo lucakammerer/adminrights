@@ -8,7 +8,7 @@
   let seed = (opts && opts.seed) || 1
   const rand = () => ((seed = (seed * 16807) % 2147483647) / 2147483647)
   const doc = (opts && opts.doc) || document
-  const stats = { relabelled: 0, decoys: 0, shuffled: 0, rows: 0, reformatted: 0, framed: 0 }
+  const stats = { relabelled: 0, decoys: 0, shuffled: 0, rows: 0, reformatted: 0, framed: 0, grids: 0, scripted: 0 }
 
   // 1. Labels: whole-word synonyms on controls, headings and table headers only (never in data cells).
   const SYNONYMS = {
@@ -91,6 +91,44 @@
 
   // 5. An extra same-origin frame around the main content (last, so the steps above changed the framed copy): the
   // page's styles go with it; a page with a form keeps its content where it is.
+  // opts.widgets: markup of a framework app. Tables become styled rows of spans (no table tags, no roles) and every
+  // other link a pointer element without href that a script on the page follows on click.
+  if (opts && opts.widgets) {
+    for (const table of [...doc.querySelectorAll("table")]) {
+      if (table.querySelector("input, select, textarea, button, [rowspan], [colspan], table")) continue
+      const grid = doc.createElement("div")
+      for (const tr of table.querySelectorAll("tr")) {
+        const row = doc.createElement("div")
+        row.style.cssText = "display:flex;gap:16px"
+        for (const cell of tr.children) {
+          const span = doc.createElement("span")
+          span.innerHTML = cell.innerHTML
+          row.appendChild(span)
+        }
+        grid.appendChild(row)
+      }
+      table.replaceWith(grid)
+      stats.grids++
+    }
+    const links = [...doc.querySelectorAll("a[href]")].filter((a) => !/^(#|javascript:|mailto:)/i.test(a.getAttribute("href")))
+    links.filter((_, i) => i % 2 === 0).forEach((a) => {
+      const span = doc.createElement("span")
+      span.innerHTML = a.innerHTML
+      try { span.dataset.go = new URL(a.getAttribute("href"), (opts && opts.base) || doc.baseURI).href }
+      catch (e) { span.dataset.go = a.getAttribute("href") }
+      span.style.cssText = "cursor:pointer;color:#06c"
+      a.replaceWith(span)
+      stats.scripted++
+    })
+    if (stats.scripted) {
+      const script = doc.createElement("script")
+      script.textContent = "document.addEventListener('click', (e) => { const t = e.target.closest('[data-go]'); " +
+        "if (t) window.top.location.href = t.dataset.go })"
+      const own = doc.querySelector("main") || doc.querySelector("article")  // still listening inside an extra frame
+      for (const parent of new Set([own, doc.body || doc.documentElement].filter(Boolean))) parent.appendChild(script.cloneNode(true))
+    }
+  }
+
   const main = doc.querySelector("main") || doc.querySelector("article") || doc.body
   if (opts && opts.frame !== false && main && !main.querySelector("form") && rand() < 0.7) {
     const styles = [...doc.querySelectorAll("style, link[rel=stylesheet]")].map((e) => e.outerHTML).join("")
