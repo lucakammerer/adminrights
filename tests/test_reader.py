@@ -1,5 +1,6 @@
 """reader.js and fetched documents (I17), on synthetic pages for each trap category: decoys out; generated labels,
-tooltips and canvas marks in; off-screen text marked; a fetched page's own style rules respected; a PDF read.
+tooltips and canvas marks in; off-screen text marked; a fetched page's own style rules respected; values of styled rows kept apart; ARIA widgets and
+clickable elements given refs; a PDF read.
 
 Run from the repo root: uv run --project agent --no-sync python -m unittest discover -s tests -v
 """
@@ -32,6 +33,10 @@ PAGE = """<!doctype html><html><head><style>
 <span role="tooltip" style="visibility:hidden">Valid until 2030-12-31 <b>hover value 31</b></span>
 <a href="/x">Open <span aria-hidden="true">decoy-in-link</span></a>
 <button aria-describedby="d1">Check</button><span id="d1">Approved <b hidden>decoy-in-description</b></span>
+<div style="display:flex"><span>Bore</span><span>63</span></div>
+<div role="row"><span role="gridcell">250</span><span role="gridcell">17,40</span></div>
+<span role="link">Open record</span><div role="checkbox" aria-checked="false">Confirm</div>
+<div style="cursor:pointer" onmousedown="0">Next results <span>page</span></div>
 </body></html>"""
 
 
@@ -112,6 +117,14 @@ class Reader(unittest.TestCase):
         for text in (self.live, self.fetched):
             self.assertIn("(off-screen text: screen reader value 17)", text)
             self.assertIn("(off-screen text: off page value 23)", text)
+
+    def test_values_of_styled_rows_stay_apart_and_widgets_get_refs(self):
+        self.assertIn("Bore\n63", self.live)
+        for text in (self.live, self.fetched):
+            self.assertIn("| 250 | 17,40", text)
+        self.assertRegex(self.live, r'\[\d+:link "Open record"\]')
+        self.assertRegex(self.live, r'\[\d+:checkbox "Confirm" unchecked\]')
+        self.assertRegex(self.live, r"\[\d+:clickable\] Next results page")
 
     def test_pdf_is_read(self):
         self.assertIn("Delivery note 0815", describe_file("note.pdf", minimal_pdf("Delivery note 0815")))

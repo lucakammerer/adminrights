@@ -274,9 +274,9 @@ on disagreement it logs both, re-asks once, then the rule wins.
 | 1b | Off-screen and screen-reader-only (clipped) text kept but marked `(off-screen text: …)` and counted: recorded pages showed no such hiding, and real values can live there (decided on the recordings) | ✅ I17 |
 | 2 | Reveal real values: image and canvas labels, tooltips (also `title` of plain elements), CSS-generated text (`::before`/`::after`), collapsed `<details>`, select options, input values; a canvas without text is marked; names, labels and tooltips skip hidden descendants (decoys inside them) | ✅ I17 |
 | 3 | Normalize text: remove invisible characters; keep number-format hints verbatim | ✅ |
-| 4 | Controls as `[n:kind "label"]` refs the tools act on; links show their href | ✅ |
+| 4 | Controls as `[n:kind "label"]` refs the tools act on; links show their href. ARIA widgets (`role` link, checkbox, switch, radio, combobox, textbox), links without href and contenteditable fields count as controls when they hold none of their own; a plain element with a click handler attribute or a pointer cursor (the outermost one, around no control) is marked `[n:clickable]` and its content still read | ✅ |
 | 5 | Same-origin iframes inlined, nested ones too | ✅ |
-| 6 | Tables with cell separators; page indicators stay in the text | ✅ |
+| 6 | Tables with cell separators, also tables built from styled elements: ARIA cell roles and `display: table-cell` give a cell separator, block, flex and grid layout and the `row` role a line break, `inline-*` layout a space, so values in adjacent spans never merge; page indicators stay in the text | ✅ |
 | 7 | Open dialogs marked; in-page dialogs closed on every settle; browser dialogs accepted and reported | ✅ |
 | 8 | Repeated page chrome (headers, banners) suppressed to save tokens: on the page shown after an action, lines without controls that earlier reads of the tab showed twice are left out at its top and bottom, with a note; controls, evidence and explicit reads stay complete (about 10 % less page text on the recordings) | ✅ I17 |
 | 9 | 14,000 characters per read, `offset` for the rest | ✅ |
@@ -483,7 +483,8 @@ Stress levels:
 
 - **S1:** renamed and reordered site ids. Pass: no crash, same answer.
 - **S2:** live scouting pages rewritten during local runs (relabelled UI text, swapped number formats, extra iframes,
-  injected decoys, shuffled lists). Pass: signs and scores ≥ 95. Time-boxed to 2 h.
+  injected decoys, shuffled lists); `--widgets` adds framework-app markup (tables as styled span rows, every other
+  link a pointer element without href that a page script follows). Pass: signs and scores ≥ 95. Time-boxed to 2 h.
 - **S3:** a no-bid variant where the matching material shows as blocked. Pass: answers no_bid.
 - **S4 (stretch):** information moved between sites. Pass: the gap sweep (I16) finds it.
 
