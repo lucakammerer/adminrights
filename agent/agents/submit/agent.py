@@ -80,6 +80,9 @@ number / newest), open it and finish with found true and the TAN exactly as writ
             """A look-up that found no TAN keeps searching instead of handing the portal a non-TAN."""
             if result.get("found") and str(result.get("tan") or "").strip():
                 return result, ""
+            if result.get("found"):
+                return result, ("Not done: you found the message but gave no TAN. Open that message and finish with "
+                                "its TAN exactly as written.")
             return result, ("Not done: no signing-TAN message found yet. Search the mailbox for it (newest first, "
                             "every folder), open it and finish with found true and its TAN.")
 

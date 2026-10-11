@@ -257,7 +257,11 @@ async def main() -> int:
         async def submission():
             mail = await mail_job
             portal = await fresh(tabs["tender_portal"])
-            return await submit_agent.run(task, portal, lambda: fresh(tabs["webmail"]), bid_ready,
+            # the first TAN look-up's tab opens now, while the bid is worked out: a mailbox start page that loaded
+            # slowly in a new tab cost the look-up 50 s in 2 of ~8 runs (run_5150d06e5790477d)
+            spare = [asyncio.create_task(fresh(tabs["webmail"]))]
+            mailbox = lambda: spare.pop() if spare else fresh(tabs["webmail"])  # noqa: E731
+            return await submit_agent.run(task, portal, mailbox, bid_ready,
                                           mail.get("own_address", ""), end - 20, mail.get("search_url", ""))
         submitting = start(submission(), end) if early_submit else None
 

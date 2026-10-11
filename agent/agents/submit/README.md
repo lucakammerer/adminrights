@@ -39,8 +39,10 @@ bindingly. Without a submission the run scores 0.
   with the search URL the webmail agent reported (`search_url`), so it searches instead of browsing (9 steps, 71 s
   in run_acc211d89c011277).
   Finds the newest TAN mail for the request just made, in a new tab of the mailbox's browser (same login) opened on
-  its start page: the mail agent's tab, idle since phase 1, stopped answering for 45-150 s in half the runs. A
-  `check` refuses a finish without `found` and a TAN while more than 45 s remain: in one test run the look-up started
+  its start page: the mail agent's tab, idle since phase 1, stopped answering for 45-150 s in half the runs. The
+  first look-up's tab is opened when the submission starts, so its start page loads while the bid is worked out
+  (a slow start page cost 50 s at the look-up). A `check` refuses a finish without `found` and a TAN while more than
+  45 s remain (a found message without its TAN: open it): in one test run the look-up started
   inside the mail agent's last search list, returned the newest message there (not a TAN mail) with no TAN, and the
   second look-up the submit agent then started ran out of time, so nothing was signed.
 - Extra tool `verify_summary` (I6b): code reads the summary page and reports every unit price and the total net that
