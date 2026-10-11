@@ -395,9 +395,21 @@ run_2bfbe16b551a62a3 100 / 5:17 / $0.144 / 45.6 $·s, the two best Qwen runs of 
 Next idea: the requirements resolver is the gate to the bid in slow runs (362 s here); the backlog's "smaller
 question or effort low" is the next lever, measured offline with `tools/resolver_eval.py --repeat` first.
 
+### 11 · 06:52 · `specs` at effort low? Measured first, then more evidence for the pick
+
+Hypothesis (backlog): `specs` at effort low starts the early ERP searches sooner. Offline check impossible: the
+local proxy answered every call with 429 again (`tools/resolver_eval.py` via a /tmp wrapper, 0 answers, and a
+single one-line `ask_json` too). From the logs instead: in run_ddc02354bde271f3 (the slow 10:41) `specs` asked at
+239 s and answered at 256 s (17 s at medium); the searches waited for phase 1 (supplier portal + technical mail done at
+239 s), not for `specs`. The 60 s backup in run_b4c23813dd122d18 is the exception. Verdict: not the lever; no change.
+A saving of ~15 s can't be told apart from the 2x run spread in two runs.
+
+Instead one more pair of the unchanged tip cd967a0 for the morning decision: run_abc7db6e7a9804f9,
+run_aeaefa93edce1937 (started 06:57).
+
 ## Backlog
 
-- `specs` at effort low: it only starts the early ERP searches and `requirements` corrects it, yet at medium it took
+- `specs` at effort low (iteration 11: 17 s at medium in a slow run, not on the critical path; low priority): it only starts the early ERP searches and `requirements` corrects it, yet at medium it took
   60 s and timed out into the low backup in run_b4c23813dd122d18 (early searches ~60 s later). Measure low vs medium
   offline first (`/tmp`-style script calling `resolvers.specs` on `eval/fixtures/resolvers`); at 05:30 the local
   proxy answered every call with 429, so it was not measured.
