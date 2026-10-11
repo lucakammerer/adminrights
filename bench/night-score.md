@@ -120,6 +120,27 @@ Next idea: a browser tool that times out means the page stopped answering (Timeo
 without waiting) and do it in `investigate`'s error path for a timeout, telling the model. Generic web mechanics;
 check the submit agent's `form` handler too (its own `wait_for`).
 
+### 4 · 03:36 · Reads of long-idle tabs hang on the settle wait
+
+Evidence: run_d0283ff8e1a3187d: the submit agent's first `read` after the bid (616 s) came back only at 693 s
+(60 s `TOOL_TIMEOUT` + 15 s re-read); the tab had idled since the early start. Same shape as the TAN look-up stalls
+(mailbox tab idle for minutes) and run_6038f546123323a1 (submit tab, 479→686 s). Every stall was on a tab that sat
+unused for minutes.
+
+Hypothesis: `Tab.settle` awaited one in-page Promise that looped on the page's own `setTimeout` (50 ms ticks). A
+background tab's timers are throttled (Chrome: once a minute after 5 min hidden), so the promise outlived the tool
+timeout. Locally not reproducible: Playwright-launched Chromium keeps every tab visible and disables throttling;
+the platform's browsers are attached over CDP, their flags unknown.
+
+Change 3258746: settle polls a synchronous evaluate (ms since the last DOM change, pending short timers) from Python
+every 50 ms, each poll bounded, at most `SETTLE_MAX`. Same semantics on a normal page. Test: a page whose timers
+never fire (old code hangs to the test's 10 s guard, new one returns in < 2.5 s). Gate: check_release green, audit
+clean, reviewer PASS (gap noted: if a tab is truly frozen rather than throttled, the dialog sweep after the loop has
+no bound; add one if stalls persist).
+
+Runs (3258746): run_590a955bd423bbac, run_01a5fe851c09aba6 (started 01:50 UTC). Judge by: any `read`/action on an
+idle tab taking > 30 s (submit's first read after the bid, `get_tan`), quality, signing.
+
 ## Backlog
 
 - Frozen pages (see iteration 3 "Next idea"): 75-207 s per run in run_6038f546123323a1 and run_d0283ff8e1a3187d,
