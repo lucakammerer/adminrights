@@ -18,8 +18,7 @@ CI = ROOT / "bench/.ci"
 STATE = CI / "state.json"
 SCRATCH = Path(tempfile.gettempdir()) / "adminrights-ci"
 BRANCHES = ("p1/", "p2/")
-MAX_ACTIVE = 4  # the platform runs 4 of the team's test runs at once
-RUN_ENDED = {"submitted", "failed", "timed_out", "cancelled"}
+RUN_ENDED = {"submitted", "scored", "failed", "timed_out", "cancelled"}
 SUBMISSION_ENDED = {"complete", "failed", "rejected", "disqualified"}
 
 
@@ -141,13 +140,9 @@ def tick(dry: bool) -> list[str]:
     STATE.write_text(json.dumps(state, indent=1))
     status = atira("status", "--challenge", "rfq")
     busy = [s["submission_id"] for s in status["submissions"] if s.get("status") not in SUBMISSION_ENDED]
-    active = [r for r in status["test_runs"] if r.get("status") not in RUN_ENDED]
     if busy:
         lines.append(f"hold: submission {busy} is running")
     for name, refs in [] if busy else candidates():
-        if len(active) >= MAX_ACTIVE:
-            lines.append(f"wait: {len(active)} test runs active")
-            break
         try:
             path, tree, label = build(name, refs)
         except RuntimeError as error:
@@ -167,7 +162,6 @@ def tick(dry: bool) -> list[str]:
             started = json.loads(sh("atira", "test-run", str(path / "agent"), "--challenge", "rfq", "--no-open", "--json"))
             state["tested"][tree] = started["run_id"]
             state["runs"][started["run_id"]] = {"label": label, "tree": tree, "rehearsal": started["rehearsal_id"]}
-            active.append(started)
             lines.append(f"started {started['run_id']} for {label}")
         sh("git", "worktree", "remove", "--force", str(path), check=False)
     STATE.write_text(json.dumps(state, indent=1))
