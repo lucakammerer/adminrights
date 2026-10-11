@@ -2,12 +2,18 @@
 
 ## Morning summary
 
-Best candidate: **5f858c2** (fcac256 + a changed requirement goes to the running early ERP search). Its runs:
-100 / 9:47 / $0.285 / 167.2 $·s (run_b4c23813dd122d18), 100 / 10:26 / $0.275 / 172.4 $·s (run_5150d06e5790477d):
-the fastest Qwen runs on this branch (bid at 421 s and 344 s, was 497-545 s); $·s flat because cost was higher.
-fcac256's pair: 167.2 and 147.6 $·s. Main on Qwen tonight: 122.6-262 $·s. Our submission: 70 $·s (Haiku). Rank 1:
-25 $·s. No Qwen run is a submit candidate on $·s; the fixes below are model-independent and help Haiku too.
+Best candidate: **58f933b** (5c1668a + the night-gen merge 1920ba1 + the no-match check fix); its runs are pending
+(run_28c8d1f903003c25, run_92428b63f6b01b4e). 5c1668a's pair: run_96d33dd7b340c037 100 / 6:34 / $0.142 / **56.1 $·s**
+(best Qwen run of the night, below our Haiku submission's 70 $·s; rank 1: 25 $·s) and run_7d633f73aa69af53 **5**: a
+no_bid from a bug in 5f858c2 (a changed requirement never reached the ERP no-match check), fixed in 58f933b.
+**Do not merge 5f858c2 without 58f933b.** Earlier pairs: 5f858c2 167.2 / 172.4 $·s, fcac256 167.2 / 147.6 $·s.
+Main-based night-gen runs on Qwen: 85.8 and 121.6 $·s, so the radical-speed structure on this branch is not shown
+to beat main on Qwen; single runs vary 2× with load.
 Merge to main, each worth it on its own:
+- 58f933b (agent): goes with 5f858c2. The no-match check (a second ERP search) now gets the changed requirement
+  too; without it a no_match decided on the specification's values became a no_bid (run_7d633f73aa69af53: 5).
+- 5c1668a (agent): the first TAN look-up's mailbox tab opens when the submission starts. TAN look-up 13 s and
+  36 s in its two runs (was 16-161 s).
 - 5f858c2 (agent, llm, erp): early ERP searches start from the specification; when the final requirements carry an
   amendment the specification lacked, main used to cancel that search and start over (the last search to finish,
   ~110 s). Now the running search of the same catalogue group gets the new values as a message; one that had
@@ -239,8 +245,40 @@ look-up gets them back; a mailbox whose session times out lands on its login pag
 it). Runs (5c1668a): run_7d633f73aa69af53, run_96d33dd7b340c037 (started 05:14). Judge by: `get_tan` → TAN finish,
 no `fresh` line at the look-up, quality, signing.
 
+Results (5c1668a): run_96d33dd7b340c037 100 / 6:34 / $0.142 / 56.1 $·s, the best Qwen run on any branch (bid at
+286 s, TAN look-up `get_tan` 381 s → signed 394 s); run_7d633f73aa69af53 **5** / 7:39 / $0.186: a no_bid, not caused
+by this change (TAN look-up 36 s there too, no `fresh` stall in either). Verdict: keep 5c1668a.
+
+Luca merged `luca/night-gen` into this branch at 05:14 (1920ba1: stalled frames, form field lookup, office files,
+reader tables); the 5c1668a runs were started before it.
+
+### 7 · 05:15 · A changed requirement must reach the no-match check (fixes a no_bid from 5f858c2)
+
+Evidence (run_7d633f73aa69af53): the early search of one catalogue group started from the specification (usable
+stroke + reserves, without the Q&A amendment) and decided "no match" at 246 s, correctly for those values. Its
+no-match check (a second search, I11) started at 249 s, but `erp_search` called it without `news`. The requirements
+answer came at 286 s with the amended stroke; `redirect` found the job still running and appended the message, which
+nothing read. The check searched on the old values, found nothing; the first no_match stood → calc no_bid → 5 points.
+5f858c2's guard (unread `news` → run again) only ran after the first search, not after the check.
+
+Change 58f933b: every run of `erp_search` (first, rerun, check) gets `news`; unread news after any run means a rerun
+with the new values; when the requirement changed during the check, the first "no match" is dropped and the check's
+answer counts (a forced check then leaves the position without a material rather than a stale no_bid). Test: a group
+whose first search decides no_match at once and whose check is told the change (old code: '' instead of the
+material). Gate: check_release green, audit clean. Reviewer first REJECTED (the snapshot of the requirement was taken
+before the first search, so a valid no_match decided on the new values could be dropped when the check is forced);
+moved it to just before the check, which is the reviewer's suggested fix. Runs (58f933b, includes the night-gen
+merge): run_28c8d1f903003c25, run_92428b63f6b01b4e (started ~05:43). Judge by: quality, signing, time, and whether
+the night-gen merge holds the 6:34 pace.
+
 ## Backlog
 
+- `specs` at effort low: it only starts the early ERP searches and `requirements` corrects it, yet at medium it took
+  60 s and timed out into the low backup in run_b4c23813dd122d18 (early searches ~60 s later). Measure low vs medium
+  offline first (`/tmp`-style script calling `resolvers.specs` on `eval/fixtures/resolvers`); at 05:30 the local
+  proxy answered every call with 429, so it was not measured.
+- Phase 1 varies 99-243 s between identical runs (tender or supplier agent taking 13 vs 30 steps): the largest
+  remaining spread; the generalization owner's area, look at step counts before touching prompts.
 - TAN look-up after the bid (iteration 5): `fresh` waits up to 50 s for a mailbox start page that sometimes
   never loads; the TAN agent wanders after finding the message.
 

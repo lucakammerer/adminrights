@@ -5,6 +5,8 @@ logged answer scored by `eval/compare.py` (what the bid would have scored if sig
 
 | Date (UTC) | Run | Commit | Platform | Eval | Time | Cost | Outcome and top problem (owner) |
 | --- | --- | --- | --- | --- | --- | --- | --- |
+| 2026-10-11 03:11 | run_96d33dd7b340c037 | luca/night-score@5c1668a | 100, eligible | – | 7 min (394 s) | $0.142 | First TAN tab opened when the submission starts: `get_tan` 381 s → signed 394 s, 56.1 $·s, best Qwen run so far (bid at 286 s, one search told). |
+| 2026-10-11 03:11 | run_7d633f73aa69af53 | luca/night-score@5c1668a | 5, eligible | – | 8 min (459 s) | $0.186 | no_bid: the early GR search decided "no match" on the specification's stroke, its no-match check started without the message channel, the corrected stroke arrived during the check and never reached it; the stale no_match stood (bug in 5f858c2, fixed in 58f933b). TAN look-up 36 s. |
 | 2026-10-11 02:50 | run_b4c23813dd122d18 | luca/night-score@5f858c2 | 100, eligible | – | 10 min (587 s) | $0.285 | A changed requirement goes to the running early ERP search: two searches told (no restart), bid at 421 s (was 497-545 s), 167.2 $·s. Submit after the bid 166 s. |
 | 2026-10-11 02:50 | run_5150d06e5790477d | luca/night-score@5f858c2 | 100, eligible | – | 10 min (626 s) | $0.275 | Same package: one search told, bid at 344 s, 172.4 $·s. Submit after the bid 282 s is now the longest stretch. |
 | 2026-10-11 02:30 | run_26b1c884ae47eb49 | luca/night-score@fcac256 | 100, eligible | – | 13 min (769 s) | $0.217 | `fresh` stops a start page without an answer: not needed this run, 167.2 $·s. TAN look-up 86 s, 46 s of it one model call (twin, both timed out at 40 s). |
