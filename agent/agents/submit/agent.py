@@ -31,6 +31,28 @@ total net {german(answer['total_net'])} EUR (net; a displayed gross amount with 
 {f"Unfinished positions to omit with the form's omit option (partial submission): {', '.join(omitted)}" if omitted else ''}"""
 
 
+def number(text) -> float | None:
+    """A typed amount in any common format: the last separator is the decimal one if one or two digits follow it."""
+    text = re.sub(r"[^\d.,-]", "", str(text))
+    if not re.search(r"\d", text):
+        return None
+    last = max(text.rfind("."), text.rfind(","))
+    whole, frac = (text[:last], text[last + 1:]) if last >= 0 and len(text) - last - 1 <= 2 else (text, "")
+    try:
+        return round(float(re.sub(r"[.,]", "", whole) + "." + (frac or "0")), 2)
+    except ValueError:
+        return None
+
+
+def unentered(steps: list, answer: dict) -> list[str]:
+    """Breakdown values of a position whose unit price this form call types but which the call itself doesn't:
+    found on the summary only after every later position was entered, a fix means walking back through them all."""
+    typed = {number(s.get("value")) for s in steps if isinstance(s, dict)} - {None}
+    return [f"position {p['position']} {label} {german(p[key])}" for p in answer["positions"]
+            if number(german(p["unit_price"])) in typed
+            for key, label in OPTIONAL if p.get(key) and round(p[key], 2) not in typed]
+
+
 async def run(task, tab, mail_tab, bid: asyncio.Future, contact: str, deadline, mail_search: str = ""):
     """Starts before the bid is calculated: the agent enters what doesn't depend on it (bidder data, offer kind) and
     then waits in `bid_values`, which returns once `bid` holds (answer, omitted, specs)."""
@@ -66,6 +88,22 @@ number / newest), open it and finish with found true and the TAN exactly as writ
                                       min(deadline, time.time() + 120), "tan", max_steps=12, check=check)
         found.pop("evidence", None)
         return json.dumps(found, ensure_ascii=False)
+
+    held: set[str] = set()  # positions held back once; held again means "this page asks for it elsewhere or not at all"
+
+    async def form(args):
+        steps = args.get("steps") or []
+        if bid.done() and "off" not in held and (missing := unentered(steps, bid.result()[0])):
+            positions = {m.split()[1] for m in missing}
+            if positions & held:
+                held.add("off")
+            else:
+                held.update(positions)
+                llm.log("submit", f"form held: {'; '.join(missing)}")
+                return ("Not run: this call enters a position's unit price but not " + "; ".join(missing) +
+                        ". If this page has a field for it (even one already showing another value), add it in this "
+                        "page's number format and send the call again; if it has none, send the same call again.")
+        return await asyncio.wait_for(tab.act("form", args), llm.TOOL_TIMEOUT)
 
     async def verify_summary(_args):
         """Read-back before signing (I6b): every unit price and the total as calculated must be on the summary, and
@@ -122,5 +160,5 @@ If a value is rejected, read the message and fix it. Finish with what the portal
              "did, get it with get_tan, and submit the bid bindingly now. Call finish only after the portal accepted it.")
     return await llm.investigate(tab, system(task), mission, obj(confirmation=STR), deadline, "submit",
                                  extra_tools=tools, handlers={"bid_values": bid_values, "get_tan": fetch_tan,
-                                           "verify_summary": verify_summary}, max_steps=70,
+                                           "verify_summary": verify_summary, "form": form}, max_steps=70,
                                  warn_at=SIGN_BY, warning=hurry)

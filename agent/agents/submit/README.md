@@ -46,6 +46,12 @@ bindingly. Without a submission the run scores 0.
   isn't on it as calculated; the mission calls it before the TAN request. Values the summary doesn't show are fine.
   Once the summary shows any non-zero breakdown value (base price, surcharge, packaging, project bonus), it checks
   every non-zero one, so a breakdown value typed wrong is caught too.
+- `form` is wrapped (`unentered`): once the bid is known, a call that types a position's unit price but not one of
+  its non-zero breakdown values is held back with what is missing, before its next-step button moves on; each
+  position once. A position held again runs and switches the hold off for the run (that portal asks for them
+  elsewhere or not at all). A next-step click sent as its own tool call in the same turn is not held.
+  Without it, a bonus typed as 0 surfaced only in `verify_summary`, and the fix meant walking back through and
+  re-entering every later position (about 110 s).
 - Fixed guardrails in the mission: no extra positions, none skipped except the `omitted` ones (omit option in the form), never tick our own terms, request the TAN exactly
   once (a new request invalidates the old one, valid 5 min), net not gross.
 

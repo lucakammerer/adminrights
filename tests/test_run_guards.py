@@ -390,5 +390,20 @@ class Bid(unittest.TestCase):
         self.assertEqual(result["omitted"], ["1"])
 
 
+
+class FormHold(unittest.TestCase):
+    def test_a_position_typed_without_its_bonus_is_held(self):
+        """A bonus typed as 0 was found only on the summary, and fixing it meant re-entering every later position."""
+        from agents.submit.agent import unentered
+        answer = {"positions": [{"position": "1", "unit_price": 1906.85, "rebate_total": 2131.11,
+                                 "packaging_per_unit": 0.0}]}
+        steps = [{"field": "a", "value": "21"}, {"field": "b", "value": "1.906,85"}, {"field": "c", "value": "0,00"},
+                 {"click": "next"}]
+        self.assertEqual(unentered(steps, answer), ["position 1 project bonus for the position 2.131,11"])
+        steps[2]["value"] = "2131.11"
+        self.assertEqual(unentered(steps, answer), [])
+        self.assertEqual(unentered([{"field": "a", "value": "21"}], answer), [])
+
+
 if __name__ == "__main__":
     unittest.main()
