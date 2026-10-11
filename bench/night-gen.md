@@ -193,7 +193,50 @@ decoys dropped instead of raw XML or garbage.
 Next: a stress variant that serves the tender documents as XLSX/DOCX (or UTF-16 CSV) instead of the public-1 files
 would measure this end to end; `run_agents.py` mutates only HTML today.
 
+### 6 · 2026-10-11 04:15 · browser: `form` finds a field by the name the reader shows, in frames too
+
+Hypothesis: the reader names a field by aria-labelledby, aria-label, `label[for]`, a wrapping label, else its
+placeholder, title or name; `form` resolves `field` only with Playwright's `get_by_label` and only in the main frame.
+On software whose inputs carry only a placeholder or title, or whose form sits in an iframe (trap 8), every
+`{"field": ...}` step the submit mission asks for waits Playwright's 30 s default and fails with a timeout text;
+`click` by name misses buttons in frames the same way.
+
+Fix (`Tab.named`, `Tab.form`/`Tab.step`, `Tab.settle`): a field is looked up by exact label or placeholder, then
+partial label or placeholder, then title or name attribute (hidden inputs skipped), in every frame; a button by exact,
+then partial role name, in every frame. Nothing found: one `settle`, one more search, then "no field ... use the label
+the page shows, or its ref" at once. `settle` also waits for child frames (in parallel, at most `FRAME_WAIT` 3 s); a
+field step whose frame was replaced mid-step is tried once more (fields only, never a click or ref step, so nothing is
+applied twice).
+
+Evidence: new test `test_form_finds_fields_by_the_reader_s_name_and_inside_frames` (placeholder-only input, title-only
+select with a non-ASCII title next to a hidden input of the same name, role=button div, the configurator in an
+iframe, a missing field) fails on the old code after 91 s (three 30 s timeouts, "Locator.evaluate: Timeout 30000ms
+exceeded"); passes now, 50 repeats without a flake after the frame-race fixes (before them 1 in 5 and 1 in 25
+failed). 99 tests, `check_release.sh` green, audit clean. Adversarial review round 1 FAIL (name match hit hidden inputs
+before a partial label; `json.dumps` escaped umlauts so CSS never matched; frame waits serial, 3 s each), all fixed;
+round 2 PASS. Commit a36d345.
+
+Sandbox `run_a9338f4c12a5d253` (a36d345): 15, 17.5 min, $0.203. The new lookup worked: every `field` step resolved,
+none FAILED. The answer was complete at 663 s, but after one click in the configurator two `read` calls each hung
+about 77 s (past `TOOL_TIMEOUT`) while the portal page was still loading. The model then rebuilt the page by ref, ran
+out of time and signed with `positions: []`. Root cause, reproduced locally on the old code as well:
+`settle` closes in-page dialogs with an unbounded `frame.evaluate` in every frame, and on a frame whose server never
+answers that blocks forever, so every read on such a page lasts until the 60 s tool timeout. The same symptom
+("three 60 s browser-tool timeouts on reads") appeared in `run_a1e07a5b9bdce64b` (iteration 2) on older code.
+Follow-up 9a59bdf: each frame's load wait and dialog close run as tasks under one 3 s cap; a frame still loading at
+the cap is not waited for again until it navigates. Test `test_a_frame_that_never_loads_does_not_hold_up_reads`:
+old code 20 s (until the test server gave up), new code under 4 s; a form step on such a page takes 3.3 s, a missing
+field 0.4 s. Review PASS after a third round (a frame marked stalled must be waited for again after it navigates).
+Sandbox `run_7705434641fff595` (9a59bdf): pending.
+
+Verdict so far: keep both commits, pending the 9a59bdf run. The lookup is a strict superset of the old one (exact
+label first, as before) and fails fast instead of after 30 s. The stalled-frame bound removes a 60 s-per-read hang
+that has now cost two sandbox runs.
+
+
 ## Backlog
+
+- Check how often `read` hits `TOOL_TIMEOUT` across recent team runs (grep stdout for a `read` followed by 60+ s of silence); if the 9a59bdf runs show none, the stalled-frame fix is the cause of those losses.
 
 - Stress: serve the tender documents as XLSX/DOCX/UTF-16 CSV (needs a file mutation in `run_agents.py`).
 
