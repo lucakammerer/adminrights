@@ -62,7 +62,8 @@ Pages it kept from the ERP:
 Fill this JSON only from those pages, copying values exactly as shown; use null for anything the pages do not show.
 available_stock_pieces is the freely usable/unrestricted stock only (not blocked/inspection, not a physical total).
 price_condition is the condition record valid on the scenario date (inclusive), with every scale and its price exactly
-as shown and the record's own number format and price unit.
+as shown and the record's own number format and price unit. why, description and other_relevant_facts take a few
+words each: every word you write delays the bid.
 {json.dumps(RESULT['properties'], ensure_ascii=False)}"""
     data = await llm.ask_json(RESOLVE, question, effort="low")
     data["material_number"] = data.get("material_number") or chosen["material_number"]

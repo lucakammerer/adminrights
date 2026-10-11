@@ -135,20 +135,24 @@ Every browser agent is the same loop; agents differ only in mission, result sche
   model-selected result set"). Of several page actions in one turn only the last one's result carries the page (the
   others say what they did; a read that reports a download or dialog stays whole). A page the model has read is kept
   without being shown again. Tools of one turn run in order, and the tool descriptions ask for `finish` in the turn of
-  the last `save_evidence`.
+  the last `save_evidence`. `SYSTEM` says that every action returns the page it leads to, so no `read` follows it.
 - **Small context:** tool results of the last 4 steps stay in full (`KEEP_STEPS`); older ones shrink to 300 characters, and a
   shortened `save_evidence` result tells the model the page is kept in full for the analyst, so it doesn't reopen it
   to copy values (`llm.SHORTENED_KEPT`); a `fetch` of a kept page's address that shows the same content gets
-  the same reminder appended (`investigate`'s `kept_at`). They shrink in batches, once 6 steps have left the window (`TRIM_EVERY`) or
-  their results reach 60,000 characters (`TRIM_CHARS`): every shortening invalidates the prompt cache from that point
-  on, and between batches the history only grows, so the model reads it from the cache.
+  the same reminder appended (`investigate`'s `kept_at`). The history only grows, so the prompt cache serves each call
+  everything but its newest step, at a tenth of the input price; the older reads shrink at once when a prompt passes
+  `llm.COMPACT_AT` (60,000 tokens, estimated as characters / `CHARS_PER_TOKEN`): one rewrite, then the history grows
+  from the cache again, and no call nears Haiku 5.5's 100k-token price step. Every shortening makes every later call
+  write the rest of the history to the cache again at 1.25× the input price (2026-10-10, shortening each step: a third
+  of a run's prompt came from the cache); replayed on that run's calls, the size cap brings loop input to about
+  $0.069 against $0.085 with a batch every 6 steps.
 - **Shared prefix:** every agent sends the same system message, the website rules and the brief
   (`agents.common.system`), and the same tools: the browser tools and one `finish` whose result schema is in the
   mission (`llm.FINISH`); submit's own tools come after them. The provider caches a prompt prefix only for the same
   tool list (measured: same system text, another finish schema, no cache hit), so now all agents of a run share their
   first ~4,500 tokens and every model replica soon serves them from its cache. On Claude a cache breakpoint ends the
-  system message, so every agent reads it from the cache, also right after a batch. The model's reasoning stays while
-  its step is in the `KEEP_STEPS` window and goes in the same batches as the older page reads (the API reads reasoning
+  system message, so every agent reads it from the cache, also right after that rewrite. The model's reasoning stays while
+  its step is in the `KEEP_STEPS` window and goes in the same rewrite as the older page reads (the API reads reasoning
   sent back as input on every later step).
 - **`finish`:** a result that isn't a JSON object is refused while more than 30 s remain; an agent without a `check`
   (its kept pages are what counts) that sends broken text a second time has it taken as `summary` (a supplier agent
@@ -170,8 +174,10 @@ Every browser agent is the same loop; agents differ only in mission, result sche
   attempts at a call go to the hosted Qwen (`llm.FALLBACK`, with a plain-text system message), which `agent.json` keeps warm at no cost in time; a credit refusal (402) sends that call there at
   once, a spent key (403) every later call of the run (each refused attempt cost 15 s a call); a call
   without an answer after `HEDGE` (15 s) gets a twin and the first answer wins (about one OpenRouter call in six never
-  came back); `ask_json` (resolvers, ERP extract) runs on the same model. Browser steps run
-  with low reasoning effort (`STEP_EFFORT`): without thinking a step took a fifth of the time, but a webmail agent kept
+  came back); every OpenRouter call asks for the provider with the lowest latency (`llm.ROUTE`, `PROVIDER_SORT`; sticky
+  routing keeps a conversation, and so its cache, on one provider); `ask_json` (resolvers, ERP extract) runs on the
+  same model. Browser steps run with low reasoning effort (`STEP_EFFORT`; `none` switches thinking off, an A/B still to
+  run): without thinking a step took a fifth of the time, but a webmail agent kept
   its only record after 12 steps and then searched on to its step limit of 60 (it never judged itself done);
   `chat` tries up to 6 times, each attempt at most `CALL_TIMEOUT` (180 s; no SDK-internal retries) and all of them
   bounded by the stage's `llm.UNTIL`, which `agent.safe`/`agent.start` set per stage; step calls end at the agent's
@@ -191,7 +197,8 @@ Every browser agent is the same loop; agents differ only in mission, result sche
 
 ### 3.4 Resolvers, calculator, submission
 
-- **Resolvers** (`agents/resolvers`): one `ask_json` call each (JSON mode, up to 3 attempts). `sites`: which website
+- **Resolvers** (`agents/resolvers`): one `ask_json` call each (JSON mode, up to 3 attempts); on the hosted Qwen
+  `requirements` asks twice at once, since one Qwen call in a few hangs until its timeout. `sites`: which website
   plays which role, from the brief. `specs`: the governing requirements from the specification and the technical
   mail alone, so the ERP searches start early; `requirements`: final quantities and governing requirements; `commercials`:
   discount, clauses, tariffs, commitments, pool and bonus membership, setup fees, FX rates, metal indices, pool fee,
@@ -210,7 +217,8 @@ Every browser agent is the same loop; agents differ only in mission, result sche
   one TAN request). One `form` call per page or position, a configurator's dependent choices each followed by its
   apply button, named by field label (refs are lost when a choice is applied) and sent without reading their options
   first (`form` matches an option by text, beginning or part, and a step without a match stops with the page's
-  options; a choice still disabled after one wait stops with "apply the earlier choice first").
+  options; a choice still disabled after one wait stops with "apply the earlier choice first"); once the first
+  position is accepted, all remaining positions in a single `form` call.
   First watchdog slice: `SIGN_BY` (180 s) before its deadline the agent is told to omit what isn't entered, request the
   TAN and sign, instead of the generic "call finish" (which once ended a run unsigned with 4 positions entered).
 
@@ -220,7 +228,8 @@ Every line goes through `llm.log` as `[tag  123s] ...` (seconds since start). `m
 (`sites`, `specs`, `tender-portal`, `supplier-portal`, `webmail`, `requirements`, `commercials`, `erp`, `facts`, `calc`,
 `answer`,
 `submit`); every agent step
-appears as `[tag  123s] n: tool {args}`.
+appears as `[tag  123s] n: tool {args}`, and a tool that took over `llm.SLOW_TOOL` (5 s) adds
+`[tag  123s] n: tool took 30 s`: where a run's browser time goes.
 
 ---
 
@@ -365,13 +374,20 @@ on disagreement it logs both, re-asks once, then the rule wins.
 | Anything else | a frontier model via team secret | off; only behind a flag where it buys quality (E6) |
 
 - Calls are bounded by the caller's deadline (I2); at most 12 concurrent calls per run (the team shares 32).
+- A Haiku call took 1.65 s plus 3.3 s per 1,000 output tokens on 2026-10-10 (125 calls; thinking counts as output,
+  prompt size hardly mattered). So: fewer calls (`all_pages`, `finish` with the last saves, one `form` call for the
+  remaining positions) and fewer words (no wording copied into a `finish` the kept pages hold, terse resolver and
+  extraction fields, notes only where a page isn't kept).
 - Reasoning effort: low for browser steps (`STEP_EFFORT`) and for copying values, medium for the resolvers. Low is
   several times faster; switching thinking off entirely made the model rewrite number formats (PR #5) and loop
   without ever finishing (a webmail agent searched 48 steps past its only record).
-- Prompt layout: static system prompt and tool schemas first (cached input is cheaper), then brief, then dynamic parts.
+- Prompt layout: static system prompt and tool schemas first (cached input is cheaper), then brief, then dynamic parts;
+  the tool loop's history only grows (§3.3).
 - The system prompt teaches meanings (traps, German business terms), never values.
 - Resolver inputs only carry the evidence they need (I5); later, extraction while browsing (I19).
-- Cost: measure per test run; target ≤ $0.25 (T3.3).
+- Cost: the platform bills OpenRouter's reported cost. Haiku 5.5: $0.10/M input, $0.125/M written to the cache,
+  $0.01/M read from it, $0.50/M output; input and output cost five times as much once a prompt passes 100k tokens.
+  The platform's input tokens leave out cache reads. Measure per test run; target ≤ $0.25 (T3.3).
 
 ---
 
@@ -478,10 +494,10 @@ Every item has exactly one owner. When it touches a file someone else owns (§14
 | I10 | Strict numbers: a number's own format beats the hint ✅, thousands separators in grams ✅, text values ✅ (`tests/test_calc.py`); remaining: ambiguous forms refused (the agent re-reads); `Decimal` end to end | `numbers.py`, `calc.py` | parser tests | 4, 22 | L |
 | I11 | ERP no-match needs proof on kept pages ✅ (`erp.unproven`: result pages kept, every candidate listed with its difference, `tests/test_erp_no_match.py`); ERP match check in code ✅ (`validate.material_mismatch` in the ERP `check`, `tests/test_validate.py`); no-bid gate ✅ (`main` `erp_search`: a `no_match` with ≥ 150 s left gets a second agent in a fresh tab; a material it finds wins); remaining: answer schema validated before signing | `agents/erp`, `validate.py`, `agents/submit` | tests with look-alike and blocked candidates | T1.6, 3, 7, 8 | L |
 | I12 | ✅ Mail topics and senders parsed from the brief (`common.mail_records`, `tests/test_brief.py`); approval found by sender and meaning; technical release for `requirements` from the brief | `agents/webmail`, `agents/common.py`, `agents/resolvers` | no public mail subject in prompts | T0.11, 5, 10, 21 | Y |
-| I13 | ✅ Code-side retry of transient error pages; auto re-login; adaptive settle; `form` ref click falls back to a DOM click, a null value is never typed (`tests/test_browser.py`) | `browser.py` | fewer model turns on the ERP in the dry-run log | T3.2 | Y |
+| I13 | ✅ Code-side retry of transient error pages; auto re-login; adaptive settle; `form` ref click falls back to a DOM click, a null value is never typed; a click that went through to a slow page counts (it took 32 s and ended in an error: 2 s, then 30 s waiting for its button, gone with the old page), a missing label or button fails at once, and no Playwright wait is longer than `ACTION_TIMEOUT` (`tests/test_browser.py`) | `browser.py` | fewer model turns on the ERP in the dry-run log | T3.2 | Y |
 | I14 | ✅ Calculator tests (`tests/test_calc.py`): golden test, values written as text, allocation ties, band edges, inclusive ceilings and thresholds, shared stock | `tests/` | green | 4–9, 12, 15–18, 22–27 | L |
 | I15 | Loud failures instead of silent fallbacks (FX, metal index): tolerant key match and `MISSING` in the trace ✅; omitted positions per rule 9 ✅ (also when all are omitted); a material without prices is submitted with its other fields ✅ | `calc.py` | tests | 9, 22, 28 | L |
-| I23 | Cost: cache-friendly loop (append-only history; when it grows too long, restart from the notes and kept evidence); measure Clef against Qwen for yes/no and pick decisions, then use it or drop it | `llm.py` | cached share of input up; cost per run ≤ $0.10 | T3.4 | F |
+| I23 | Cost: cache-friendly loop ✅ (append-only history, older reads shortened once past `COMPACT_AT`; no page twice in one turn; the cache only where a later call reads it; `requirements` asked once on OpenRouter); remaining: measure Clef for yes/no and pick decisions, then use it or drop it | `llm.py` | cached share of input up; cost per run ≤ $0.10 | T3.4 | F |
 | I24 | Stress harness for levels S1–S4 (§14.1): S1 ✅ (`s1_sites.py`); single-agent runner and recorder ✅ (`run_agents.py`: results, kept evidence, raw HTML, step summary, timing, gather score against `eval/public-1/gather-facts.json`); S3 `s3_nobid.py` (live: blocked → no_bid 2/2, unchanged → bid, starved → no false no-bid); S2 `--mutate` (`mutations.js`) and S4 `--s4` built, not yet passed live | `tools/stress/` | S1 and S3 pass; S2 time-boxed to 2 h | T1.12, 3, 19 | Y |
 
 ### P2: private-dataset readiness

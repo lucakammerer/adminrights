@@ -90,6 +90,12 @@ minutes; results land in `bench/RUNS.md`. Details and the submission gate: `docs
 - Leaving dev scripts that launch their own Chromium in the package: the reviewer sees them.
 - A run that ends without an answer looks like a model failure but is usually a time problem: check the phase
   deadlines in `main` first.
+- Editing an earlier message of a model conversation (shortening, deleting, reordering it) breaks the prompt cache from
+  that message on: every later call pays for the rest of the history again, as cache writes at 1.25× the input price.
+  `investigate` only appends, and shortens older reads once, past `llm.COMPACT_AT`.
+- A Playwright call on an element that is gone waits for it to come back. Without its own timeout that took 30 s per
+  click on a slow page; `browser.ACTION_TIMEOUT` now bounds every such wait, and a click whose page loads slowly
+  (Playwright's error says "click action done") is never clicked again.
 
 ## Keeping docs current
 

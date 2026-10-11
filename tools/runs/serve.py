@@ -217,7 +217,8 @@ def advice(run: dict, timeline: list[dict]) -> list[dict]:
     cost = run["cost_micro_usd"] / 1e6
     if cost > TARGET_COST:
         tip("time", f"Cost ${cost:.2f} against the ${TARGET_COST:.2f} target, {run['input_tokens'] / 1e6:.1f} M "
-            "input tokens: a cache-friendly history cuts most of it (I23).")
+            "input tokens not served from the cache (cache reads are not in that count): the run's llm-calls show "
+            "which agent's calls missed it.")
     return tips
 
 

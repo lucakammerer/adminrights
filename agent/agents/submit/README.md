@@ -25,7 +25,8 @@ bindingly. Without a submission the run scores 0.
   took 240-330 s; an early submission that ends before the bid (a crash) is started again once the bid is there.
   Values in German format with two decimals (`german`). Whole form pages in one `form` call, a configurator's
   dependent choices each followed by its apply button; `form` opens collapsed sections around a field itself.
-- One `form` call per position: the mission sends the configurator's choices without reading their options first,
+- One `form` call for the first position, then one for all the remaining ones: the mission sends the configurator's
+  choices without reading their options first,
   because `form` picks an option by its exact text, its beginning or any part of it, and a step without a matching
   option stops the call and lists the page's options. A choice that is still disabled (or still lacks the option) gets
   one wait for the page; if it stays disabled, the step stops and says an earlier choice must be applied first, not

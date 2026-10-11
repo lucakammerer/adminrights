@@ -54,8 +54,10 @@ means. The output is typed facts for `calc`, which does all the arithmetic.
   (`GOVERNING`) and value schema (`SPEC_JSON`) are the ones `requirements` uses, so both decide the same values.
 - `requirements` runs after phase 1, effort medium, alongside the ERP searches; `agent.main` matches its positions to
   the searches by their values and searches the values `specs` missed. Without an answer from `specs` it is on the
-  critical path again: the ERP agents wait for it. It asks twice at once and takes the first answer (`first`), because
-  one hosted call in a few hangs until its timeout. It gets only the technical mail because all mail doubles its time
+  critical path again: the ERP agents wait for it. On OpenRouter it asks once (both copies of a twin answered within a
+  second and both were billed; `llm.chat` sends a twin alongside a call without a reply after `HEDGE`); on the hosted
+  Qwen it asks twice at once and takes the first answer (`first`), because one Qwen call in a few hangs until its
+  timeout. It gets only the technical mail because all mail doubles its time
   (66 s instead of 34 s on public-1). Prompt: tender quantity replaced by the latest dated clarification, a withdrawn
   answer as if never given (an older change it replaced applies again), sets into pieces; decided from the kept
   pages, not the agents' summaries; the current revision's requirement plus only the amendments naming exactly that

@@ -1,5 +1,6 @@
 """llm.investigate with a fake model: a finish sent after the time warning is marked forced, so a search the agent
-never completed can't count as no_match (I1); a finish without its wrapper and a tool that never answers.
+never completed can't count as no_match (I1); a finish without its wrapper and a tool that never answers; a history
+the prompt cache can serve (it only grows until COMPACT_AT).
 
 Run from the repo root: uv run --project agent --no-sync python -m unittest discover -s tests -v
 """
@@ -106,6 +107,70 @@ class Investigate(unittest.TestCase):
         self.assertIn("Unchanged since you kept it as evidence #1", self.prompts[2][-1])
         self.assertNotIn("Unchanged since", self.prompts[3][-1])
         self.assertNotIn("Unchanged since", self.prompts[4][-1])
+
+
+class PageTab:
+    """A tab whose every read is a new long page."""
+
+    def __init__(self):
+        self.reads = 0
+
+    async def read(self, offset=0):
+        self.reads += 1
+        return f"page {self.reads}\n" + "x" * 20_000
+
+
+def turn(*calls):
+    """A model reply that calls each (tool, arguments) in one turn."""
+    tool_calls = [SimpleNamespace(id=str(i), function=SimpleNamespace(name=name, arguments=json.dumps(arguments)))
+                  for i, (name, arguments) in enumerate(calls)]
+    message = SimpleNamespace(content=None, tool_calls=tool_calls,
+                              model_dump=lambda **_: {"role": "assistant", "content": None})
+    return SimpleNamespace(choices=[SimpleNamespace(message=message)])
+
+
+class History(unittest.TestCase):
+    """2026-10-10: shortening older reads on every step left a third of a Haiku run's prompt to the cache."""
+
+    def setUp(self):
+        self.real = llm.chat, llm.COMPACT_AT
+
+    def tearDown(self):
+        llm.chat, llm.COMPACT_AT = self.real
+
+    def play(self, turns) -> list[list[str]]:
+        """Plays `turns`, then finish: every prompt as sent (its messages as JSON)."""
+        sent = []
+
+        async def chat(messages, tools=None, **kwargs):
+            sent.append([json.dumps(m, sort_keys=True) for m in messages])
+            return turns[len(sent) - 1] if len(sent) <= len(turns) else finish({})
+        llm.chat = chat
+        asyncio.run(llm.investigate(PageTab(), "system", "mission", {"type": "object"}, time.time() + 300, "test"))
+        return sent
+
+    @staticmethod
+    def rewrites(sent) -> int:
+        """Calls whose prompt changed what the call before them sent (the cache serves only an unchanged start)."""
+        return sum(1 for before, after in zip(sent, sent[1:]) if after[:len(before)] != before)
+
+    @staticmethod
+    def results(prompt) -> list[str]:
+        return [m["content"] for m in map(json.loads, prompt) if m["role"] == "tool"]
+
+    def test_history_only_grows_below_the_cap(self):
+        llm.COMPACT_AT = 1_000_000  # never reached
+        sent = self.play([turn(("read", {}))] * 10)
+        self.assertEqual(self.rewrites(sent), 0)  # a batch every 6 steps rewrote the last of these prompts
+        self.assertFalse(any("shortened" in r for r in self.results(sent[-1])))
+
+    def test_past_the_cap_older_reads_shrink_at_once(self):
+        llm.COMPACT_AT = 70_000  # tokens: about ten steps of 20,000 characters
+        sent = self.play([turn(("read", {}))] * 12)
+        self.assertEqual(self.rewrites(sent), 1)
+        results = self.results(sent[-1])
+        self.assertIn("shortened", results[0])
+        self.assertTrue(all(len(r) > 20_000 for r in results[-llm.KEEP_STEPS:]))
 
 
 if __name__ == "__main__":

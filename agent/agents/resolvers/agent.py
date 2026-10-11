@@ -134,11 +134,18 @@ For every tender position, work out:
   never been given: the latest change that is not withdrawn still applies, even when it is older than the withdrawn
   one. List every quantity clarification for the position in quantity_reasoning before you decide;
 - the governing requirement: {GOVERNING}
+Every word you write delays the bid: keep the reasoning fields to their facts. quantity_reasoning lists each
+clarification as "number (date): change, withdrawn or not"; requirement_reasoning names the revision, the amendments
+and the reserve used, without further prose.
 JSON: {{"positions": [{{"position": "...", "final_quantity_pieces": 0, "quantity_reasoning": "...",
 "requirement": "the requirement id the position refers to", {SPEC_JSON}, "requirement_reasoning": "..."}}]}}"""
-    llm.log("requirements", f"asking twice with {len(question)} chars, effort {effort}")  # its size drives the critical path
-    # it holds up the ERP phase, and one hosted call in a few hangs until its timeout: the faster of two answers
-    return await first(llm.ask_json(RESOLVE, question, effort=effort), llm.ask_json(RESOLVE, question, effort=effort))
+    # It holds up the ERP phase. The hosted Qwen hangs on one call in a few until its timeout: there the faster of two
+    # answers counts. On OpenRouter both copies answered within a second and both were billed (+2 % of a run's cost),
+    # while chat already sends a twin alongside a call that has no reply after HEDGE.
+    copies = 1 if llm.OPENROUTER else 2
+    llm.log("requirements", f"asking {'once' if copies == 1 else 'twice'} with {len(question)} chars, "
+            f"effort {effort}")  # its size drives the critical path
+    return await first(*(llm.ask_json(RESOLVE, question, effort=effort) for _ in range(copies)))
 
 
 async def commercials(task, tender, mail, others: list[dict] | None = None) -> dict:
