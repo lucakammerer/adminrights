@@ -116,9 +116,11 @@ Every browser agent is the same loop; agents differ only in mission, result sche
 - **Tools:** `read`, `goto`, `click`, `fill`, `select`, `check`, `press`, `back`, `form` (a whole form by visible
   labels, survives reloads; `ref` steps for unlabeled controls; opens collapsed sections around a field), `fetch` (read a same-site URL without navigating; opens ZIPs and PDFs), `save_evidence`
   (keep a page word for word), `note` (pin verified facts), `finish`.
-- **Small context:** tool results of the last 4 steps stay in full (`KEEP_STEPS`); older ones shrink to 300 characters, and a
-  shortened `save_evidence` result tells the model the page is kept in full for the analyst, so it doesn't reopen it
-  to copy values (`llm.SHORTENED_KEPT`).
+- **Small context, cached:** tool results of the last 4 steps stay in full (`KEEP_STEPS`); older ones shrink to 300
+  characters in one batch once they add up to `llm.TRIM_CHARS`, never step by step, so the history only grows between
+  batches and each call reads the previous prompt from the prompt cache (a write costs 1.25× input, a read 0.1×).
+  `ask_json` sends no cache breakpoint: its prompt is never continued. A shortened `save_evidence` result tells the
+  model the page is kept in full for the analyst, so it doesn't reopen it to copy values (`llm.SHORTENED_KEPT`).
 - **`finish`:** a result that isn't a JSON object is refused while more than 30 s remain; fields sent without the
   `result` wrapper are taken as the result.
 - **Tools:** a browser tool, and the first page read before step 0, runs at most `TOOL_TIMEOUT` (60 s) and never past

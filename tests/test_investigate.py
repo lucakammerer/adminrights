@@ -81,6 +81,24 @@ class Investigate(unittest.TestCase):
                                                               warn_at=0), 10))
         self.assertTrue(result["forced"])
 
+    def test_history_only_grows_until_old_reads_shrink_in_one_batch(self):
+        """run_0bf3628e04112a0c: shortening a read each step rewrote the history, so no call read it from the cache."""
+        page = "x" * 10_000
+
+        class LongTab(FakeTab):
+            async def read(self, offset=0):
+                return page
+
+        async def chat(messages, tools=None, **kwargs):
+            self.prompts.append([m.get("content") for m in messages if isinstance(m, dict)])
+            return finish({}) if len(self.prompts) > 16 else finish({}, {}, tool="read")
+        llm.chat = chat
+        asyncio.run(llm.investigate(LongTab(), "system", "mission", {"type": "object"}, time.time() + 300, "test"))
+        rewrites = [n for n, (before, after) in enumerate(zip(self.prompts, self.prompts[1:]))
+                    if after[:len(before)] != before]
+        self.assertEqual(len(rewrites), 1)  # stale reads reach TRIM_CHARS once in 16 steps of 10,000 characters
+        self.assertTrue(all(len(c or "") < 1000 for c in self.prompts[rewrites[0] + 1][2:-2 * llm.KEEP_STEPS]))
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -11,10 +11,19 @@ from openai import AsyncOpenAI
 
 MODEL = os.environ.get("AGENT_MODEL", "anthropic/claude-haiku-5.5")
 OPENROUTER = "/" in MODEL  # "<provider>/<model>" runs on OpenRouter with the team secret OPENROUTER_API_KEY
-# Anthropic caches only behind a breakpoint; the top-level one moves with the conversation
+# Anthropic caches only behind a breakpoint; the top-level one moves with the conversation. A cache write costs 1.25x
+# input and a read 0.1x, and a read lands only where an earlier request ended: it pays off for a conversation that
+# grows, a one-off call (ask_json) only pays the surcharge.
 CACHE = {"extra_body": {"cache_control": {"type": "ephemeral"}}} if MODEL.startswith("anthropic/") else {}
 STEP_EFFORT = os.environ.get("STEP_EFFORT", "low")  # reasoning per browser step; latency is mostly thinking tokens
 KEEP_STEPS = 4  # tool results of the latest steps stay in full; older page reads shrink so the context stays small
+# Older reads shrink in one batch, once the full ones outside KEEP_STEPS reach TRIM_CHARS, never step by step: a
+# shortened read changes the history behind it, so the next call reads nothing past it from the cache. Shortening
+# each step made every Haiku call write its whole history again and read only the fixed prefix (2026-10-10, a 6 min
+# run: $0.18 of $0.215 was input written to the cache, no call read more than 15k tokens of it). Between batches the
+# history only grows and each call reads the previous prompt. The cap keeps a prompt far below Haiku's 100k-token
+# price step.
+TRIM_CHARS = 80_000
 # one model call; a slower one is retried while its deadline allows. Qwen steps took 20-90 s under load (a tender
 # finish 132 s: a cut call starts over, so the cap sits above the slowest calls seen); Haiku's slowest took 17 s
 CALL_TIMEOUT = 45 if OPENROUTER else 180
@@ -66,16 +75,17 @@ def client() -> AsyncOpenAI:
     return _client
 
 
-def send(messages: list, tools: list | None, limit: float, kwargs: dict) -> asyncio.Future:
+def send(messages: list, tools: list | None, limit: float, cache: bool, kwargs: dict) -> asyncio.Future:
     call = asyncio.ensure_future(client().chat.completions.create(model=MODEL, messages=messages, tools=tools,
-                                                                  timeout=limit, **CACHE, **kwargs))
+                                                                  timeout=limit, **(CACHE if cache else {}), **kwargs))
     call.add_done_callback(lambda c: c.cancelled() or c.exception())  # a dropped call's failure stays quiet
     return call
 
 
-async def chat(messages: list, tools: list | None = None, **kwargs):
+async def chat(messages: list, tools: list | None = None, cache: bool = True, **kwargs):
     """One model reply, each attempt bounded by CAP and all of them by UNTIL; raises TimeoutError when time is up.
-    An attempt without a reply after HEDGE_AFTER sends the same request again alongside it."""
+    An attempt without a reply after HEDGE_AFTER sends the same request again alongside it. cache=False for a prompt
+    no later call continues."""
     for attempt in range(6):
         left = UNTIL.get() - time.time() - 1
         if left < 3:
@@ -83,7 +93,7 @@ async def chat(messages: list, tools: list | None = None, **kwargs):
         limit = min(CAP.get(), left)
         end = time.time() + limit
         twin_at = time.time() + HEDGE_AFTER
-        calls = [send(messages, tools, limit, kwargs)]
+        calls = [send(messages, tools, limit, cache, kwargs)]
         try:
             while True:
                 running = [c for c in calls if not c.done()]
@@ -100,7 +110,7 @@ async def chat(messages: list, tools: list | None = None, **kwargs):
                     raise TimeoutError(f"model call over {limit:.0f} s")
                 if len(calls) == 1 and not calls[0].done():
                     print(f"[llm] no reply after {HEDGE_AFTER} s: asking again alongside", flush=True)
-                    calls.append(send(messages, tools, end - time.time(), kwargs))
+                    calls.append(send(messages, tools, end - time.time(), cache, kwargs))
         except Exception as error:  # noqa: BLE001  the hosted model may hiccup: retry like any provider
             if attempt == 5:
                 raise
@@ -122,11 +132,12 @@ def parse_object(text: str) -> dict | None:
 
 async def ask_json(system: str, user: str, effort: str | None = None) -> dict:
     """One reasoning call that must answer with a JSON object. effort="low" suits copying values out of pages: several
-    times faster, while switching thinking off entirely made the model rewrite number formats."""
+    times faster, while switching thinking off entirely made the model rewrite number formats. Not cached: no other
+    call continues the prompt, and twins sent at once can't read each other's write."""
     messages = [{"role": "system", "content": system}, {"role": "user", "content": user}]
     extra = {"reasoning_effort": effort} if effort else {}
     for _ in range(3):
-        reply = await chat(messages, response_format={"type": "json_object"}, **extra)
+        reply = await chat(messages, cache=False, response_format={"type": "json_object"}, **extra)
         text = reply.choices[0].message.content or ""
         value = parse_object(text)
         if value is not None:
@@ -219,6 +230,7 @@ async def investigate(tab, system: str, mission: str, finish_schema: dict, deadl
     messages = [{"role": "system", "content": system},
                 {"role": "user", "content": mission + "\n\nThe page now:\n" + page}]
     steps: list[list[dict]] = []
+    shortened = 0  # the steps before this one had their long reads shortened already
     evidence: list[str] = []
     if (stage := KEPT.get()) is not None:
         stage.append(evidence)
@@ -326,10 +338,13 @@ async def investigate(tab, system: str, mission: str, finish_schema: dict, deadl
             entry = {"role": "tool", "tool_call_id": call.id, "content": output}
             messages.append(entry)
             results.append(entry)
-        for old in (entry for results in steps[:-KEEP_STEPS] for entry in results):
-            if len(old["content"]) > 400:
-                old["content"] = old["content"][:300] + (SHORTENED_KEPT if old["content"].startswith(KEPT_PREFIX)
-                                                         else SHORTENED)
+        stale = [entry for results in steps[shortened:-KEEP_STEPS] for entry in results]
+        if sum(len(entry["content"]) for entry in stale) >= TRIM_CHARS:
+            for old in stale:
+                if len(old["content"]) > 400:
+                    old["content"] = old["content"][:300] + (SHORTENED_KEPT if old["content"].startswith(KEPT_PREFIX)
+                                                             else SHORTENED)
+            shortened = len(steps) - KEEP_STEPS
     messages.append({"role": "user", "content": "Stop now and call finish with your best findings."})
     log(tag, "finish forced (deadline or step limit)")
     try:
