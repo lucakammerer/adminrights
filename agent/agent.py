@@ -216,12 +216,16 @@ async def main() -> int:
             pages.append(page)
         roles = await roles_job
         llm.log("sites", json.dumps({role: entry["siteId"] for role, entry in roles.items()}))
-        for (role, entry), page in zip(roles.items(), pages):
+
+        async def first_load(role: str, entry: dict, page) -> None:
+            # side by side and bounded: one start page the site never answers held every agent for 30 s (2 of 6 runs)
+            tabs[role] = Tab(page, entry)
             try:
-                await page.goto(entry["url"], wait_until="domcontentloaded")
+                await asyncio.wait_for(page.goto(entry["url"], wait_until="domcontentloaded"), OPEN_TIMEOUT)
             except Exception as error:  # noqa: BLE001  a slow site must not end the run: its agent opens the URL itself
                 llm.log(role, f"first load failed: {type(error).__name__}")
-            tabs[role] = Tab(page, entry)
+                await tabs[role].stop()
+        await asyncio.gather(*(first_load(role, entry, page) for (role, entry), page in zip(roles.items(), pages)))
 
         phase1 = end - 10 * 60  # agents wrap up here; hard cut 30 s later
         # several webmail agents at once, each with its share of the brief's records; the first (the technical release)
