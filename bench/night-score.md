@@ -318,6 +318,24 @@ Next idea: the step limit itself costs time even when facts are complete: run_0a
 (bid ~65 s later than run_75da). Look at what those 40 steps did (retrying the search form again?) before touching
 prompts; the search form retry pattern also caused iteration 7's 85.3.
 
+### 9 · 05:50 · Fetching a kept page unchanged says it is kept
+
+Evidence (run_0a26a180075ecc2c, 79 $·s): after keeping every fact, one ERP search fetched pages it had already kept
+14 times (236→294 s, "CORRECTION" notes re-checking values), another 5 times before its step limit (281 s); the bid
+waited on them. Same pattern, 4 times, in run_96d33dd7b340c037; none in three other runs.
+
+Hypothesis: the model re-checks values because it can't tell a fetch shows a page the analyst already has. A `fetch`
+whose address was kept and whose content is unchanged gets a reminder appended ("unchanged since you kept it as
+evidence #n: the analyst reads it word for word"). Saves the tail of re-checks; never fires on a changed page.
+
+Commit 38d5b42, test (a refetch of a kept page gets the line, another address or changed content doesn't). Gate:
+check_release green, audit clean. Reviewer first REJECTED the address-only version (hash routes, state-dependent
+pages, `goto` redirects would get a false "already kept" and the model could skip keeping new facts); reworked to
+`fetch` only, same address and same `paging.body`, fragment kept; re-review PASS. Runs (38d5b42):
+run_076dc1c00233e5a6, run_0847ad70cbda7696 (started ~06:10). Judge by: quality, signing, ERP search step counts and
+last-ERP-finish time, how often the line fires (`Unchanged since` is not logged; count refetches of kept URLs with
+/tmp-style log parsing as in this entry).
+
 ## Backlog
 
 - `specs` at effort low: it only starts the early ERP searches and `requirements` corrects it, yet at medium it took
