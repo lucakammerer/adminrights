@@ -284,10 +284,24 @@ Next idea: a search stopped by its step limit long before its deadline, with req
 that a few more steps would have saved. Give it one extension when time is plentiful (generic: a cost guard, not a
 site assumption), or let the forced finish's `extract` gap list drive a short follow-up on the chosen material.
 
+### 8 · 05:40 · A search cut by its step limit gets a short follow-up for its missing facts
+
+Evidence (iteration 7, run_28c8d1f903003c25, 85.3): one ERP search spent ~30 of its 40 steps on the search form,
+chose the right material and was forced at step 40 (264 s) with its stage deadline ~9 min away; the price page was
+never kept, so the position had no base price.
+
+Hypothesis: when a search ends without the price condition, `extract` already lists what the kept pages lack; with
+at least 120 s left before its search deadline, a follow-up `investigate` on the same tab (mission: the chosen
+material + that list, at most 12 steps, no check) keeps those pages, then `extract` reads all pages. Generic (driven
+by extract's gap list, no site assumption); costs nothing when searches finish normally.
+
+Commit 2c5dd5f, test (a search forced at its step limit; old code: no price condition). Gate: check_release green,
+audit clean, reviewer PASS (notes: the follow-up ignores `news`, which `erp_search` reruns on anyway; it holds one of
+the 6 slots). Runs (2c5dd5f): run_0a26a180075ecc2c, run_75da3ea2197f3709 (started 05:47). Judge by: quality,
+signing, `follow-up for` in the log (fires only on a cut search), time.
+
 ## Backlog
 
-- ERP step limit (iteration 7): a search forced at 40 steps with the stage deadline minutes away and the price
-  missing. One extension when time is plentiful, or a follow-up driven by `extract`'s gap list.
 - `specs` at effort low: it only starts the early ERP searches and `requirements` corrects it, yet at medium it took
   60 s and timed out into the low backup in run_b4c23813dd122d18 (early searches ~60 s later). Measure low vs medium
   offline first (`/tmp`-style script calling `resolvers.specs` on `eval/fixtures/resolvers`); at 05:30 the local
