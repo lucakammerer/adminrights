@@ -118,7 +118,7 @@ Each agent is a folder `agent/agents/<name>/` with `agent.py` (mission, result s
 | `erp.run` | ERP (one tab each) | the material for one requirement; its pages kept; `check` → `extract` reads the facts, `validate.material_mismatch` refuses a wrong pick once | 40 steps |
 | `resolvers` | — | four `ask_json` calls: sites, specs, requirements, commercials | 3 attempts each |
 | `submit` | tender portal | fill the wizard, sign | 70 steps |
-| `get_tan` | webmail | the newest TAN for the request just made | 12 steps, 2 min |
+| `get_tan` | webmail | the newest TAN for the request just made; only a value that reads as a TAN | 16 steps, 2 min |
 
 ### 3.3 The tool loop (`agent/llm.py` `investigate`)
 

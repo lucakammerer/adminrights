@@ -434,5 +434,15 @@ class FormHold(unittest.TestCase):
         self.assertEqual(unentered([{"field": "a", "value": "21"}], answer), [])
 
 
+class TanLookUp(unittest.TestCase):
+    def test_a_sentence_about_the_tan_is_no_tan(self):
+        """A forced finish once handed the portal "Not captured — located in message at …" as the TAN."""
+        from agents.submit.agent import readable
+        self.assertTrue(readable("483 920"))
+        self.assertTrue(readable("TAN-7Q4K2"))
+        self.assertFalse(readable("Not captured — located in message at 10:42"))
+        self.assertFalse(readable("unknown"))
+
+
 if __name__ == "__main__":
     unittest.main()

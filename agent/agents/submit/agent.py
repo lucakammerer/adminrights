@@ -31,6 +31,11 @@ total net {german(answer['total_net'])} EUR (net; a displayed gross amount with 
 {f"Unfinished positions to omit with the form's omit option (partial submission): {', '.join(omitted)}" if omitted else ''}"""
 
 
+def readable(tan: str) -> bool:
+    """A TAN as a message writes it: one short code with digits, not a sentence about it."""
+    return len(tan) <= 32 and len(tan.split()) <= 3 and any(c.isdigit() for c in tan)
+
+
 def number(text) -> float | None:
     """A typed amount in any common format: the last separator is the decimal one if one or two digits follow it."""
     text = re.sub(r"[^\d.,-]", "", str(text))
@@ -78,19 +83,24 @@ number / newest), open it and finish with found true and the TAN exactly as writ
 
         async def check(result, _evidence):
             """A look-up that found no TAN keeps searching instead of handing the portal a non-TAN."""
-            if result.get("found") and str(result.get("tan") or "").strip():
+            if result.get("found") and readable(str(result.get("tan") or "").strip()):
                 return result, ""
             if result.get("found"):
-                return result, ("Not done: you found the message but gave no TAN. Open that message and finish with "
-                                "its TAN exactly as written.")
+                return result, ("Not done: you found the message but gave no TAN as written in it. Open that message "
+                                "and finish with its TAN exactly as written.")
             return result, ("Not done: no signing-TAN message found yet. Search the mailbox for it (newest first, "
                             "every folder), open it and finish with found true and its TAN.")
 
         found = await llm.investigate(mail_tab, system(task), mission,
                                       obj(found=BOOL, tan=STR, request=STR, subject=STR),
-                                      min(deadline, time.time() + 120), "tan", max_steps=12, check=check)
+                                      min(deadline, time.time() + 120), "tan", max_steps=16, check=check)
         found.pop("evidence", None)
-        return json.dumps(found, ensure_ascii=False)
+        if found.get("found") and readable(str(found.get("tan") or "").strip()):
+            return json.dumps(found, ensure_ascii=False)
+        # a finish forced at the step or time limit skips the check: never hand the portal what isn't a TAN
+        llm.log("tan", "no TAN read")
+        return json.dumps({"found": False, "reported": found, "next": "No TAN was read: call get_tan again."},
+                          ensure_ascii=False)
 
     held: set[str] = set()  # positions held back once; held again means "this page asks for it elsewhere or not at all"
 
