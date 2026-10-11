@@ -336,6 +336,17 @@ run_076dc1c00233e5a6, run_0847ad70cbda7696 (started 05:53; both failed on the pl
 last-ERP-finish time, how often the line fires (`Unchanged since` is not logged; count refetches of kept URLs with
 /tmp-style log parsing as in this entry).
 
+Results (38d5b42): run_822da1971e1635d9 100 / 7:16 / $0.141 / 61.5 $·s, run_28dc851b508f1f3c 100 / 10:48 / $0.135 /
+87.7 $·s. No search fetched a kept page again (0 refetches; searches 13-24 steps, none at the step limit), so the
+reminder had nothing to fire on: the 2c5dd5f runs had 0 and 23. run_28dc lost its time in phase 1 (the mailbox
+login started at 93 s, the webmail agent paged the archive for 28 steps to 382 s), so the early ERP searches never
+started. Verdict: keep as insurance (no regression, 2/2 signed at 100, reviewer PASS, inert when the model doesn't
+re-check); not shown to save time.
+
+Next idea: phase 1 is again the spread (webmail agent 201→382 s here, against ~200 s in the fast runs). Look at what
+makes the mailbox agent page every archive page twice (steps 18-23 re-open pages 1-4 by `goto`) before touching
+prompts; the `kept_at` reminder doesn't cover `goto`.
+
 ## Backlog
 
 - `specs` at effort low: it only starts the early ERP searches and `requirements` corrects it, yet at medium it took

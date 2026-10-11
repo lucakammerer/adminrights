@@ -5,6 +5,8 @@ logged answer scored by `eval/compare.py` (what the bid would have scored if sig
 
 | Date (UTC) | Run | Commit | Platform | Eval | Time | Cost | Outcome and top problem (owner) |
 | --- | --- | --- | --- | --- | --- | --- | --- |
+| 2026-10-11 04:04 | run_822da1971e1635d9 | luca/night-score@38d5b42 | 100, eligible | – | 7 min (436 s) | $0.141 | Fetching a kept page unchanged says it is kept: no refetch of a kept page this run (searches 15-24 steps), 61.5 $·s. Restart of run_076dc1c00233e5a6 (platform failure: Qwen 502 upstream unreachable). |
+| 2026-10-11 04:04 | run_28dc851b508f1f3c | luca/night-score@38d5b42 | 100, eligible | – | 11 min (648 s) | $0.135 | Same package, 87.7 $·s. Phase 1 to 382 s (mailbox login from 93 s, the webmail agent paged the archive 28 steps), so no early ERP searches; searches 13-19 steps, bid 509 s. Restart of run_0847ad70cbda7696. |
 | 2026-10-11 03:40 | run_75da3ea2197f3709 | luca/night-score@2c5dd5f | 100, eligible | – | 6 min (330 s) | $0.150 | Step-limit follow-up (not needed: no search cut short of facts), 49.6 $·s, best Qwen run so far. One search told the changed requirement, commercials at 241 s, `get_tan` 313 s. |
 | 2026-10-11 03:40 | run_0a26a180075ecc2c | luca/night-score@2c5dd5f | 100, eligible | – | 8 min (456 s) | $0.173 | Same package, 79.0 $·s. One search hit its step limit at 281 s but had kept every fact (no follow-up), so the bid came ~65 s later (306 s); `get_tan` 411 s. |
 | 2026-10-11 03:28 | run_92428b63f6b01b4e | luca/night-score@58f933b | 100, eligible | – | 7 min (411 s) | $0.131 | No-match check gets the changed requirement (not needed this run) + night-gen merge: 53.6 $·s. Bid at 253 s, `get_tan` 356 s. |
