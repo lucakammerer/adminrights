@@ -291,6 +291,7 @@ on disagreement it logs both, re-asks once, then the rule wins.
 | Transient error pages | code reloads a 5xx page (GET only) twice and `fetch` retries twice before the model sees it; a `fetch` without an answer for 40 s returns as HTTP 504 (never kept as evidence), all inside `llm.TOOL_TIMEOUT`; the model is told | ✅ I13 |
 | Unlock gates | the model (`fill` on a slider, `check`) | — |
 | Look-alike controls | the model, guided by hrefs | — |
+| Forms on other software | `form` resolves a field by the name the reader shows (label, else placeholder, title or name attribute) and fields and buttons in every frame; an unknown name fails at once (was a 30 s timeout); `settle` also waits for frames, and a field step whose frame reloaded mid-step is tried once more | ✅ |
 | Settle on every read | waits while the page has short timers pending (delayed popups) or its DOM changed in the last 300 ms, at most 1.5 s; untracked pages keep the fixed wait | ✅ I13 |
 
 ### 5.3 Documents, numbers and dates

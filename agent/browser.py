@@ -5,6 +5,7 @@ import codecs
 import difflib
 import html
 import io
+import json
 import re
 import zipfile
 import xml.etree.ElementTree as ET
@@ -18,6 +19,7 @@ MAX_CHARS = 14000
 DISABLED = "e => e.matches(':disabled') || e.getAttribute('aria-disabled') === 'true'"
 OPEN_DETAILS = "e => { for (let d = e.closest('details'); d; d = d.parentElement?.closest('details')) d.open = true }"
 SETTLE_MAX = 1.5  # seconds a read waits at most for the page to settle (popups appear up to that long after load)
+FRAME_WAIT = 3  # seconds a settle waits at most for the page's frames to load
 # Every page of the tab tracks its pending short timers and its last DOM change, so a read waits exactly as long as
 # something is still due (a delayed popup) instead of a fixed time.
 TRACK = """(() => { if (window.__arefTimers) return; const pending = new Set(), st = window.setTimeout, ct = window.clearTimeout;
@@ -144,6 +146,12 @@ class Tab:
             await asyncio.sleep(0.5)
         if waited < 0:  # a page loaded before this tab tracked it: popups appear a moment after load
             await asyncio.sleep(SETTLE_MAX)
+        frames = [frame.wait_for_load_state("domcontentloaded") for frame in self.page.frames[1:]]
+        if frames:  # a form inside a frame reloads only that frame, by now under way
+            try:
+                await asyncio.wait_for(asyncio.gather(*frames, return_exceptions=True), FRAME_WAIT)
+            except Exception:  # noqa: BLE001  a frame that never loads (ads, chat) costs this wait once per settle
+                pass
         for frame in self.page.frames:  # in-page popup dialogs only block the page; browser dialogs are accepted above
             try:
                 await frame.evaluate("document.querySelectorAll('dialog[open]').forEach(d => d.close())")
@@ -273,6 +281,33 @@ class Tab:
                 return loc.first
         raise ValueError(f"ref {ref} not on the page any more: read the page again")
 
+    async def named(self, label: str, click: bool = False):
+        """The field (or with click, the button or link) the model names, in the page or one of its frames. A field
+        goes by any name the reader shows for it: its label, then its placeholder, title or name attribute."""
+        quoted = json.dumps(label, ensure_ascii=False)
+        attribute = ", ".join(f"{t}[{a}={quoted}]" for a in ("title", "name")
+                              for t in ("input:not([type=hidden])", "select", "textarea"))
+        for attempt in range(2):  # a frame the last step reloaded may still be loading: wait for the page once
+            for exact in (True, False, None):  # None: by title or name attribute, after every label
+                for frame in self.page.frames:
+                    if click:
+                        found = [frame.get_by_role("button", name=label, exact=exact),
+                                 frame.get_by_role("link", name=label, exact=exact)] if exact is not None else []
+                    elif exact is None:
+                        found = [frame.locator(attribute)]
+                    else:
+                        found = [frame.get_by_label(label, exact=exact), frame.get_by_placeholder(label, exact=exact)]
+                    for loc in found:
+                        try:
+                            if await loc.count():
+                                return loc.first
+                        except Exception:  # noqa: BLE001  a frame detached while it was searched
+                            pass
+            if not attempt:
+                await self.settle()
+        kind = "button or link" if click else "field (by label, placeholder, title or name)"
+        raise ValueError(f"no {kind} {label!r} on this page: use the label the page shows, or its ref")
+
     async def act(self, action: str, args: dict) -> str:
         page = self.page
         if action == "goto":
@@ -308,71 +343,73 @@ class Tab:
 
     async def form(self, steps: list[dict]) -> str:
         """Fill fields and press buttons by their visible label, in order, waiting for the page after each step."""
-        page = self.page
         log = []
         for step in steps:
             try:
-                if step.get("field") and step.get("click"):  # both in one step: fill, then click
-                    steps_left = [{"field": step["field"], "value": step.get("value")}, {"click": step["click"]}]
-                    log.append((await self.form(steps_left)).split("\n", 1)[0].removeprefix("Form steps: "))
-                    continue
-                if step.get("ref") is not None and step.get("value") is None:
-                    loc = await self.locate(int(step["ref"]))
-                    await loc.evaluate(OPEN_DETAILS)
-                    await self.click(loc)
+                try:
+                    log.append(await self.step(step))
+                except Exception as error:  # noqa: BLE001
+                    # the last click reloaded a frame a moment after the wait: a field by label is found again
+                    if "context was destroyed" not in str(error) or step.get("ref") is not None or step.get("click"):
+                        raise
                     await self.settle()
-                    log.append(f"clicked ref {step['ref']}")
-                    continue
-                if step.get("click"):
-                    loc = page.get_by_role("button", name=str(step["click"]))
-                    if not await loc.count():
-                        loc = page.get_by_role("link", name=str(step["click"]))
-                    await loc.first.scroll_into_view_if_needed(timeout=3000)
-                    await loc.first.click(timeout=5000)
-                    await self.settle()
-                    log.append(f"clicked {step['click']}")
-                    continue
-                value = step.get("value")
-                if value is None:
-                    raise ValueError("no value given for this field")
-                if step.get("ref") is not None:
-                    label, loc = f"ref {step['ref']}", await self.locate(int(step["ref"]))
-                else:
-                    label = str(step["field"])
-                    loc = page.get_by_label(label, exact=True)
-                    if not await loc.count():
-                        loc = page.get_by_label(label)
-                    loc = loc.first
-                await loc.evaluate(OPEN_DETAILS)  # a field in a collapsed section can't be filled
-                if await loc.evaluate(DISABLED):  # a dependent choice a script may open a moment after the last step
-                    await self.settle()
-                    if await loc.evaluate(DISABLED):
-                        raise ValueError(f"{label} is disabled: if it depends on an earlier choice, apply that choice first (its "
-                                         "apply or next button), then send this step again")
-                tag = await loc.evaluate("e => e.tagName + ':' + (e.type || '')")
-                if tag.startswith("SELECT"):
-                    want = str(value).strip()
-                    for attempt in range(2):  # options a script loads after the last step: wait for the page once
-                        options = await loc.evaluate("e => [...e.options].map(o => [o.value, o.textContent.trim()])")
-                        pick = next((v for v, t in options if t == want), None) or next(
-                            (v for v, t in options if v == want), None) or next(
-                            (v for v, t in options if t.startswith(want + " ") or t.startswith(want + " ")), None) or next(
-                            (v for v, t in options if want in t), None)
-                        if pick is not None or attempt:
-                            break
-                        await self.settle()
-                    if pick is None:
-                        raise ValueError(f"no option {want!r}; options: {[t for _, t in options][:40]}")
-                    await loc.select_option(value=pick, timeout=5000)
-                elif tag in ("INPUT:checkbox", "INPUT:radio"):
-                    await loc.set_checked(value not in (False, "false", "no", "0"), timeout=5000, force=True)
-                else:
-                    await loc.fill(await self.credential(loc, str(value)), timeout=5000)
-                log.append(f"set {label} = {value}")
+                    log.append(await self.step(step))
             except Exception as error:  # noqa: BLE001  stop at the first failing step, the model sees why
                 log.append(f"FAILED at {step}: {str(error)[:300]}")
                 break
         return "Form steps: " + "; ".join(log) + "\n\n" + await self.read(compact=True)
+
+    async def step(self, step: dict) -> str:
+        """One form step; returns what it did."""
+        if step.get("field") and step.get("click"):  # both in one step: fill, then click
+            steps_left = [{"field": step["field"], "value": step.get("value")}, {"click": step["click"]}]
+            return (await self.form(steps_left)).split("\n", 1)[0].removeprefix("Form steps: ")
+        if step.get("ref") is not None and step.get("value") is None:
+            loc = await self.locate(int(step["ref"]))
+            await loc.evaluate(OPEN_DETAILS)
+            await self.click(loc)
+            await self.settle()
+            return f"clicked ref {step['ref']}"
+        if step.get("click"):
+            loc = await self.named(str(step["click"]), click=True)
+            await loc.scroll_into_view_if_needed(timeout=3000)
+            await loc.click(timeout=5000)
+            await self.settle()
+            return f"clicked {step['click']}"
+        value = step.get("value")
+        if value is None:
+            raise ValueError("no value given for this field")
+        if step.get("ref") is not None:
+            label, loc = f"ref {step['ref']}", await self.locate(int(step["ref"]))
+        else:
+            label = str(step["field"])
+            loc = await self.named(label)
+        await loc.evaluate(OPEN_DETAILS)  # a field in a collapsed section can't be filled
+        if await loc.evaluate(DISABLED):  # a dependent choice a script may open a moment after the last step
+            await self.settle()
+            if await loc.evaluate(DISABLED):
+                raise ValueError(f"{label} is disabled: if it depends on an earlier choice, apply that choice first (its "
+                                 "apply or next button), then send this step again")
+        tag = await loc.evaluate("e => e.tagName + ':' + (e.type || '')")
+        if tag.startswith("SELECT"):
+            want = str(value).strip()
+            for attempt in range(2):  # options a script loads after the last step: wait for the page once
+                options = await loc.evaluate("e => [...e.options].map(o => [o.value, o.textContent.trim()])")
+                pick = next((v for v, t in options if t == want), None) or next(
+                    (v for v, t in options if v == want), None) or next(
+                    (v for v, t in options if t.startswith(want + " ") or t.startswith(want + " ")), None) or next(
+                    (v for v, t in options if want in t), None)
+                if pick is not None or attempt:
+                    break
+                await self.settle()
+            if pick is None:
+                raise ValueError(f"no option {want!r}; options: {[t for _, t in options][:40]}")
+            await loc.select_option(value=pick, timeout=5000)
+        elif tag in ("INPUT:checkbox", "INPUT:radio"):
+            await loc.set_checked(value not in (False, "false", "no", "0"), timeout=5000, force=True)
+        else:
+            await loc.fill(await self.credential(loc, str(value)), timeout=5000)
+        return f"set {label} = {value}"
 
     async def fetch(self, url: str) -> str:
         """Read a same-origin URL through the logged-in page without navigating: text only, no refs. A server error

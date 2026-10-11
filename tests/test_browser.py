@@ -79,6 +79,12 @@ class Site(BaseHTTPRequestHandler):
                              '</label><script>document.getElementById("b").onchange = () => setTimeout(() => {'
                              'const s = document.getElementById("s"); s.add(new Option("600")); s.disabled = false'
                              '}, 600)</script>')
+        if path == "/plain":  # fields named only by placeholder or title, as some software ships them
+            return self.page('<input name="q" placeholder="Quantity"><input type="hidden" name="Quantity"><select name="p" title="Ø Pressure"><option>choose'
+                             '</option><option>16 bar</option></select><div role="button" onclick="document.title='
+                             '\'sent\'">Send</div>')
+        if path == "/framed":  # the configurator inside a frame of the page
+            return self.page('<h1>Order</h1><iframe src="/config" width="600" height="200"></iframe>')
         return self.page("start")
 
     def do_POST(self):
@@ -237,6 +243,29 @@ class TabAgainstLocalSite(unittest.TestCase):
         self.assertLess(spent, 4.0)
         self.assertNotIn("FAILED", applied.split("\n", 1)[0])
         self.assertNotIn("FAILED", scripted.split("\n", 1)[0])
+
+    def test_form_finds_fields_by_the_reader_s_name_and_inside_frames(self):
+        async def steps(tab):
+            await tab.act("goto", {"url": "/plain"})
+            plain = await tab.form([{"field": "Quantity", "value": "7"}, {"field": "Ø Pressure", "value": "16 bar"},
+                                    {"click": "Send"}])
+            values = await tab.page.input_value("[name=q]"), await tab.page.input_value("[name=p]")
+            title = await tab.page.title()
+            loop = asyncio.get_running_loop()
+            started = loop.time()
+            missing = await tab.form([{"field": "Colour", "value": "red"}])
+            spent = loop.time() - started
+            await tab.act("goto", {"url": "/framed"})
+            framed = await tab.form([{"field": "Bore", "value": "50"}, {"click": "Apply choice"},
+                                     {"field": "Stroke", "value": "600"}])
+            return plain, values, title, missing, spent, framed
+        plain, values, title, missing, spent, framed = self.run_tab(steps)
+        self.assertNotIn("FAILED", plain.split("\n", 1)[0])
+        self.assertEqual(values, ("7", "16 bar"))
+        self.assertEqual(title, "sent")
+        self.assertIn("FAILED", missing.split("\n", 1)[0])
+        self.assertLess(spent, 4.0)
+        self.assertNotIn("FAILED", framed.split("\n", 1)[0])
 
 
 if __name__ == "__main__":
