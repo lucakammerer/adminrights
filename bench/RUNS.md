@@ -5,6 +5,8 @@ logged answer scored by `eval/compare.py` (what the bid would have scored if sig
 
 | Date (UTC) | Run | Commit | Platform | Eval | Time | Cost | Outcome and top problem (owner) |
 | --- | --- | --- | --- | --- | --- | --- | --- |
+| 2026-10-11 08:40 | run_a13f9b0737e9ceb3 | luca/try-p2@b14f63d | 100, eligible | – | 4 min (218 s) | $0.097 | main + #53 + #57: 21.1 $·s, best run so far (main after #56: 32-65 $·s over 4 runs). |
+| 2026-10-11 08:40 | run_782e86917fd26bb8 | luca/try-p2@b14f63d | 100, eligible | – | 5 min (305 s) | $0.105 | Same package, 32.0 $·s. |
 | 2026-10-11 05:20 | run_4e307d86869b4141 | luca/night-score@b942b04 | 100, eligible | – | 6 min (372 s) | $0.156 | 58.1 $·s; 215 calls, up to 11 at once. |
 | 2026-10-11 05:20 | run_f63b9812b45ac269 | luca/night-score@b942b04 | 100, eligible | – | 7 min (430 s) | $0.133 | 57.3 $·s; 201 calls. |
 | 2026-10-11 05:11 | run_e36d97ed806dea22 | luca/night-score@b942b04 | 100, eligible | – | 6 min (345 s) | $0.135 | 46.7 $·s; one twin, it answered: the silent-twin retry did not fire. |
