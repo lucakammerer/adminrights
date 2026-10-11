@@ -188,6 +188,16 @@ class TabAgainstLocalSite(unittest.TestCase):
             return loop.time() - started
         self.assertLess(self.run_tab(steps), 1.0)  # the fixed wait this replaced took 1.4 s on every read
 
+    def test_settle_ends_when_the_pages_timers_never_fire(self):
+        async def steps(tab):  # a background tab: its timers held back, one of the page's own still pending
+            await tab.act("goto", {"url": "/form"})
+            await tab.page.evaluate("window.__arefSetTimeout = () => 0; window.__arefTimers.add(-1)")
+            loop = asyncio.get_running_loop()
+            started = loop.time()
+            await asyncio.wait_for(tab.settle(), 10)
+            return loop.time() - started
+        self.assertLess(self.run_tab(steps), 2.5)  # an in-page wait loop on the page's timers hung to the tool timeout
+
     def test_form_ref_click_falls_back_and_null_value_is_not_typed(self):
         async def steps(tab):
             await tab.act("goto", {"url": "/form"})

@@ -332,7 +332,7 @@ on disagreement it logs both, re-asks once, then the rule wins.
 | Transient error pages | code reloads a 5xx page (GET only) twice and `fetch` retries twice before the model sees it; a `fetch` without an answer for 40 s returns as HTTP 504 (never kept as evidence), all inside `llm.TOOL_TIMEOUT`; the model is told | ✅ I13 |
 | Unlock gates | the model (`fill` on a slider, `check`) | — |
 | Look-alike controls | the model, guided by hrefs | — |
-| Settle on every read | waits while the page has short timers pending (delayed popups) or its DOM changed in the last 300 ms, at most 1.5 s; untracked pages keep the fixed wait | ✅ I13 |
+| Settle on every read | waits while the page has short timers pending (delayed popups) or its DOM changed in the last 300 ms, at most 1.5 s, polled from code (a background tab's timers may fire once a minute); untracked pages keep the fixed wait | ✅ I13 |
 
 ### 5.3 Documents, numbers and dates
 
