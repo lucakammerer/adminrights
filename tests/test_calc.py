@@ -48,6 +48,11 @@ class Golden(unittest.TestCase):
         self.assertEqual(result["answer"]["tender_reference"], FACTS["tender_reference"])
         self.assertEqual(len(result["omitted"]), len(FACTS["positions"]))
 
+    def test_invisible_characters_leave_the_answer_s_identifiers(self):
+        facts = copy.deepcopy(FACTS)
+        facts["tender_reference"] = "\u200e" + facts["tender_reference"] + "\u2063"
+        self.assertEqual(quality(facts), 100.0)
+
     def test_known_material_without_prices_is_submitted(self):
         """Rule 9: material, quantity, surcharge, packaging and lead time keep their points; base stays blank."""
         facts = copy.deepcopy(FACTS)
@@ -112,6 +117,17 @@ class NoMatch(unittest.TestCase):
         self.assertEqual(shown["answer"]["decision"], "no_bid")
 
 
+class Setup(unittest.TestCase):
+    def test_a_materials_erp_setup_fee_never_adds_to_the_positions_own(self):
+        """run_cf57141fcf4352a0: the ERP's fee for a material shared by two positions was added to both."""
+        requirements = {"positions": [{"position": "1", "final_quantity_pieces": 10},
+                                      {"position": "2", "final_quantity_pieces": 10}]}
+        commercials = {"positions": [{"position": "1", "setup_fee": 0}, {"position": "2", "setup_fee": 85}]}
+        erp = {"1": {"setup_fee": "85"}, "2": {"setup_fee": "85"}}
+        fees = [p["setup_fee"] for p in calc.facts({}, requirements, commercials, erp)["positions"]]
+        self.assertEqual(fees, [0.0, 85.0])
+
+
 class Shapes(unittest.TestCase):
     def test_model_output_in_other_shapes_never_crashes(self):
         """facts and compute run outside `safe`: a crash there loses an answer the run already found."""
@@ -141,6 +157,14 @@ class Parsing(unittest.TestCase):
                                  ("1.234.567", "en-US", 1234567), ("186,615", "en-US", 186615),
                                  ("186,615", "de-DE", 186.615), ("1,0873", "", 1.0873)]:
             self.assertAlmostEqual(calc.number(text, fmt), value, msg=f"{text} {fmt}")
+
+    def test_number_reads_other_locales(self):
+        for text, fmt, value in [("1 234,50 €", "fr-FR", 1234.5), ("1\u202f234,50", "", 1234.5),
+                                 ("CHF 12'500.00", "", 12500), ("1234,50", "fr-FR", 1234.5),
+                                 ("1234.50", "de-CH", 1234.5), ("12,50", "1 234,56", 12.5),
+                                 ("186,615", "English", 186615)]:
+            self.assertAlmostEqual(calc.number(text, fmt), value, msg=f"{text} {fmt}")
+        self.assertAlmostEqual(calc.grams_to_kg("2 125 g"), 2.125)
 
     def test_rate_lookup_tolerates_key_spelling(self):
         rates = {"FX-1": 1.1, "FX-2": 0.9}

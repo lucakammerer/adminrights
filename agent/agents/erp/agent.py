@@ -1,9 +1,10 @@
 """ERP agents: login, the material per requirement, its facts read from kept pages. See README.md."""
 import asyncio
 import json
+import time
 
 import llm
-from agents.common import BOOL, INT, NUM, RESOLVE, STR, SYSTEM, arr, context, login_line, obj
+from agents.common import BOOL, INT, NUM, RESOLVE, STR, arr, login_line, obj, system
 from validate import material_mismatch
 
 
@@ -16,6 +17,8 @@ RESULT = obj(
                         number_format=STR, scales=arr(obj(from_quantity=NUM, price_as_shown=STR))),
     other_relevant_facts=STR)
 FINISH_GRACE = 30  # seconds for a forced finish, which before ran to the stage cut and left the extract none
+FOLLOW_UP_MIN = 120  # seconds a search cut by its step limit needs left for a follow-up on its missing facts
+FOLLOW_UP_STEPS = 12
 NO_MATCH_REFUSALS = 2  # an unproven no_match goes back this often; then main's second agent confirms it
 CANDIDATES = arr(obj(material=STR, differs_in=STR, blocked=BOOL))
 REQUIRED = ("material_number", "available_stock_pieces", "lead_time_stock_weeks", "lead_time_production_weeks",
@@ -39,7 +42,7 @@ async def login(task, tab, deadline):
     mission = f"""{login_line(tab.site)}
 Your part: log in to this ERP and get past every cookie, notice or unlock step until you reach its main screen
 (where materials can be searched). Then finish with {{"ok": true}}."""
-    return await llm.investigate(tab, SYSTEM, mission, obj(ok=BOOL), deadline, "erp-login", max_steps=20)
+    return await llm.investigate(tab, system(task), mission, obj(ok=BOOL), deadline, "erp-login", max_steps=20)
 
 
 async def extract(task, requirement: dict, chosen: dict, pages: list[str], asked: set | None = None) -> tuple[dict, str]:
@@ -98,10 +101,9 @@ def unproven(result: dict, evidence: list[str]) -> str:
     return ""
 
 
-async def run(task, tab, requirement: dict, deadline):
-    mission = f"""{context(task)}
-
-{login_line(tab.site)} (you should already be logged in)
+async def run(task, tab, requirement: dict, deadline, news: list | None = None):
+    """`news`: main appends a message when it changes `requirement` in place while the search runs."""
+    mission = f"""{login_line(tab.site)} (you should already be logged in)
 Your part: find the material for one requirement in this ERP. Requirement: {json.dumps(requirement, ensure_ascii=False)}
 1. Search by the requirement's catalogue group (the brief says how records are found) and read every result page.
 2. Compare each candidate's bore, stroke, pressure, mounting and certification with the requirement: all must be
@@ -140,12 +142,31 @@ Finish with material_number and why; the facts are read from the pages you kept.
     tag = f"erp:{requirement.get('catalogue_group')}"
     async with slots():  # at most PARALLEL searches at once; a waiting one keeps its own deadline
         with llm.limits(deadline):  # a forced finish must not eat the time the extract below needs after it
-            result = await llm.investigate(tab, SYSTEM, mission,
+            result = await llm.investigate(tab, system(task), mission,
                                            obj(material_number=STR, no_match=BOOL, why=STR, candidates=CANDIDATES),
-                                           deadline - FINISH_GRACE, tag, max_steps=40, check=check)
+                                           deadline - FINISH_GRACE, tag, max_steps=40, check=check,
+                                           news=news)
     if result.get("material_number") and not result.get("price_condition"):
         try:
-            result, _ = await extract(task, requirement, result, result.get("evidence", []))
+            data, problem = await extract(task, requirement, result, result.get("evidence", []))
         except Exception as error:  # noqa: BLE001  out of time: the material and its kept pages still count
             llm.log(tag, f"extract failed: {type(error).__name__}: {str(error)[:200]}")
+            return result
+        if problem and deadline - FINISH_GRACE - time.time() > FOLLOW_UP_MIN:
+            # cut by its step limit long before its deadline (run_28c8d1f903003c25: step 40, 9 min left, the price page
+            # unkept): a short follow-up on the same tab keeps the pages extract misses
+            llm.log(tag, f"facts missing after the step limit: follow-up for {data['material_number']}")
+            mission = f"""{login_line(tab.site)} (you should already be logged in)
+Your part: material {data['material_number']} was chosen for the requirement {json.dumps(requirement, ensure_ascii=False)}.
+{problem}"""
+            async with slots():
+                with llm.limits(deadline):
+                    more = await llm.investigate(tab, system(task), mission, obj(material_number=STR),
+                                                 deadline - FINISH_GRACE, tag, max_steps=FOLLOW_UP_STEPS)
+            pages = result.get("evidence", []) + more.get("evidence", [])
+            try:
+                data, _ = await extract(task, requirement, result, pages)
+            except Exception as error:  # noqa: BLE001  out of time: the first read still counts
+                llm.log(tag, f"extract failed: {type(error).__name__}: {str(error)[:200]}")
+        result = data
     return result

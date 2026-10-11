@@ -10,8 +10,10 @@ Run from the repo root, with `atira models proxy` running and `source tools/dev-
 
 --mutate SEED runs stress level S2: every read-only page (GET, no password field, no POST form) is rewritten by
 tools/stress/mutations.js before the agent sees it (synonym labels, hidden decoys, shuffled menus, swapped number
-formats with their hints, shuffled table rows, main content in an extra frame), in this tool's browser only. Pass:
-the gather score stays what it is unmutated.
+formats with their hints, shuffled table rows, invisible characters inside identifiers, main content in an extra
+frame), in this tool's browser only. Pass:
+the gather score stays what it is unmutated. --widgets adds framework-app markup: tables as styled rows of spans and
+every other link a pointer element without href that a page script follows.
 --s4 PAGE runs stress level S4 (needs --resolve): the mail message recorded in PAGE (raw HTML from a fixture, its
 URL in that fixture's index.json) disappears from the mailbox (its list rows go, its pages answer 404) and appears
 as an attachment page linked from every tender-portal page. After the resolvers, agents.sweep looks for the open
@@ -125,7 +127,7 @@ MUTATED: Counter = Counter()
 SWEEP: dict = {}
 
 
-async def mutator(playwright, seed: int):
+async def mutator(playwright, seed: int, widgets: bool = False):
     """A route handler that rewrites read-only HTML pages with mutations.js in a separate script-free page."""
     browser = await playwright.chromium.launch(headless=True)
     scratch = await (await browser.new_context(java_script_enabled=False)).new_page()
@@ -144,7 +146,7 @@ async def mutator(playwright, seed: int):
             return await route.fulfill(response=response)
         async with lock:
             await scratch.set_content(body, wait_until="domcontentloaded")
-            stats = await scratch.evaluate(f"({MUTATIONS})(opts)", {"seed": seed, "base": request.url})
+            stats = await scratch.evaluate(MUTATIONS, {"seed": seed, "base": request.url, "widgets": widgets})
             body = await scratch.content()
         MUTATED.update({k: v for k, v in stats.items()} | {"pages": 1})
         await route.fulfill(response=response, body=body)
@@ -359,6 +361,7 @@ async def main() -> int:
     parser.add_argument("--requirements", type=Path)
     parser.add_argument("--from", dest="previous", type=Path)
     parser.add_argument("--mutate", type=int, help="S2: rewrite read-only pages with this seed")
+    parser.add_argument("--widgets", action="store_true", help="with --mutate: tables as styled span rows, links as scripted elements")
     parser.add_argument("--s4", type=Path, help="S4: recorded mail message page to move to the tender portal")
     args = parser.parse_args()
     chosen = [a for a in args.agents.split(",") if a]
@@ -389,7 +392,7 @@ async def main() -> int:
         try:
             mutate = None
             if args.mutate is not None:
-                scratch, mutate = await mutator(playwright, args.mutate)
+                scratch, mutate = await mutator(playwright, args.mutate, args.widgets)
                 browsers.append(scratch)
             extra: dict = {}
             if args.s4:

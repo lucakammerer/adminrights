@@ -1,9 +1,14 @@
 """The brief's bid arithmetic over facts the models established. No website values live here: only the rules."""
 import re
+import sys
+import unicodedata
 from decimal import ROUND_FLOOR, ROUND_HALF_UP, Decimal
 from math import ceil
 
 CENT = Decimal("0.01")
+# invisible format characters (zero-width, bidi marks, invisible separators, tags) a page may hide in an identifier
+INVISIBLE = re.compile("[\u034f" + "".join(c for c in map(chr, range(sys.maxunicode + 1))
+                                           if unicodedata.category(c) == "Cf") + "]")
 
 
 def d(value) -> Decimal:
@@ -20,6 +25,11 @@ def record(value) -> dict:
 
 def records(value) -> list[dict]:
     return [v for v in value if isinstance(v, dict)] if isinstance(value, list) else []
+
+
+def ident(value) -> str:
+    """An identifier as the page shows it, without invisible characters a model may have copied along."""
+    return INVISIBLE.sub("", str(value or "")).strip()
 
 
 def cents(value: Decimal) -> Decimal:
@@ -63,7 +73,7 @@ def compute(facts: dict) -> dict:
     """facts: from `facts` below. Returns the answer in the challenge's format, the positions left unfinished (to omit
     in the form, rule 9) and a calculation trace."""
     positions = facts["positions"]
-    reference = facts["tender_reference"]
+    reference = ident(facts["tender_reference"])
     approval = facts.get("discount") or {}
     percent = d(approval.get("percent"))
     threshold = approval.get("min_order_value")
@@ -119,7 +129,7 @@ def compute(facts: dict) -> dict:
         unit_price = cents(base_net + mass_net + (setup + packaging - rebate) / qty)
         commitment = p.get("delivery_commitment") or {}
         ceiling = commitment.get("max_pieces", commitment.get("max_pooled_pieces"))
-        if (commitment.get("material_number") or commitment.get("material")) == material and ceiling is not None \
+        if ident(commitment.get("material_number") or commitment.get("material")) == material and ceiling is not None \
                 and commitment.get("weeks") is not None and demand[material] <= d(ceiling):
             weeks = int(d(commitment["weeks"]))
         elif d(p.get("stock")) >= demand[material]:
@@ -142,21 +152,41 @@ def compute(facts: dict) -> dict:
             "omitted": omitted, "trace": "\n".join(trace + [f"omitted (unfinished): {omitted}"] * bool(omitted))}
 
 
+SPACE = r"[\s\u00a0\u202f\u2009'’]"  # grouping as in 1 234,50 or 1'234.50
+COMMA_LANGUAGES = "de fr es it nl pt pl cs sk sl hr ru uk sv da fi nb nn no tr hu ro bg el id lt lv et".split()
+
+
+def hinted_decimal(fmt: str) -> str | None:
+    """The decimal separator a format hint names: a sample ("1 234,56", "1.234,56"), a locale tag, or words."""
+    fmt = (fmt or "").strip()
+    sample = re.search(rf"\d{{1,3}}(?:(?:{SPACE}|[.,])\d{{3}})+[.,]\d+", fmt)
+    if sample:
+        return re.search(r"([.,])\d+$", sample.group(0)).group(1)
+    tag = re.match(r"([a-z]{2})(?:[-_]([a-z]{2})(?![a-z])|(?=[.;)]?$))", fmt, re.I)  # "de-DE format", not "no grouping"
+    if tag:
+        regions = ("CH", "LI", "MX", "US")  # their languages write a decimal comma elsewhere, a point here
+        return "," if tag[1].lower() in COMMA_LANGUAGES and (tag[2] or "").upper() not in regions else "."
+    if re.search(r"german|deutsch|decimal comma|comma decimal|dezimalkomma", fmt, re.I):
+        return ","
+    return "." if fmt else None
+
+
 def number(text, fmt: str = "") -> float:
-    """A number as shown. When the number itself shows its format (both separators, or one repeated), that wins;
-    a single separator follows the format hint (de-DE: decimal comma), else a lone comma is decimal."""
-    match = re.search(r"-?\d[\d.,]*", str(text))
+    """A number as shown. When the number itself shows its format, that wins: both separators, one repeated,
+    grouping by spaces or apostrophes, a lone separator not followed by exactly three digits, or a leading 0. Only
+    "12,345" and "12.345" follow the format hint, else a lone comma is decimal."""
+    match = re.search(rf"-?\d{{1,3}}(?:{SPACE}\d{{3}})+(?:[.,]\d+)?(?!\d)|-?\d[\d.,]*", str(text))
     if not match:
         return 0.0
-    s = match.group(0).rstrip(".,")
+    s = re.sub(SPACE, "", match.group(0)).rstrip(".,")
     if "," in s and "." in s:
         decimal = "," if s.rfind(",") > s.rfind(".") else "."
     elif s.count(",") > 1 or s.count(".") > 1:
         decimal = ""
-    elif fmt:
-        decimal = "," if re.search(r"\bde[-_]de\b|^de\b", fmt.strip(), re.I) else "."
-    else:
+    elif s != match.group(0).rstrip(".,") or not re.search(r"[.,]\d{3}$", s) or re.match(r"-?0[.,]", s):
         decimal = "," if "," in s else "."
+    else:
+        decimal = hinted_decimal(fmt) or ("," if "," in s else ".")
     if decimal == ",":
         return float(s.replace(".", "").replace(",", "."))
     return float(s.replace(",", "") if decimal == "." else s.replace(",", "").replace(".", ""))
@@ -205,7 +235,7 @@ def facts(tender, requirements, commercials, erp: dict) -> dict:
         positions.append({
             "position": key, "quantity_pieces": int(d(req.get("final_quantity_pieces"))),
             # no match needs the searched result list kept (rule 3): one claimed without evidence is unfinished
-            "material_number": e.get("material_number") or None,
+            "material_number": ident(e.get("material_number")) or None,
             "no_match": e.get("no_match") is True and bool(e.get("evidence")),
             "scales": [{"min_quantity": s.get("from_quantity"), "price": number(s["price_as_shown"], fmt)}
                        for s in records(pc.get("scales")) if s.get("price_as_shown") not in (None, "")],
@@ -213,7 +243,9 @@ def facts(tender, requirements, commercials, erp: dict) -> dict:
             "fx_eur_per_currency_unit": fx,
             "surcharge_mass_kg_per_piece": grams_to_kg(e.get("surcharge_mass") or 0),
             "metal_index_eur_per_kg": index or 0,
-            "setup_fee": float(d(c.get("setup_fee")) + d(e.get("setup_fee"))),
+            # a position's ordinary setup comes from the tender (commercials); a material's ERP fee only stands in when
+            # the commercials lack the position: added, it counted twice and reached every position of that material
+            "setup_fee": float(d(c["setup_fee"] if c.get("setup_fee") is not None else e.get("setup_fee"))),
             "discount_applies_to": c.get("discount_applies_to") or "base",
             "stock": e.get("available_stock_pieces") or 0,
             "lead_time_stock_weeks": e.get("lead_time_stock_weeks") or 0,

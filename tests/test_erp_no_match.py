@@ -100,5 +100,29 @@ class NoMatchFinish(unittest.TestCase):
         self.assertTrue(result.get("no_match"))  # main's second agent still has to confirm it
 
 
+class StepLimit(unittest.TestCase):
+    def setUp(self):
+        self.chat, self.ask = llm.chat, llm.ask_json
+
+    def tearDown(self):
+        llm.chat, llm.ask_json = self.chat, self.ask
+
+    def test_search_cut_by_its_step_limit_keeps_the_missing_pages_in_a_follow_up(self):
+        chosen = {"material_number": "MAT-3", "why": "exact"}
+        llm.chat, _ = scripted([[("read", {})]] * 40 + [[("finish", {"result": chosen})]] +
+                                  [[("save_evidence", {"url": "/price?m=MAT-3", "label": "price"})],
+                                   [("finish", {"result": {"material_number": "MAT-3"}})]])
+
+        async def ask_json(system, question, **kwargs):
+            facts = {"material_number": "MAT-3", "available_stock_pieces": 5, "lead_time_stock_weeks": 1,
+                     "lead_time_production_weeks": 4}
+            if RESULTS_PAGE in question:  # the follow-up's page reached extract
+                facts["price_condition"] = {"scales": [{"from_quantity": 1, "price_as_shown": "10,00"}]}
+            return facts
+        llm.ask_json = ask_json
+        result = asyncio.run(erp.run(TASK, FakeTab(), REQUIREMENT, time.time() + 600))
+        self.assertEqual(result["price_condition"]["scales"][0]["price_as_shown"], "10,00")
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -1,16 +1,19 @@
 """The guards that keep a run going to a signed bid: model calls end on the wall clock even when the server trickles
-bytes, a cut agent hands on the pages it kept, the requirements resolver gets a backup attempt, and a malformed
-resolver answer or broken facts never end the run without an answer.
+bytes, a cut agent hands on the pages it kept, the resolvers get a backup attempt, the early ERP searches match the
+requirements however a model wrote the values, and a malformed resolver answer or broken facts never end the run
+without an answer.
 
 Run from the repo root: uv run --project agent --no-sync python -m unittest discover -s tests -v
 """
 import asyncio
 import json
+import os
 import sys
 import time
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
+from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "agent"))
 
@@ -57,6 +60,152 @@ class HardCallBound(unittest.TestCase):
                 server.close()
             return time.time() - began
         self.assertLess(asyncio.run(scenario()), 10)  # the server would have answered after 20 s
+
+
+def chunk(delta: dict, finish: str | None = None) -> dict:
+    return {"id": "x", "object": "chat.completion.chunk", "created": 0, "model": "m",
+            "choices": [{"index": 0, "delta": delta, "finish_reason": finish}]}
+
+
+TOOL_STREAM = [chunk({"role": "assistant", "content": ""}),
+               chunk({"tool_calls": [{"index": 0, "id": "c1", "type": "function",
+                                      "function": {"name": "finish", "arguments": '{"result": {"material'}}]}),
+               chunk({"tool_calls": [{"index": 0, "function": {"arguments": '_number": "M-1"}}'}}]}),
+               chunk({}, "tool_calls")]
+
+
+def streaming(replies: list, silent: int = 0):
+    """A server that streams one of `replies` per request; the first `silent` requests never hear back."""
+    requests = []
+
+    async def serve(reader, writer):
+        await reader.readuntil(b"\r\n\r\n")
+        requests.append(1)
+        try:
+            if len(requests) <= silent:
+                await asyncio.sleep(60)
+            body = b"".join(b"data: %s\n\n" % json.dumps(c).encode() for c in replies[len(requests) - 1]) + \
+                b"data: [DONE]\n\n"
+            writer.write(b"HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nContent-Length: %d\r\n\r\n%s"
+                         % (len(body), body))
+            await writer.drain()
+        except (ConnectionError, asyncio.CancelledError):
+            pass
+        finally:
+            writer.close()
+    return serve, requests
+
+
+def ask(serve, silence: float = 30, **limits):
+    """llm.chat against a local server; returns the reply and the seconds it took."""
+    async def scenario():
+        server = await asyncio.start_server(serve, "127.0.0.1", 0)
+        real, real_silence, real_openrouter = llm._client, llm.SILENCE, llm.OPENROUTER
+        llm._client = AsyncOpenAI(base_url=f"http://127.0.0.1:{server.sockets[0].getsockname()[1]}/v1",
+                                  api_key="k", max_retries=0)
+        llm.SILENCE, llm.OPENROUTER = silence, False  # the streamed path, as on the hosted Qwen
+        began = time.time()
+        try:
+            with llm.limits(time.time() + limits.get("within", 30)):
+                return await llm.chat([{"role": "user", "content": "x"}]), time.time() - began
+        finally:
+            llm._client, llm.SILENCE, llm.OPENROUTER = real, real_silence, real_openrouter
+            server.close()
+    return asyncio.run(scenario())
+
+
+class HedgedCall(unittest.TestCase):
+    def test_an_unanswered_openrouter_call_gets_a_twin(self):
+        asked = []
+
+        async def reply(*_args, **_kwargs):
+            asked.append(time.time())
+            if len(asked) == 1:
+                await asyncio.sleep(30)  # the call that never comes back
+            return "twin"
+
+        async def scenario():
+            real = llm.reply, llm.OPENROUTER, llm.HEDGE
+            llm.reply, llm.OPENROUTER, llm.HEDGE = reply, True, 0.2
+            began = time.time()
+            try:
+                with llm.limits(time.time() + 10):
+                    return await llm.chat([{"role": "user", "content": "x"}]), time.time() - began
+            finally:
+                llm.reply, llm.OPENROUTER, llm.HEDGE = real
+        answer, seconds = asyncio.run(scenario())
+        self.assertEqual((answer, len(asked)), ("twin", 2))
+        self.assertLess(seconds, 2)
+
+
+    def test_a_spent_key_goes_to_the_fallback_at_once_and_stays_there(self):
+        import httpx
+        from openai import PermissionDeniedError
+        asked = []
+
+        async def reply(_messages, _tools, _silence, fallback, *_args, **_kwargs):
+            asked.append(fallback)
+            if not fallback:
+                response = httpx.Response(403, request=httpx.Request("POST", "http://openrouter.test"))
+                raise PermissionDeniedError("Key limit exceeded (total limit)", response=response, body=None)
+            return "hosted"
+
+        async def scenario():
+            real = llm.reply, llm.OPENROUTER, llm._spent
+            llm.reply, llm.OPENROUTER = reply, True
+            began = time.time()
+            try:
+                with llm.limits(time.time() + 30):
+                    answers = [await llm.chat([{"role": "user", "content": "x"}]) for _ in range(2)]
+                return answers, time.time() - began
+            finally:
+                llm.reply, llm.OPENROUTER, llm._spent = real
+        with mock.patch.dict(os.environ, {"QWEN_BASE_URL": "http://hosted.test"}):
+            answers, seconds = asyncio.run(scenario())
+        self.assertEqual(answers, ["hosted", "hosted"])
+        self.assertEqual(asked, [False, True, True])  # the second call never tried the spent key
+        self.assertLess(seconds, 2)
+
+
+class StuckCallAskedAgain(unittest.TestCase):
+    def test_silent_call_is_asked_again(self):
+        serve, requests = streaming([None, TOOL_STREAM], silent=1)
+        reply, seconds = ask(serve, silence=1)
+        self.assertEqual(len(requests), 2)
+        self.assertLess(seconds, 10)  # the first request would have held the call for 60 s
+        call = reply.choices[0].message.tool_calls[0]
+        self.assertEqual((call.id, call.function.name), ("c1", "finish"))
+        self.assertEqual(json.loads(call.function.arguments), {"result": {"material_number": "M-1"}})
+
+    def test_call_without_a_first_chunk_gets_a_twin(self):
+        serve, requests = streaming([None, TOOL_STREAM], silent=1)
+        real, llm.FIRST_CHUNK = llm.FIRST_CHUNK, 0.3
+        try:
+            reply, seconds = ask(serve)  # the silent call alone would be dropped only after 30 s
+        finally:
+            llm.FIRST_CHUNK = real
+        self.assertEqual(len(requests), 2)
+        self.assertLess(seconds, 5)
+        self.assertEqual(reply.choices[0].message.tool_calls[0].function.name, "finish")
+
+    def test_twin_as_silent_as_the_dropped_call_is_not_waited_out(self):
+        serve, requests = streaming([None, None, TOOL_STREAM], silent=2)
+        real, llm.FIRST_CHUNK = llm.FIRST_CHUNK, 0.9
+        try:
+            reply, seconds = ask(serve, silence=1)  # waiting out the twin: 1.9 s + the 2 s pause
+        finally:
+            llm.FIRST_CHUNK = real
+        self.assertEqual(len(requests), 3)
+        self.assertLess(seconds, 3.5)
+        self.assertEqual(reply.choices[0].message.tool_calls[0].function.name, "finish")
+
+    def test_streamed_reply_reads_like_a_plain_one(self):
+        serve, _ = streaming([[chunk({"role": "assistant", "content": "{\"a\""}), chunk({"content": ": 1}"}, "length")]])
+        reply, _ = ask(serve)
+        message = reply.choices[0].message
+        self.assertEqual(llm.parse_object(message.content), {"a": 1})  # a reply cut at its length limit still counts
+        self.assertEqual(message.model_dump(exclude_none=True), {"role": "assistant", "content": "{\"a\": 1}"})
+        self.assertIsNone(message.tool_calls)
 
 
 class FakeTab:
@@ -229,6 +378,47 @@ class Requirements(unittest.TestCase):
         self.assertEqual(agent.positions({"positions": [{"position": 10}]}), [{"position": 10}])
 
 
+class EarlySearches(unittest.TestCase):
+    def test_same_values_written_differently_share_one_search(self):
+        a = {"bore_mm": 80, "stroke_mm": 200.0, "pressure_bar": "160", "mounting": "Schwenkauge",
+             "certification": "EN 1493", "catalogue_group": "GR-1"}
+        b = {"bore_mm": "80.0", "stroke_mm": 200, "pressure_bar": 160, "mounting": "schwenkauge ",
+             "certification": "en1493", "catalogue_group": "gr-1", "position": "1", "final_quantity_pieces": 5}
+        self.assertEqual(agent.spec_key(a), agent.spec_key(b))
+        self.assertNotEqual(agent.spec_key(a), agent.spec_key({**a, "stroke_mm": 250}))
+        self.assertEqual(agent.spec_key({}), agent.spec_key({k: None for k in agent.SPEC_KEYS}))
+
+    def test_specs_rows_name_something_to_search(self):
+        self.assertEqual(agent.governing(None), [])
+        self.assertEqual(agent.governing({"requirements": "none"}), [])
+        self.assertEqual(agent.governing({"requirements": [{"requirement": "A", "bore_mm": None}, "x",
+                                                           {"requirement": "B", "catalogue_group": "G"}]}),
+                         [{"requirement": "B", "catalogue_group": "G"}])
+
+    def test_cancelling_a_resolver_stops_both_attempts(self):
+        stopped = []
+
+        async def hangs():
+            try:
+                await asyncio.sleep(100)
+            except asyncio.CancelledError:
+                stopped.append(1)
+                raise
+
+        async def scenario():
+            real = agent.BACKUP_AFTER
+            agent.BACKUP_AFTER = 0.1
+            try:
+                job = asyncio.create_task(agent.resolve("test", lambda effort: hangs(), time.time() + 5,
+                                                        agent.governing))
+                await asyncio.sleep(0.3)  # both attempts run
+                job.cancel()
+                await asyncio.sleep(0.1)
+            finally:
+                agent.BACKUP_AFTER = real
+        asyncio.run(scenario())
+        self.assertEqual(stopped, [1, 1])
+
 class Bid(unittest.TestCase):
     TENDER = {"tender_reference": "REF"}
     COMMERCIALS = {"tender_reference": "REF", "positions": []}
@@ -244,6 +434,13 @@ class Bid(unittest.TestCase):
         # since #34 a position with its material but no usable prices is submitted with its other fields
         self.assertEqual([(p["position"], p["material_number"]) for p in result["answer"]["positions"]], [("1", "M")])
 
+    def test_no_requirements_omit_the_tender_positions(self):
+        # both requirements calls lost: an empty answer made the submit agent file a waiver
+        tender = {**self.TENDER, "positions": [{"position": "01.01", "quantity": 24}, {"position": "01.02"}]}
+        result = agent.bid(tender, {"positions": []}, self.COMMERCIALS, {})
+        self.assertEqual(result["answer"]["decision"], "bid")
+        self.assertEqual(result["omitted"], ["01.01", "01.02"])
+
     def test_broken_commercials_still_give_an_answer(self):
         requirements = {"positions": [{"position": "1", "final_quantity_pieces": 2}]}
         commercials = {"positions": [{"no position key": True}]}
@@ -251,6 +448,32 @@ class Bid(unittest.TestCase):
         self.assertEqual(result["answer"]["decision"], "bid")
         self.assertEqual(result["answer"]["tender_reference"], "REF")
         self.assertEqual(result["omitted"], ["1"])
+
+
+
+class FormHold(unittest.TestCase):
+    def test_a_position_typed_without_its_bonus_is_held(self):
+        """A bonus typed as 0 was found only on the summary, and fixing it meant re-entering every later position."""
+        from agents.submit.agent import unentered
+        answer = {"positions": [{"position": "1", "unit_price": 1906.85, "rebate_total": 2131.11,
+                                 "packaging_per_unit": 0.0}]}
+        steps = [{"field": "a", "value": "21"}, {"field": "b", "value": "1.906,85"}, {"field": "c", "value": "0,00"},
+                 {"click": "next"}]
+        self.assertEqual(unentered(steps, answer), ["position 1 project bonus for the position 2.131,11"])
+        steps[2]["value"] = "2131.11"
+        self.assertEqual(unentered(steps, answer), [])
+        self.assertEqual(unentered([{"field": "a", "value": "21"}], answer), [])
+
+
+class TanLookUp(unittest.TestCase):
+    def test_a_sentence_about_the_tan_is_no_tan(self):
+        """A forced finish once handed the portal "Not captured — located in message at …" as the TAN."""
+        from agents.submit.agent import readable
+        self.assertTrue(readable("483 920"))
+        self.assertTrue(readable("TAN-7Q4K2"))
+        self.assertTrue(readable("4821 9375 1046 2283"))
+        self.assertFalse(readable("Not captured — located in message at 10:42"))
+        self.assertFalse(readable("unknown"))
 
 
 if __name__ == "__main__":

@@ -14,7 +14,8 @@ packaging tariff, delivery commitment, setup pool). Decisions happen in [resolve
 ## Input / output
 
 - Input: brief (up to "## Site access"), portal login, reference from `common.reference` (the brief's first
-  identifier in parentheses, a bare number such as a year only if there is no other).
+  identifier in parentheses; then one behind a short label word, with letters and a separator; a bare number such as
+  a year only if there is no other).
 - Output `RESULT`: `tender_reference`, `title`, `positions[]` (`position`, `description`, `quantity`, `unit`),
   `clarifications[]` (`number`, `date`, `evidence`: the number it is kept as), `other_relevant_facts`, plus `evidence`.
   The Q&A text reaches the resolvers only through the kept pages: copying it into `finish` cost output tokens and

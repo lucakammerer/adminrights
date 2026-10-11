@@ -11,7 +11,7 @@ sys.path.insert(0, str(ROOT / "agent"))
 
 from agents.common import (commercial_records, mail_records, mentions, names_position, reference, routed,  # noqa: E402
                            technical_records)
-from agents.webmail.agent import wanted  # noqa: E402
+from agents.webmail.agent import groups, wanted  # noqa: E402
 
 PUBLIC_BRIEF = (ROOT / "eval/public-1/run-brief.md").read_text()
 
@@ -72,6 +72,9 @@ class SyntheticBrief(unittest.TestCase):
         self.assertEqual(reference(SYNTHETIC), "TX-0001-0042")
         self.assertEqual(reference("Framework (2030) for pumps (TX-0001-0042)."), "TX-0001-0042")  # a year is no reference
         self.assertEqual(reference("Order (4711)."), "4711")  # a bare number when there is nothing else
+        self.assertEqual(reference("Tender (2030) for pumps (Ref. TX-0001-0042)."), "TX-0001-0042")  # behind a label word
+        self.assertEqual(reference("Weld to (EN 1090-2). Tender (TX-0001-0042)."), "TX-0001-0042")  # unlabelled first
+        self.assertEqual(reference("See (rule 4.2) and (Annex A3). Order (482913)."), "482913")  # a cited number is no label
 
 
 # The same rules in other list shapes a private brief may use.
@@ -114,8 +117,13 @@ class NeverRaises(unittest.TestCase):
         self.assertEqual(mail_records("")["records"], [])
 
     def test_mission_falls_back_to_the_rules(self):
-        self.assertIn("derive", wanted("no records named"))
-        self.assertIn("Hubfreigabe", wanted(SYNTHETIC))
+        self.assertIn("derive", wanted(mail_records("no records named")["records"]))
+        self.assertIn("Hubfreigabe", wanted(mail_records(SYNTHETIC)["records"]))
+
+    def test_mail_agents_share_every_record_the_technical_release_first(self):
+        shares = groups(SYNTHETIC)
+        self.assertEqual(shares[0], technical_records(SYNTHETIC))
+        self.assertCountEqual([r for share in shares for r in share], mail_records(SYNTHETIC)["records"])
 
 
 class TechnicalMailSelection(unittest.TestCase):

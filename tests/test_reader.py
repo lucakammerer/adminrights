@@ -1,12 +1,16 @@
 """reader.js and fetched documents (I17), on synthetic pages for each trap category: decoys out; generated labels,
-tooltips and canvas marks in; off-screen text marked; a fetched page's own style rules respected; a PDF read.
+tooltips and canvas marks in; off-screen text marked; a fetched page's own style rules respected; values of
+styled rows kept apart; ARIA widgets and clickable elements given refs; a table row on one line and a tooltip a
+control names read once; a PDF read.
 
 Run from the repo root: uv run --project agent --no-sync python -m unittest discover -s tests -v
 """
 import asyncio
+import io
 import sys
 import threading
 import unittest
+import zipfile
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
@@ -20,18 +24,39 @@ PAGE = """<!doctype html><html><head><style>
 .gone { display: none } .ghost { visibility: hidden } .label::before { content: attr(data-label) ": " }
 .unit::after { content: " pieces" } .sr { position: absolute; width: 1px; height: 1px; overflow: hidden;
   clip: rect(0 0 0 0) } .away { position: absolute; left: -9999px } .dot::before { content: "\\2022" }
+.dim { display: inline-block; transform: scale(0) }
 </style></head><body>
 <p>Quantity <span class="label" data-label="Binding total">40</span><span class="unit"></span></p>
 <p class="gone">Quantity 999 decoy-class</p><p class="ghost">decoy-ghost</p>
 <p aria-hidden="true">decoy-aria</p><p style="display:none">decoy-inline</p>
 <span title="Received 2030-01-02 10:00">Date</span>
+<p>Sent <time datetime="2030-01-02T09:30:00+01:00">yesterday</time>, due <time datetime="2030-01-09">2030-01-09</time></p>
+<a href="/m/1">Offer <time datetime="2030-01-01T23:15:00Z">Tue 23:15</time></a>
 <canvas id="c1" aria-label="Receipt 4711"></canvas><canvas id="c2"></canvas>
 <span class="sr">screen reader value 17</span><div class="away">off page value 23</div>
 <p class="dot">listed</p>
+<p>Ref AB\u200e-12\u2063-3\u202c4\U000e0041</p>
 <span role="tooltip">Status released <span class="gone">decoy-in-tooltip</span></span>
 <span role="tooltip" style="visibility:hidden">Valid until 2030-12-31 <b>hover value 31</b></span>
 <a href="/x">Open <span aria-hidden="true">decoy-in-link</span></a>
 <button aria-describedby="d1">Check</button><span id="d1">Approved <b hidden>decoy-in-description</b></span>
+<table><tr><th>Ref</th><th>Value</th></tr><tr><td><div>R-1</div></td><td><p>12</p><p>units</p></td></tr></table>
+<button aria-describedby="t9">Date</button><span id="t9" role="tooltip">2031-05-06</span>
+<p style="color:transparent">decoy-clear</p><p style="color:#fff;background:#fff">decoy-white</p><p class="dim">kept-scaled</p>
+<div style="background:#123"><p style="color:#112233">decoy-same-ink</p><p style="color:#fff">kept-light-on-dark</p></div>
+<p style="text-indent:-9999px">indented value 29</p><p style="filter:opacity(0)">decoy-filtered</p>
+<p style="background:linear-gradient(red,blue);-webkit-background-clip:text;color:transparent">kept-gradient</p>
+<section style="position:relative"><span style="position:absolute;inset:0;background:#000"></span>
+<b style="position:relative;color:#fff">kept-over-a-box</b></section>
+<div style="display:flex"><span>Bore</span><span>63</span></div>
+<div role="row"><span role="gridcell">250</span><span role="gridcell">17,40</span></div>
+<span role="link">Open record</span><div role="checkbox" aria-checked="false">Confirm</div>
+<div style="cursor:pointer" onmousedown="0">Next results <span>page</span></div>
+<a href="/p/2"><img src="data:," alt="Next page"></a><button><i class="icon" aria-label="Download offer"></i></button>
+<a href="/p/1" title="First page"><svg viewBox="0 0 1 1"><path d="M0 0"/></svg></a><input type="image" alt="Search" src="data:,">
+<a href="/p/3">Price <span aria-label="decoy-label-over-text">12,50</span></a>
+<button aria-label="Delete item"><i title="Trash"></i></button><label>Email <i title="required"></i><input></label>
+<span role="link" onclick="0"><img src="data:," alt="Previous page"></span>
 </body></html>"""
 
 
@@ -93,6 +118,16 @@ class Reader(unittest.TestCase):
                           "decoy-in-link", "decoy-in-description"):
                 self.assertNotIn(decoy, text)
 
+    def test_text_painted_invisibly_stays_out(self):
+        for text in (self.live, self.fetched):
+            for decoy in ("decoy-clear", "decoy-filtered"):
+                self.assertNotIn(decoy, text)
+            for kept in ("kept-light-on-dark", "kept-gradient", "kept-over-a-box", "kept-scaled"):  # scaled: a tooltip at rest
+                self.assertIn(kept, text)
+            self.assertIn("(off-screen text: indented value 29)", text)
+            self.assertIn("(text in its background's colour: decoy-white)", text)
+            self.assertIn("(text in its background's colour: decoy-same-ink)", text)
+
     def test_generated_labels_and_units_are_read(self):
         for text in (self.live, self.fetched):
             self.assertIn("Binding total", text)
@@ -108,13 +143,87 @@ class Reader(unittest.TestCase):
             self.assertIn("Receipt 4711", text)
             self.assertIn("canvas without text", text)
 
+    def test_a_time_keeps_its_exact_moment(self):
+        for text in (self.live, self.fetched):
+            self.assertIn("yesterday (datetime: 2030-01-02T09:30:00+01:00)", text)
+            self.assertIn("due 2030-01-09", text)
+            self.assertNotIn("(datetime: 2030-01-09)", text)  # shown in full already
+        self.assertRegex(self.live, r'link "Offer Tue 23:15 \(datetime: 2030-01-01T23:15:00Z\)"')
+
     def test_off_screen_text_is_kept_but_marked(self):
         for text in (self.live, self.fetched):
             self.assertIn("(off-screen text: screen reader value 17)", text)
             self.assertIn("(off-screen text: off page value 23)", text)
 
+    def test_a_table_row_is_one_line(self):
+        for text in (self.live, self.fetched):
+            self.assertIn("| Ref | Value\n| R-1 | 12 units\n", text)
+
+    def test_a_tooltip_a_control_names_is_read_once(self):
+        for text in (self.live, self.fetched):
+            self.assertIn('button "Date" (info: 2031-05-06)', text)
+            self.assertEqual(text.count("2031-05-06"), 1)
+
+    def test_values_of_styled_rows_stay_apart_and_widgets_get_refs(self):
+        self.assertIn("Bore\n63", self.live)
+        for text in (self.live, self.fetched):
+            self.assertIn("| 250 | 17,40", text)
+        self.assertRegex(self.live, r'\[\d+:link "Open record"\]')
+        self.assertRegex(self.live, r'\[\d+:checkbox "Confirm" unchecked\]')
+        self.assertRegex(self.live, r"\[\d+:clickable\] Next results page")
+
+    def test_icon_controls_are_named_by_their_text_alternative(self):
+        for name in ('link "Next page"', 'button "Download offer"', 'link "First page"', 'button "Search"',
+                     'link "Price 12,50"', 'button "Delete item"', 'input type=text "Email"', 'link "Previous page"'):
+            # a part's own text and the control's own label win over a part's text alternative
+            self.assertRegex(self.live, r"\[\d+:" + name)
+
+    def test_invisible_characters_leave_identifiers(self):
+        for text in (self.live, self.fetched, describe_file("ref.txt", "Ref AB\u200f-12\u2066-34".encode())):
+            self.assertIn("Ref AB-12-34", text)
+
     def test_pdf_is_read(self):
         self.assertIn("Delivery note 0815", describe_file("note.pdf", minimal_pdf("Delivery note 0815")))
+
+    def test_office_files_and_other_encodings_are_read(self):
+        def archive(files):
+            buf = io.BytesIO()
+            with zipfile.ZipFile(buf, "w") as z:
+                for name, text in files.items():
+                    z.writestr(name, text)
+            return buf.getvalue()
+        sheet = 'xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"'
+        rel = 'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"'
+        xlsx = archive({
+            "[Content_Types].xml": "<Types/>",
+            "xl/workbook.xml": f'<workbook {sheet} {rel}><sheets><sheet name="Prices" r:id="a"/>'
+                               f'<sheet name="Old" state="hidden" r:id="b"/></sheets></workbook>',
+            "xl/_rels/workbook.xml.rels": '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/'
+                                          'relationships"><Relationship Id="a" Target="worksheets/sheet1.xml"/>'
+                                          '<Relationship Id="b" Target="/xl/worksheets/sheet2.xml"/></Relationships>',
+            "xl/styles.xml": f'<styleSheet {sheet}><numFmts><numFmt numFmtId="164" formatCode="dd/mm/yyyy"/>'
+                             f'</numFmts><cellXfs><xf numFmtId="0"/><xf numFmtId="164"/></cellXfs></styleSheet>',
+            "xl/sharedStrings.xml": f"<sst {sheet}><si><t>Unit price</t></si><si><t>Widget A</t></si></sst>",
+            "xl/worksheets/sheet1.xml": f'<worksheet {sheet}><sheetData><row><c r="C1" t="s"><v>0</v></c></row>'
+                                        f'<row><c r="A2" t="s"><v>1</v></c><c r="C2"><v>12.5</v></c><c r="D2" s="1"><v>46082</v></c></row>'
+                                        f'<row hidden="1"><c r="A3" t="inlineStr"><is><t>9.99</t></is></c></row>'
+                                        f"</sheetData></worksheet>",
+            "xl/worksheets/sheet2.xml": f'<worksheet {sheet}><sheetData><row><c r="A1" t="inlineStr"><is><t>7.77'
+                                        f"</t></is></c></row></sheetData></worksheet>"})
+        text = describe_file("prices.xlsx", xlsx)
+        self.assertIn("\t\tUnit price\nWidget A\t\t12.5\t2026-03-01", text)
+        self.assertNotIn("9.99", text)
+        self.assertNotIn("7.77", text)
+        word = 'xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"'
+        docx = archive({"[Content_Types].xml": "<Types/>", "word/document.xml": (
+            f"<w:document {word}><w:body><w:p><w:pPr><w:rPr><w:vanish/></w:rPr></w:pPr><w:r><w:t>Delivery 3 weeks"
+            f"</w:t></w:r></w:p><w:p><w:r><w:rPr><w:vanish/></w:rPr><w:t>Price 1</w:t></w:r><w:r><w:t>Price 2</w:t>"
+            f"</w:r></w:p><w:tbl><w:tr><w:tc><w:p><w:r><w:t>Qty</w:t></w:r></w:p></w:tc><w:tc><w:p><w:r><w:t>40"
+            f"</w:t></w:r></w:p></w:tc></w:tr></w:tbl></w:body></w:document>")})
+        self.assertEqual(describe_file("t.docx", docx), "DOCUMENT t.docx:\nDelivery 3 weeks\nPrice 2\nQty\t40\n")
+        export = "Material;Preis €\nGröße;1,50\n"
+        for encoding in ("cp1252", "utf-16", "utf-16-le"):
+            self.assertIn(export, describe_file("export.csv", export.encode(encoding)))
 
 
 if __name__ == "__main__":

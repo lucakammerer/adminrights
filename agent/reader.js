@@ -5,17 +5,25 @@
 // Called as (opts) => {text, next, marked}. opts.doc: a fetched document without layout (only inline styles count);
 // opts.root: a fetched document rendered in a hidden frame, so its own style rules decide what is hidden.
 (opts) => {
-  const ZW = /[​-‍⁠﻿­]/g
+  const ZW = /[\p{Cf}\u034f]/gu  // invisible format characters, also inside identifiers (trap 10)
   const clean = (s) => (s || "").replace(ZW, "").replace(/[ \t\r\f\v ]+/g, " ")
   const BLOCK = new Set(["P", "DIV", "SECTION", "ARTICLE", "MAIN", "HEADER", "FOOTER", "NAV", "ASIDE", "UL", "OL", "LI",
     "TR", "TABLE", "FORM", "FIELDSET", "DL", "DT", "DD", "H1", "H2", "H3", "H4", "H5", "H6", "BR", "HR", "PRE",
     "BLOCKQUOTE", "DETAILS", "SUMMARY", "DIALOG", "FIGURE", "CAPTION", "LEGEND", "OUTPUT", "LABEL"])
   const SKIP = new Set(["SCRIPT", "STYLE", "NOSCRIPT", "TEMPLATE", "HEAD", "META", "LINK"])
+  // Other software builds tables and rows from styled spans and divs: their layout, not their tag, separates values
+  const CELL = new Set(["cell", "gridcell", "columnheader", "rowheader"])
+  const BLOCKISH = /^(block|flex|grid|flow-root|list-item|table|table-row|table-row-group|table-header-group|table-footer-group|table-caption)$/
+  const TOGGLE_ROLES = new Set(["checkbox", "switch", "radio", "menuitemcheckbox", "menuitemradio"])
+  const TEXT_ROLES = new Set(["textbox", "searchbox", "combobox", "spinbutton"])
+  const CONTROLS = "a[href], button, input, select, textarea, summary, label, [role=button], [role=link], [role=tab], [role=menuitem], [role=option], [role=checkbox], [role=switch], [role=radio], [onclick]"
   const fetched = !!opts.doc || !!opts.root
   const styled = !opts.doc
   let next = opts.start || 1
   let marked = 0
+  let inCell = 0
   const out = []
+  const told = new Set()  // tooltips already given as a control's (info: ...): shown once, not twice
 
   // A checkbox or radio made transparent under a styled label is still the control people tick: only display and
   // visibility hide it. Everything else with zero opacity or font size is hidden text (decoys).
@@ -25,12 +33,53 @@
     if (!styled) return /display\s*:\s*none|visibility\s*:\s*hidden/i.test(el.getAttribute("style") || "")
     const st = el.ownerDocument.defaultView.getComputedStyle(el)
     if (st.display === "none" || st.visibility === "hidden") return true
-    return !toggle(el) && (st.opacity === "0" || parseFloat(st.fontSize) === 0)
+    return !toggle(el) && vanished(st)
+  }
+  // Zero opacity or font size: nothing of it is painted.
+  const vanished = (st) => st.opacity === "0" || parseFloat(st.fontSize) === 0 || /opacity\(0\)/.test(st.filter)
+  // Text painted (almost) transparent: a decoy nobody sees ("clear"). Text in the colour of an opaque background its
+  // own box or an ancestor's paints behind it may be one too, or real text over something the reader cannot see (an
+  // image, a sibling, a hover colour): kept but marked ("camouflaged"). Not judged in SVG, with gradient, outlined or
+  // shadowed text, or with a background image, shadow, border image, blending or a positioned box in between.
+  const rgba = (c) => {
+    const m = /^rgba?\(([\d.]+), ([\d.]+), ([\d.]+)(?:, ([\d.]+))?\)$/.exec(c || "")
+    return m ? [+m[1], +m[2], +m[3], m[4] === undefined ? 1 : +m[4]] : null
+  }
+  const same = (a, b) => Math.max(Math.abs(a[0] - b[0]), Math.abs(a[1] - b[1]), Math.abs(a[2] - b[2])) <= 8
+  const inks = new Map()
+  const ink = (el) => {
+    if (!styled || !el) return ""
+    if (!inks.has(el)) inks.set(el, paint(el))
+    return inks.get(el)
+  }
+  const paint = (el) => {
+    if (el.namespaceURI !== "http://www.w3.org/1999/xhtml") return ""
+    const view = el.ownerDocument.defaultView, st = view.getComputedStyle(el)
+    if (st.webkitBackgroundClip === "text" || st.backgroundClip === "text" || parseFloat(st.webkitTextStrokeWidth) > 0 ||
+      st.textShadow !== "none") return ""
+    const c = rgba(st.webkitTextFillColor || st.color)
+    if (!c) return ""
+    if (c[3] < 0.05) return "clear"
+    if (c[3] < 1) return ""
+    for (let e = el; e; e = e.parentElement) {
+      const s = e === el ? st : view.getComputedStyle(e)
+      if (e !== el && s.position !== "static") return ""
+      if (s.backgroundImage !== "none" || s.boxShadow !== "none" || s.borderImageSource !== "none" ||
+        s.mixBlendMode !== "normal") return ""
+      const bg = rgba(s.backgroundColor)
+      if (!bg || bg[3] > 0 && bg[3] < 1) return ""
+      if (bg[3] === 1) return same(c, bg) ? "camouflaged" : ""
+      if (s.position !== "static") return ""
+    }
+    return ""
   }
   // Positioned outside the page or clipped to (almost) nothing: not on screen, yet read by assistive technology.
   const offscreen = (el) => {
     if (!styled) return false
-    const st = el.ownerDocument.defaultView.getComputedStyle(el)
+    const view = el.ownerDocument.defaultView, st = view.getComputedStyle(el)
+    // text indented far out of its box (inherited by children, so only where it is set)
+    if (parseFloat(st.textIndent) <= -999 &&
+      !(el.parentElement && parseFloat(view.getComputedStyle(el.parentElement).textIndent) <= -999)) return true
     if (st.position !== "absolute" && st.position !== "fixed") return false
     const r = el.getBoundingClientRect()
     const away = r.right < 0 || r.bottom + el.ownerDocument.defaultView.scrollY < 0 || r.left >= 20000
@@ -54,17 +103,28 @@
     if (!styled) return /display\s*:\s*none|visibility\s*:\s*hidden/i.test(el.getAttribute("style") || "")
     const view = el.ownerDocument.defaultView, st = view.getComputedStyle(el)
     const inherited = el.parentElement && view.getComputedStyle(el.parentElement).visibility === "hidden"
-    return st.display === "none" || st.opacity === "0" || parseFloat(st.fontSize) === 0 ||
-      (st.visibility === "hidden" && !inherited)
+    return st.display === "none" || vanished(st) || (st.visibility === "hidden" && !inherited)
   }
-  // An element's text without its hidden descendants (decoys planted inside names, labels and tooltips).
-  const textOf = (el) => {
+  // An element's text without its hidden descendants (decoys planted inside names, labels and tooltips). With alt, a
+  // part with no text of its own (an icon, an image) counts by its text alternative: for names that are empty without.
+  const textOf = (el, alt) => {
     let t = ""
     for (const n of el.childNodes) {
-      if (n.nodeType === 3) t += n.textContent
-      else if (n.nodeType === 1 && !SKIP.has(n.tagName) && !hiddenWithin(n)) t += " " + textOf(n) + " "
+      if (n.nodeType === 3) t += ink(el) === "clear" ? "" : n.textContent
+      else if (n.nodeType === 1 && !SKIP.has(n.tagName) && !hiddenWithin(n)) {
+        const own = textOf(n, alt)
+        t += " " + (alt && !/\S/.test(clean(own)) ? alternative(n) : own) + stamp(n) + " "
+      }
     }
     return t
+  }
+  const alternative = (el) => /^(INPUT|SELECT|TEXTAREA)$/.test(el.tagName) ? "" :
+    el.getAttribute("aria-label") || el.getAttribute("alt") || el.getAttribute("title") || ""
+  const shown = (el) => clean(textOf(el)).trim() || clean(textOf(el, true)).trim()
+  // A <time> shown as "yesterday" or in a short local form keeps its exact moment only in its datetime attribute.
+  const stamp = (el) => {
+    const at = el.tagName === "TIME" ? clean(el.getAttribute("datetime")).trim() : ""
+    return at && !clean(textOf(el)).includes(at) ? ` (datetime: ${at}) ` : ""
   }
   const labelOf = (el) => {
     const doc = el.ownerDocument
@@ -76,16 +136,17 @@
     if (el.getAttribute("aria-label")) return clean(el.getAttribute("aria-label")).trim()
     if (el.id) {
       const l = doc.querySelector(`label[for="${CSS.escape(el.id)}"]`)
-      if (l && clean(textOf(l)).trim()) return clean(textOf(l)).trim()
+      if (l && shown(l)) return shown(l)
     }
     const wrap = el.closest("label")
-    if (wrap && clean(textOf(wrap)).trim()) return clean(textOf(wrap)).trim()
-    return clean(el.getAttribute("placeholder") || el.getAttribute("title") || el.getAttribute("name") || "").trim()
+    if (wrap && shown(wrap)) return shown(wrap)
+    return clean(el.getAttribute("placeholder") || el.getAttribute("alt") || el.getAttribute("title") || el.getAttribute("name") || "").trim()
   }
   const described = (el) => {
     const ids = (el.getAttribute("aria-describedby") || "").split(/\s+/).filter(Boolean)
-    const t = ids.map((id) => el.ownerDocument.getElementById(id)).filter(Boolean).map((e) => clean(textOf(e)).trim())
-    return t.filter(Boolean).join("; ")
+    const els = ids.map((id) => el.ownerDocument.getElementById(id)).filter(Boolean)
+    els.forEach((e) => told.add(e))
+    return els.map((e) => clean(textOf(e)).trim()).filter(Boolean).join("; ")
   }
   const ref = (el) => {
     if (fetched) return ""
@@ -99,12 +160,12 @@
     const tag = el.tagName
     const role = el.getAttribute("role")
     if (tag === "A" && el.hasAttribute("href")) {
-      const name = clean(textOf(el)).trim() || labelOf(el)
+      const name = clean(textOf(el)).trim() || labelOf(el) || clean(textOf(el, true)).trim()
       return `[${ref(el)}link "${name}" -> ${el.getAttribute("href")}]`
     }
     if (tag === "BUTTON" || role === "button" || role === "menuitem" || role === "tab" || role === "option" ||
-        (tag === "INPUT" && ["submit", "button", "reset"].includes(el.type))) {
-      const name = clean(textOf(el)).trim() || labelOf(el) || el.value || ""
+        (tag === "INPUT" && ["submit", "button", "reset", "image"].includes(el.type))) {
+      const name = clean(textOf(el)).trim() || labelOf(el) || clean(textOf(el, true)).trim() || el.value || ""
       const d = described(el)
       return `[${ref(el)}button "${name}"${d ? ` (info: ${d})` : ""}${disabledMark(el)}]`
     }
@@ -122,6 +183,18 @@
       const opts = [...el.options].map((o) => (o.selected ? "*" : "") + clean(o.textContent).trim()).join(" | ")
       return `[${ref(el)}select "${labelOf(el)}" options: ${opts}${disabledMark(el)}]`
     }
+    // ARIA widgets and script-driven elements of other software; one around a control of its own is walked instead
+    const editor = el.isContentEditable && !(el.parentElement && el.parentElement.isContentEditable)
+    if (editor) return `[${ref(el)}input type=text "${labelOf(el)}" value="${clean(textOf(el)).trim()}"${disabledMark(el)}]`
+    if ((tag === "A" || role === "link" || TOGGLE_ROLES.has(role) || TEXT_ROLES.has(role)) && !el.querySelector(CONTROLS + ", [contenteditable]")) {
+      const name = clean(textOf(el)).trim() || clean(textOf(el, true)).trim()
+      if (TOGGLE_ROLES.has(role)) {
+        const kind = role === "radio" || role === "menuitemradio" ? "radio" : "checkbox"
+        return `[${ref(el)}${kind} "${name || labelOf(el)}" ${el.getAttribute("aria-checked") === "true" ? "checked" : "unchecked"}${disabledMark(el)}]`
+      }
+      if (TEXT_ROLES.has(role)) return `[${ref(el)}button "${[labelOf(el), name].filter(Boolean).join(": ")}"${disabledMark(el)}]`
+      if (name) return `[${ref(el)}link "${name}"]`
+    }
     if (tag === "SUMMARY") {
       const open = el.parentElement && el.parentElement.open
       return `[${ref(el)}summary${open ? "" : " (collapsed, content below)"}] `
@@ -129,9 +202,28 @@
     return null
   }
 
+  // A plain element the page reacts to clicks on (a handler attribute, or the pointer cursor scripts give it): the
+  // outermost one, not inside or around another control
+  const clickable = (el) => {
+    if (el === el.ownerDocument.body) return false
+    if (!el.hasAttribute("onclick")) {
+      if (!styled) return false
+      const view = el.ownerDocument.defaultView
+      if (view.getComputedStyle(el).cursor !== "pointer") return false
+      if (el.parentElement && view.getComputedStyle(el.parentElement).cursor === "pointer") return false
+    }
+    if (el.parentElement && el.parentElement.closest(CONTROLS) || el.querySelector(CONTROLS)) return false
+    return /\S/.test(textOf(el)) || !!(el.getAttribute("aria-label") || el.getAttribute("title") ||
+      el.querySelector("img[alt], [aria-label]"))
+  }
+
   const walk = (node) => {
     if (node.nodeType === 3) {
-      out.push(clean(node.textContent))
+      const how = ink(node.parentElement), t = clean(node.textContent)
+      if (how === "camouflaged" && t.trim()) {
+        marked++
+        out.push(` (text in its background's colour: ${t.trim()}) `)
+      } else if (how !== "clear") out.push(t)
       return
     }
     if (node.nodeType !== 1) return
@@ -140,7 +232,7 @@
     if (SKIP.has(tag)) return
     const role = el.getAttribute("role")
     if (role === "tooltip") {
-      out.push(` (tooltip: ${clean(textOf(el)).trim()}) `)
+      if (!told.has(el)) out.push(` (tooltip: ${clean(textOf(el)).trim()}) `)
       return
     }
     if (hidden(el)) return
@@ -150,7 +242,10 @@
       out.push(`\n[iframe src=${el.getAttribute("src") || ""}]\n`)
       if (doc && doc.body) {
         doc.querySelectorAll("[data-aref]").forEach((e) => e.removeAttribute("data-aref"))
+        const cellAround = inCell
+        inCell = 0
         walk(doc.body)
+        inCell = cellAround
       }
       out.push("\n[/iframe]\n")
       return
@@ -175,23 +270,38 @@
     const c = control(el)
     if (c !== null) {
       out.push(` ${c} `)
-      if (tag === "SUMMARY" || tag === "A" || tag === "BUTTON" || tag === "SELECT" || tag === "TEXTAREA" || tag === "INPUT") return
+      const byRoleOnly = /^(button|menuitem|tab|option)$/.test(role) &&
+        !["A", "BUTTON", "INPUT", "SUMMARY"].includes(tag)  // as before: such an element's content is read as well
+      if (!byRoleOnly) return
     }
-    const block = BLOCK.has(tag)
+    const row = out.length  // a table row becomes one line, its cells' own line breaks folded in
+    const display = styled ? el.ownerDocument.defaultView.getComputedStyle(el).display : ""
+    const cell = tag === "TD" || tag === "TH" || CELL.has(role) || display === "table-cell"
+    // inside a table cell, layout alone only spaces values apart, so a row stays on one line
+    const block = !cell && (BLOCK.has(tag) || role === "row" || BLOCKISH.test(display) && !inCell)
+    const spaced = !cell && !block && /^inline-|^(block|flex|grid|flow-root|list-item)$/.test(display)
     if (block) out.push("\n")
+    if (spaced) out.push(" ")
     if (/^H[1-6]$/.test(tag)) out.push("#".repeat(+tag[1]) + " ")
-    if (tag === "TD" || tag === "TH") out.push(" | ")
+    if (cell) out.push(" | ")
+    if (c === null && !fetched && clickable(el)) out.push(` [${ref(el)}clickable] `)
     const before = generated(el, "::before")
     if (before) out.push(` ${before} `)
     const start = out.length
+    if (cell) inCell++
     if (el.shadowRoot) for (const ch of el.shadowRoot.childNodes) walk(ch)
     for (const ch of el.childNodes) walk(ch)
+    if (cell) inCell--
+    const at = stamp(el)
+    if (at) out.push(at)
     const after = generated(el, "::after")
     if (after) out.push(` ${after} `)
     const title = clean(el.getAttribute("title")).trim()
     if (title && c === null && !clean(out.slice(start).join("")).includes(title)) out.push(` (tooltip: ${title}) `)
     if (tag === "DIALOG") out.push("\n=== END DIALOG ===\n")
     if (block) out.push("\n")
+    if (spaced) out.push(" ")
+    if (tag === "TR") out.push("\n" + out.splice(row).join("").replace(/\s*\n\s*/g, " ").trim() + "\n")
   }
 
   const doc = opts.root || (opts.doc ? new DOMParser().parseFromString(opts.doc, "text/html") : document)

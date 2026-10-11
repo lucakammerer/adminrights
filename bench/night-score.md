@@ -1,0 +1,461 @@
+# Night loop: score and efficiency (`luca/night-score`)
+
+## Morning summary
+
+State at 07:30 (2026-10-11). Leaderboard: our best submission (Haiku, 70 $·s, $0.204 / 5:43) has slipped to
+**rank 9**; rank 1 was about 25 $·s at the start of the night. No test run of mine is open.
+
+**Candidate: b942b04, the branch tip.** On the hosted Qwen, 16 runs in a row on this code line scored 100 and signed
+(2c5dd5f → 38d5b42 → cd967a0 → b942b04, the later ones adding only insurance and the parallel start pages):
+38.8, 43.2, 45.6, 46.6, 46.7, 49.6, 51.1, 57.3, 58.1, 61.3, 61.5, 66.4, 79.0, 87.7, 91.8, 102.6 $·s, median 57.7.
+11 of 16 beat our 70 $·s submission, none reached 25. The 2.6x spread comes from model load and from phase 1 step
+counts, not from the code.
+- b942b04 itself (4 runs, all 100): run_e36d97ed806dea22 46.7, run_f070cde80a0f6a81 66.4, run_f63b9812b45ac269
+  57.3, run_4e307d86869b4141 58.1 $·s (median 57.7). Its own change (ask again when a dropped call's twin is silent
+  too) fired in none of them: insurance.
+- cd967a0 (6 runs, all 100): 38.8, 43.2, 45.6, 51.1, 91.8, 102.6 $·s (median 48.4). Merging cd967a0 without
+  b942b04 is equally defensible.
+
+**What to merge, in this order** (oldest first; each commit is reviewed, release check green, audit clean). Easiest:
+merge the branch tip b942b04 as a whole. If cherry-picking, keep these pairs together:
+1. 7cb21db, 4d4a37f, c31d89a, a4b9d2c: submit `form` hold, twin for a silent streamed call (10 s), TAN look-up in a
+   new mailbox tab, setup fee from the commercials (fixed an 84.8 double count; judgement call, iteration 2).
+2. 9d32034 + fcac256: a navigation the site never answers is stopped after 30 s (CDP `Page.stopLoading`) instead of
+   locking the tab for 60 s per tool call.
+3. 5f858c2 **+ 58f933b, never one without the other**: the running early ERP search gets an amended requirement as
+   a message instead of starting over (~110 s); 58f933b passes the changed requirement to the no-match check
+   (without it: a false no_bid, run_7d633f73aa69af53 scored 5).
+4. 5c1668a: the first TAN mailbox tab opens when the submission starts (TAN look-up 13-36 s, was 16-161 s).
+5. 2c5dd5f: one follow-up ERP search of at most 12 steps when a search hits its step limit with required facts
+   unkept (insurance; never fired).
+6. 38d5b42: a refetch of an unchanged kept page says it is already kept (insurance against step-limit loops).
+7. cd967a0: the four start pages load side by side, each within 20 s (a hung mailbox start page cost every agent
+   ~30 s in 2 of 6 runs before).
+8. b942b04: the silent-twin retry (insurance).
+
+**Unproven / distrust**
+- Everything ran on Qwen only. The OpenRouter (Haiku) path was left untouched but is untested on this branch: before
+  submitting on Haiku, one Haiku test run of the tip.
+- All runs are public-1. Every agent/ commit passed the adversarial generalization review, but none is measured on an
+  unseen site; run `tools/stress/` if time allows.
+- Insurance commits (7cb21db, 2c5dd5f, 38d5b42, b942b04) never fired live; they are kept for robustness, not speed.
+- 3258746 was wrong (reverted in 74f20cd). f5e86da (the radical-speed merge) is not shown faster than main on Qwen.
+- A submission is one run: on Qwen expect anything from ~39 to ~100 $·s. Rank 1 (25 $·s) needs a structural cut
+  (fewer resolver calls, phase 1 steps), not more tuning; see the backlog.
+
+## Iterations
+
+### 1 · 01:50 · Structural speedups of `luca/radical-speed` on Qwen
+
+Hypothesis: on Qwen, wall time is spent in model output (≈45 tok/s, reasoning included) and in serial stages.
+`luca/radical-speed` (Luca, not on main) removed serial stages: ERP searches start from the specification, commercials
+in three parallel parts, the submission starts early, webmail logs in once and fans out, cache-friendly trimming. It
+reached 9–10 min on Haiku. Merge it onto HEAD while Qwen stays the default model and compare with two baseline Qwen
+runs of HEAD.
+
+Baseline (HEAD 1fa269f, Qwen): run_c7805bca216fa2e0, run_39d8950d739e2e2a.
+
+Merge db77ee5: `llm.py` and `submit/agent.py` from radical-speed, with Qwen as the default again and the submit
+read-back of the breakdown values (939e2d0) restored; `tests/test_chat.py` dropped (the streamed silence check
+replaces the twin on Qwen, covered in `test_run_guards`). Gate: green, audit clean. The adversarial reviewer found one
+credible reject risk: `paging.py` took a list's row links (`?id=17`) for its pager, so code would open records no
+model chose. Fixed in f5e86da: pager links need a short label and numbers that step evenly from the current page;
+two tests.
+
+Evidence: both merge runs 100, eligible, 132.8 and 197 $·s against 257.8 and 262 $·s for the baseline. Confounded by
+load: queue wait 13 min in the baseline against 26 s in run_364ee0e5b5151237. Paired runs started 00:23 UTC to settle
+it: baseline run_52961ce393c136de (1fa269f, from `git archive`), merge run_cf57141fcf4352a0 (f5e86da).
+
+Verdict: kept provisionally (quality held 2/2, faster in both); the paired runs decide. Where the time goes now
+(run_364ee0e5b5151237): phase 1 to ~230 s, ERP searches to 448 s (critical path), submit + TAN 448→661 s, 22
+sequential submit steps (run_a65e32634be4efce: 314 s).
+
+Next idea: the submit phase. It starts early but enters each configurator position in several form calls after
+the bid arrives; time per step is browser waits plus a 5–15 s Qwen call.
+
+Seen on the way: run_0b1441de63cf8acb (package fc98097b, not mine, all Haiku): 100 in 5:09, $0.091, 28.1 $·s.
+
+### 2 · 02:22 · Submit re-entry and a setup-fee double count
+
+Paired runs of iteration 1: main 1fa269f run_52961ce393c136de 100 / 10:01 / 122.6 $·s; merge f5e86da
+run_cf57141fcf4352a0 84.8 / 14:46 / 232.9 $·s. The merge's earlier lead was load. The 84.8 was calc, not the merge:
+the ERP agent kept a material's planning tab with its own setup fee, and `calc.facts` added it to the commercials'
+per-position fee (01.02 got a fee it doesn't have, 01.03 counted it twice). Fixed in a4b9d2c with a test.
+
+Hypothesis (submit): the submit agent loses ~110 s when `verify_summary` finds a breakdown value typed wrong, because
+the portal makes it walk back and re-enter every later position (run_a65e32634be4efce: 01.04 bonus typed as 0,
+same field wrong in run_c086c4a6429b3bd9). Catch it before the page's next-step button: 7cb21db holds a `form` call
+once per position when it types the position's unit price but not one of its non-zero breakdown values; a position
+held again switches the hold off (portal asks for them elsewhere). Number parsing accepts any common format.
+
+Gate: check_release green, audit clean. Reviewer on 7cb21db: no hardcoding; asked for a cap on holds and a format-
+agnostic parser, both done. Reviewer on a4b9d2c: no hardcoding, warned an unseen dataset might keep the ordinary
+setup fee only in the ERP; kept because the old sum double-counts whenever both sources show it, and the ERP value
+still stands in when the commercials lack the position. Flagged for Luca above.
+
+Runs (a4b9d2c): run_bd99f53d4d7d5c7f 100 / 11:20 / 156.2 $·s, run_ba99f2d4eb2f586e 100 / 12:52 / 181.6 $·s. Both
+signed, setup fees right (01.02 0, 01.03 106.62), `verify_summary` matched first time, the hold never fired (no false
+hold, but its catch is untested in a live run). Verdict: keep both; the hold is insurance (saves ~110 s when it
+catches), not a measured speed-up.
+
+Next idea: time to the bid varies 350–545 s between identical runs; the ERP phase (one requirement searched late
+because it "differs from the early searches") is where it goes. Profile run_ba99f2d4eb2f586e 4–9 min.
+
+
+
+### 3 · 03:00 · A twin for a streamed call that brings no first chunk
+
+Profile of run_ba99f2d4eb2f586e (bid only at 545 s): the critical path was the slowest ERP search (189→510 s, 39
+steps, forced finish). Three of its gaps were `[llm] retry after APITimeoutError at 30 s`: a hosted Qwen call that
+never brought a byte, dropped only at `SILENCE`. Count per run: run_ba99f2d4eb2f586e 6, run_cf57141fcf4352a0 10,
+run_bd99f53d4d7d5c7f 0, run_a65e32634be4efce 0. Answered calls' queue wait p95 1.3 s (night) to 14 s (loaded).
+
+Hypothesis: a streamed attempt without its first chunk after 10 s gets a twin (the silent one keeps running, first
+answer wins), as OpenRouter calls already do after 15 s. Saves ~20 s per stuck call; costs a twin on queue waits over
+10 s under load.
+
+Commit 4d4a37f: `llm.FIRST_CHUNK`, `reply` sets an event at its first chunk, `chat` sends the twin and logs
+`[llm] twin after`. Test: a silent first request answered by the twin in < 5 s. Gate: check_release green, audit clean,
+reviewer PASS (watch the twin rate under load: it adds requests while the service queues).
+
+Runs (4d4a37f): run_840f0cd20f29dc8c 100 / 11:53 / $0.213 / 151.8 $·s, run_6038f546123323a1 100 / 14:10 / $0.265 /
+225.4 $·s. Neither had a stuck call, so the twin never fired: neutral, untested live. Kept (cheap insurance, reviewer
+PASS); judge again once a run logs `twin after`.
+
+Both runs lost their time after the bid instead (381→713 s, 415→850 s): browser tabs that stopped answering. A survey
+of 8 earlier runs (subagent, run_profile + logs) found every stall over 40 s in the TAN look-up on the mailbox's
+original tab: run_bd99f53d4d7d5c7f 75 + 89 s (TAN finish forced), run_52961ce393c136de 75 s, run_a65e32634be4efce
+44 s, run_c7805bca216fa2e0 75 s; plus run_840f0cd20f29dc8c 150 s. The pattern: `start page failed: TimeoutError`
+(15 s), then the first read waits out `TOOL_TIMEOUT` (60 s); a later look-up gets through at once. 5 of 10 runs.
+
+Change c31d89a: `get_tan` opens a new tab of the mailbox's browser (same login) through `agent.fresh` for each look-up
+instead of the mail agents' idle tab. Gate: green, audit clean, reviewer PASS (a mailbox with a per-tab session would
+need a new login; the mission carries the login line). Runs (c31d89a): run_c13fd1a74d3ad98c, run_d0283ff8e1a3187d
+(started 01:20 UTC). Judge by: time from `get_tan` to the TAN agent's finish, quality, signing.
+
+Results (c31d89a): run_c13fd1a74d3ad98c 100 / 11:52 / $0.296 / 210.8 $·s, run_d0283ff8e1a3187d 100 / 15:21 / $0.261 /
+240 $·s. TAN look-up 37 s and 63 s, no stall (was 75-150 s in 5 of 10 runs). The twin fired 9 times in run_c13fd: each
+original never shows in the platform's calls (stuck before the model), each twin answered in ~2 s; no 30 s timeout.
+Total $·s is not better: phase 1 ran to 446 s in run_d0283ff8e1a3187d and a submit `read` on the tender portal hung
+75 s there (as in run_6038f546123323a1: 3 hung tools, 207 s). Verdict: keep both 4d4a37f and c31d89a; their mechanism
+is shown, the $·s gain is hidden by load and the next loss, the frozen page.
+
+Next idea: a browser tool that times out means the page stopped answering (TimeoutError after `TOOL_TIMEOUT`, then
+`investigate` waits 15 s more on a `tab.read()` of the same page; the model then reads again, another 75 s). Give
+`Tab` a way to reopen its current address in a new page of the same browser (handlers re-registered, old page closed
+without waiting) and do it in `investigate`'s error path for a timeout, telling the model. Generic web mechanics;
+check the submit agent's `form` handler too (its own `wait_for`).
+
+### 4 · 03:36 · Reads of long-idle tabs hang on the settle wait
+
+Evidence: run_d0283ff8e1a3187d: the submit agent's first `read` after the bid (616 s) came back only at 693 s
+(60 s `TOOL_TIMEOUT` + 15 s re-read); the tab had idled since the early start. Same shape as the TAN look-up stalls
+(mailbox tab idle for minutes) and run_6038f546123323a1 (submit tab, 479→686 s). Every stall was on a tab that sat
+unused for minutes.
+
+Hypothesis: `Tab.settle` awaited one in-page Promise that looped on the page's own `setTimeout` (50 ms ticks). A
+background tab's timers are throttled (Chrome: once a minute after 5 min hidden), so the promise outlived the tool
+timeout. Locally not reproducible: Playwright-launched Chromium keeps every tab visible and disables throttling;
+the platform's browsers are attached over CDP, their flags unknown.
+
+Change 3258746: settle polls a synchronous evaluate (ms since the last DOM change, pending short timers) from Python
+every 50 ms, each poll bounded, at most `SETTLE_MAX`. Same semantics on a normal page. Test: a page whose timers
+never fire (old code hangs to the test's 10 s guard, new one returns in < 2.5 s). Gate: check_release green, audit
+clean, reviewer PASS (gap noted: if a tab is truly frozen rather than throttled, the dialog sweep after the loop has
+no bound; add one if stalls persist).
+
+Runs (3258746): run_590a955bd423bbac 90.5 / 11:03 / $0.252 / 167 $·s (no stall; 01.01 quantity 26 instead of 25 from
+the requirements resolver, unrelated), run_01a5fe851c09aba6 100 / 14:49 / $0.273 / 242.8 $·s, **with** the stall on
+a busy tab: a `form` step clicked a configurator button at 572 s, then nothing until the model's `goto` at 721 s.
+Hypothesis refuted. The screenshot at 10:30 shows the tab's loading spinner: the button's form POST never got an
+answer. Reproduced locally (a POST the test server never answers): while it is pending, Playwright's
+`page.evaluate("1")` hangs (it waits for the new document), so every read, click fallback and form step on the tab
+waits out the tool timeout; the click itself fails after 5 s. `goto` or CDP `Page.stopLoading` free the page at once
+(stopLoading keeps typed inputs). Reverted 3258746 (74f20cd).
+
+Change 9d32034: `Tab` watches main-frame navigation requests; one without a response after 30 s (`goto`'s own
+limit) is stopped with `Page.stopLoading` and the model told (method, URL, "may not have taken effect: check the
+page"). Test: a form POST without an answer, then a click on it: < 14 s with the limit at 2 s (old code hung to the
+test's guard). Gate: check_release green, audit clean, reviewer PASS (accepted risk: a server slower than 30 s that
+still acts on the POST may get it twice; the tab was stuck anyway). Runs (9d32034): run_86571e2d5c35436b,
+run_3af67abb1c0fe79b (started 02:07 UTC).
+
+Results (9d32034): run_86571e2d5c35436b 100 / 17:20 / $0.246 / 255.6 $·s, run_3af67abb1c0fe79b 100 / 13:26 / $0.269 /
+216.8 $·s. No submit-tab stall in either (the watcher never had to fire). run_86571 lost 6.5 min in the TAN look-up:
+twice `fresh` hit `start page not loaded` on the mailbox (20 s), then the TAN agent's first read hung 60 s and its
+fetches hung on: the same pending-navigation lock, in `fresh`, which navigates before a `Tab` exists. Both TAN
+agents were forced off (~160 s each); the third look-up got through. run_3af67 lost no time to the browser (TAN agent
+wandered 72 s; bid at 552 s after a forced ERP search).
+
+Change fcac256: `fresh` creates the `Tab` first; a start page that misses `OPEN_TIMEOUT` is stopped (`Tab.stop`,
+shared with the watcher) and opened once more with twice the time, then stopped again (worst 60 s, was 20 s + a
+locked tab). Test: a start page that never answers, then a read returns (old code: locked to the test's 10 s
+guard). Gate: green, audit clean, reviewer PASS (slow-but-working start pages: hence the longer second attempt).
+Runs (fcac256): run_26b1c884ae47eb49 100 / 12:49 / $0.217 / 167.2 $·s, run_2ec4765202c21efd 100 / 11:59 / $0.205 /
+147.6 $·s: the best pair of Qwen runs on this branch. Neither hit an unanswered navigation (no `no answer`, no
+`start page not loaded`), so the live gain is unproven; the local reproductions show the mechanism. In run_26b1 the
+TAN look-up lost 46 s to a model call (twin sent, both timed out at 40 s).
+
+Verdict: keep 9d32034 and fcac256 (4/4 runs 100 and signed, no regression, two reproduced lock-ups fixed); 3258746
+reverted (wrong hypothesis). Next idea: the in-page `fetch` without an answer (backlog, first item), the same family
+of site requests that never answer; then the TAN agent's model calls (a 40 s timeout after a twin).
+
+### 5 · 04:45 · A changed requirement goes to the running early search, not a new one
+
+Profile of run_2ec4765202c21efd (fcac256, 100 / 11:59): the early ERP searches start at 299 s from the specification;
+the requirements resolver answers at 355 s with an amendment the specification lacked (a scoped stroke change), so
+main cancelled the early search of that catalogue group (55 s in, the right candidate already on screen) and started
+a new one from scratch: 355→466 s, the last search to finish (the others 387-413 s). Same pattern ("differs from the
+early searches") in both a4b9d2c runs. Then extract 466→497 s, then the submit agent's first step after the bid 43 s.
+
+Hypothesis: hand the corrected values to the running early search of the same catalogue group that no position
+needs (requirement updated in place, a message before its next step via `investigate(news=...)`); its candidates and
+kept pages still count. Expected: ~50 s off the critical path whenever an amendment changes a value.
+
+Commit 5f858c2. Gate: check_release green, audit clean. Reviewer first REJECTED: a search that had already decided
+(in its final extract or check) never reads the message, so its old-values result would stand. Fixed: an unread
+message when the search returns means it decided on the old values, so `erp_search` runs a fresh search (the old
+behaviour); an empty catalogue group is never redirected; test for both cases. Re-review PASS. Runs (5f858c2):
+run_b4c23813dd122d18, run_5150d06e5790477d (started 04:53). Judge by: `told the search` in the log, time from the
+requirements answer to the last ERP finish, quality, signing.
+
+Results (5f858c2): run_b4c23813dd122d18 100 / 9:47 / $0.285 / 167.2 $·s, run_5150d06e5790477d 100 / 10:26 / $0.275 /
+172.4 $·s: the two fastest Qwen runs on this branch. `told the search` fired in both (two groups and one), no search
+had to run again, bid at 421 s and 344 s (fcac256: 497 s; a4b9d2c and earlier: 350-545 s). $·s is flat because cost
+was higher ($0.275-0.285 against $0.205-0.217 for fcac256; the branch has ranged $0.205-0.296 tonight, so not
+attributed to the change). Verdict: keep.
+
+Now the longest stretch is after the bid (166 s and 282 s). In run_5150d the TAN look-up took 161 s: `fresh` lost
+50 s because the mailbox's start page didn't load in the new tab, twice (20 s, then 30 s: Playwright's own navigation
+timeout ends the second attempt before its 40 s). The TAN agent's own `goto` right after worked at once. Then the
+agent wandered (a refused finish with an empty TAN, a 42 s `all_pages` fetch of the inbox) and was forced at 624 s.
+Same start page stall in run_86571e2d5c35436b: 2 of about 8 runs. Cause unknown (no frames could be cut).
+
+Next idea: TAN look-up. (a) Don't wait for the mailbox start page in `fresh` for the TAN: if it doesn't load within a
+short time, stop it and let the agent open the URL (its mission names it); one model step is cheaper than 50 s.
+Watch out: the ERP and sweep tabs use `fresh` too, so either make it a parameter or show the shorter timeout is
+safe for all. (b) The TAN agent's mission or check: a finish with an empty TAN should send it to open the message
+it found, not search again.
+
+
+### 6 · 05:10 · The first TAN look-up's mailbox tab opens before the bid
+
+Evidence: TAN look-up `get_tan` → TAN agent's finish: run_b4c23813dd122d18 16 s (fresh 5 s, 3 steps),
+run_26b1c884ae47eb49 86 s (fresh 14 s, a 40 s model timeout), run_5150d06e5790477d 161 s (`fresh` 50 s: the mailbox
+start page twice not loaded, the agent's own `goto` right after worked; then a finish with found true but an empty
+TAN, refused with "no message found yet", so it searched every folder again: two `all_pages` fetches, 32 s and 42 s).
+
+Hypothesis: open the first look-up's tab when the submission starts (it waits minutes for the bid anyway), so a slow
+start page loads off the critical path; and a finish that found the message but gave no TAN is told to open that
+message, not to search again. Iteration 4 showed the idle-tab stalls were unanswered navigations (now stopped), not
+idleness, so a pre-opened tab idling for minutes should be safe; the runs check it.
+
+Commit 5c1668a. Gate: check_release green, audit clean, reviewer PASS (risk: if idleness did cause stalls, the first
+look-up gets them back; a mailbox whose session times out lands on its login page, the mission's login line covers
+it). Runs (5c1668a): run_7d633f73aa69af53, run_96d33dd7b340c037 (started 05:14). Judge by: `get_tan` → TAN finish,
+no `fresh` line at the look-up, quality, signing.
+
+Results (5c1668a): run_96d33dd7b340c037 100 / 6:34 / $0.142 / 56.1 $·s, the best Qwen run on any branch (bid at
+286 s, TAN look-up `get_tan` 381 s → signed 394 s); run_7d633f73aa69af53 **5** / 7:39 / $0.186: a no_bid, not caused
+by this change (TAN look-up 36 s there too, no `fresh` stall in either). Verdict: keep 5c1668a.
+
+Luca merged `luca/night-gen` into this branch at 05:14 (1920ba1: stalled frames, form field lookup, office files,
+reader tables); the 5c1668a runs were started before it.
+
+### 7 · 05:15 · A changed requirement must reach the no-match check (fixes a no_bid from 5f858c2)
+
+Evidence (run_7d633f73aa69af53): the early search of one catalogue group started from the specification (usable
+stroke + reserves, without the Q&A amendment) and decided "no match" at 246 s, correctly for those values. Its
+no-match check (a second search, I11) started at 249 s, but `erp_search` called it without `news`. The requirements
+answer came at 286 s with the amended stroke; `redirect` found the job still running and appended the message, which
+nothing read. The check searched on the old values, found nothing; the first no_match stood → calc no_bid → 5 points.
+5f858c2's guard (unread `news` → run again) only ran after the first search, not after the check.
+
+Change 58f933b: every run of `erp_search` (first, rerun, check) gets `news`; unread news after any run means a rerun
+with the new values; when the requirement changed during the check, the first "no match" is dropped and the check's
+answer counts (a forced check then leaves the position without a material rather than a stale no_bid). Test: a group
+whose first search decides no_match at once and whose check is told the change (old code: '' instead of the
+material). Gate: check_release green, audit clean. Reviewer first REJECTED (the snapshot of the requirement was taken
+before the first search, so a valid no_match decided on the new values could be dropped when the check is forced);
+moved it to just before the check, which is the reviewer's suggested fix. Runs (58f933b, includes the night-gen
+merge): run_28c8d1f903003c25, run_92428b63f6b01b4e (started ~05:43). Judge by: quality, signing, time, and whether
+the night-gen merge holds the 6:34 pace.
+
+Results (58f933b): run_92428b63f6b01b4e 100 / 6:51 / $0.131 / 53.6 $·s; run_28c8d1f903003c25 85.3 / 6:34 / $0.132 /
+52.3 $·s. Neither had a no_match, so the fix's path did not fire live (the unit test shows it). The 85.3: the
+search on the ERP login tab spent ~30 of its 40 steps retrying the search form (fills on three refs, a `form`, URL
+guesses) before a `fetch` with the query worked at step 31; at step 40 (264 s, the stage deadline ~9 min away) it was
+forced before the price page, so 01.04 had no base price and the rebates and total were off. The other searches
+went straight through. Verdict: keep 58f933b (a correctness fix; pace held at ~53 $·s with the night-gen merge).
+
+Next idea: a search stopped by its step limit long before its deadline, with required facts missing, loses points
+that a few more steps would have saved. Give it one extension when time is plentiful (generic: a cost guard, not a
+site assumption), or let the forced finish's `extract` gap list drive a short follow-up on the chosen material.
+
+### 8 · 05:40 · A search cut by its step limit gets a short follow-up for its missing facts
+
+Evidence (iteration 7, run_28c8d1f903003c25, 85.3): one ERP search spent ~30 of its 40 steps on the search form,
+chose the right material and was forced at step 40 (264 s) with its stage deadline ~9 min away; the price page was
+never kept, so the position had no base price.
+
+Hypothesis: when a search ends without the price condition, `extract` already lists what the kept pages lack; with
+at least 120 s left before its search deadline, a follow-up `investigate` on the same tab (mission: the chosen
+material + that list, at most 12 steps, no check) keeps those pages, then `extract` reads all pages. Generic (driven
+by extract's gap list, no site assumption); costs nothing when searches finish normally.
+
+Commit 2c5dd5f, test (a search forced at its step limit; old code: no price condition). Gate: check_release green,
+audit clean, reviewer PASS (notes: the follow-up ignores `news`, which `erp_search` reruns on anyway; it holds one of
+the 6 slots). Runs (2c5dd5f): run_0a26a180075ecc2c, run_75da3ea2197f3709 (started 05:47). Judge by: quality,
+signing, `follow-up for` in the log (fires only on a cut search), time.
+
+Results (2c5dd5f): run_75da3ea2197f3709 100 / 5:30 / $0.150 / **49.6 $·s** (best Qwen run of the night),
+run_0a26a180075ecc2c 100 / 7:36 / $0.173 / 79.0 $·s. The follow-up fired in neither: in run_0a26 a search did hit its
+step limit (281 s) but had kept every required fact, so extract found no gap (the trigger is correctly narrow). Verdict:
+keep as insurance (no regression, 2/2 signed at 100, costs nothing unless a cut search lacks facts); its catch is
+shown only by the unit test.
+
+Next idea: the step limit itself costs time even when facts are complete: run_0a26's search ran 40 steps to 281 s
+(bid ~65 s later than run_75da). Look at what those 40 steps did (retrying the search form again?) before touching
+prompts; the search form retry pattern also caused iteration 7's 85.3.
+
+### 9 · 05:50 · Fetching a kept page unchanged says it is kept
+
+Evidence (run_0a26a180075ecc2c, 79 $·s): after keeping every fact, one ERP search fetched pages it had already kept
+14 times (236→294 s, "CORRECTION" notes re-checking values), another 5 times before its step limit (281 s); the bid
+waited on them. Same pattern, 4 times, in run_96d33dd7b340c037; none in three other runs.
+
+Hypothesis: the model re-checks values because it can't tell a fetch shows a page the analyst already has. A `fetch`
+whose address was kept and whose content is unchanged gets a reminder appended ("unchanged since you kept it as
+evidence #n: the analyst reads it word for word"). Saves the tail of re-checks; never fires on a changed page.
+
+Commit 38d5b42, test (a refetch of a kept page gets the line, another address or changed content doesn't). Gate:
+check_release green, audit clean. Reviewer first REJECTED the address-only version (hash routes, state-dependent
+pages, `goto` redirects would get a false "already kept" and the model could skip keeping new facts); reworked to
+`fetch` only, same address and same `paging.body`, fragment kept; re-review PASS. Runs (38d5b42):
+run_076dc1c00233e5a6, run_0847ad70cbda7696 (started 05:53; both failed on the platform, 502 upstream unreachable, restarted as run_28dc851b508f1f3c and run_822da1971e1635d9). Judge by: quality, signing, ERP search step counts and
+last-ERP-finish time, how often the line fires (`Unchanged since` is not logged; count refetches of kept URLs with
+/tmp-style log parsing as in this entry).
+
+Results (38d5b42): run_822da1971e1635d9 100 / 7:16 / $0.141 / 61.5 $·s, run_28dc851b508f1f3c 100 / 10:48 / $0.135 /
+87.7 $·s. No search fetched a kept page again (0 refetches; searches 13-24 steps, none at the step limit), so the
+reminder had nothing to fire on: the 2c5dd5f runs had 0 and 23. run_28dc lost its time in phase 1 (the mailbox
+login started at 93 s, the webmail agent paged the archive for 28 steps to 382 s), so the early ERP searches never
+started. Verdict: keep as insurance (no regression, 2/2 signed at 100, reviewer PASS, inert when the model doesn't
+re-check); not shown to save time.
+
+Next idea: phase 1 is again the spread (webmail agent 201→382 s here, against ~200 s in the fast runs). Look at what
+makes the mailbox agent page every archive page twice (steps 18-23 re-open pages 1-4 by `goto`) before touching
+prompts; the `kept_at` reminder doesn't cover `goto`.
+
+### 10 · 06:18 · Does the branch tip hold its pace? Two more runs of 38d5b42
+
+Evidence for the pick: the morning decision rests on 2c5dd5f/38d5b42 with four runs (49.6, 79.0, 61.5, 87.7 $·s),
+spread 1.8x. Two more runs of the unchanged tip say more than one more insurance change with an hour left. Side
+look at run_28dc851b508f1f3c's slow phase 1: the mailbox login's two `goto`s to the start page took 33 s each
+(93→158 s) before a `goto` to the login page worked; the technical-release mail agent had kept its record at 224 s
+and then re-opened every archive and inbox page by `goto` until 382 s, looking for a superseded revision.
+
+Runs (38d5b42, unchanged): run_4b06a64ace34d51f, run_b5bfbb3ed5ed5292 (started 06:19). Judge by: quality, signing,
+$·s against 70 (our submission) and 25 (rank 1).
+
+Results (38d5b42): run_4b06a64ace34d51f 100 / 5:35 / $0.139 / **46.6 $·s** (best Qwen run of the night),
+run_b5bfbb3ed5ed5292 100 / 7:16 / $0.141 / 61.3 $·s. The 38d5b42 family (2c5dd5f + 38d5b42) now has 6 runs, all 100
+and signed: 46.6, 49.6, 61.3, 61.5, 79.0, 87.7 $·s, median 61.4 (our Haiku submission: 70).
+
+Profile of run_b5bf: 3→35 s with no input and no model call. `main` loads the four start pages one after another with
+Playwright's 30 s goto timeout, and one of them hung (the mailbox's start page hangs often: `fresh` logged `start page
+not loaded` on it in this run and in run_28dc851b508f1f3c). run_28dc had the same 31 s gap (sites call at 3 s, next
+call at 36 s); the other four runs started their agents at 5-7 s.
+
+Change cd967a0: the four start pages load side by side, each within `OPEN_TIMEOUT` (20 s, as `fresh`), a missed one is
+stopped (`Tab.stop`) so the agent's own `goto` isn't locked; the `Tab` exists before the load. Saves ≥ 10 s when a
+start page hangs and the sum of the other loads always. Gate: check_release green, audit clean, reviewer PASS (a
+start page slower than 20 s is opened by its agent, as `fresh` already accepts). Runs (cd967a0): run_f17b48d291a7d8fd,
+run_ddc02354bde271f3 (started 06:32). Judge by: time of the first agent calls after the sites call, `first load
+failed` lines, quality, signing.
+
+Results (cd967a0): run_f17b48d291a7d8fd 100 / 6:15 / $0.136 / 51.1 $·s, run_ddc02354bde271f3 100 / 10:41 / $0.160 /
+102.6 $·s. Agents started at 7 s in both, no `first load failed`: no start page hung, so the change had nothing to
+catch. run_ddc0's 10:41 is load (Qwen ~40 tok/s, calls up to 65 s; requirements at 362 s; one 50 s submit step).
+Verdict: keep cd967a0 as insurance (2/2 at 100 and signed, reviewer PASS, removes a 30 s stall seen in 2 of 6 runs;
+its catch is not yet shown live). One more pair for evidence: run_6fd78246ef5da521 100 / 5:12 / $0.139 / 43.2 $·s,
+run_2bfbe16b551a62a3 100 / 5:17 / $0.144 / 45.6 $·s, the two best Qwen runs of the night (no start page hung).
+
+Next idea: the requirements resolver is the gate to the bid in slow runs (362 s here); the backlog's "smaller
+question or effort low" is the next lever, measured offline with `tools/resolver_eval.py --repeat` first.
+
+### 11 · 06:52 · `specs` at effort low? Measured first, then more evidence for the pick
+
+Hypothesis (backlog): `specs` at effort low starts the early ERP searches sooner. Offline check impossible: the
+local proxy answered every call with 429 again (`tools/resolver_eval.py` via a /tmp wrapper, 0 answers, and a
+single one-line `ask_json` too). From the logs instead: in run_ddc02354bde271f3 (the slow 10:41) `specs` asked at
+239 s and answered at 256 s (17 s at medium); the searches waited for phase 1 (supplier portal + technical mail done at
+239 s), not for `specs`. The 60 s backup in run_b4c23813dd122d18 is the exception. Verdict: not the lever; no change.
+A saving of ~15 s can't be told apart from the 2x run spread in two runs.
+
+Instead one more pair of the unchanged tip cd967a0 for the morning decision: run_abc7db6e7a9804f9,
+run_aeaefa93edce1937 (started 06:57).
+
+Results (cd967a0): run_aeaefa93edce1937 100 / 5:20 / $0.121 / **38.8 $·s** (best Qwen run of the night),
+run_abc7db6e7a9804f9 100 / 8:24 / $0.182 / 91.8 $·s. run_abc7: 265 model calls (the fast runs make far fewer, so
+the model wandered more), and one stall of 43 s at 6:07: a submit step's call got its twin at 10 s, both stayed silent
+and the twin timed out at 40 s before the retry answered (1 of 4 twins that run; none in the other two runs looked
+at). cd967a0 now 6 runs, all 100 and signed: 38.8, 43.2, 45.6, 51.1, 91.8, 102.6 $·s, median 48.4.
+
+Verdict: no code change; the tip holds. Next idea: when the original call ends silent at SILENCE while its twin is
+still waiting, retry right away instead of waiting out the twin's own SILENCE (would have saved ~10 s here); rare,
+so insurance only.
+
+### 12 · 07:07 · Ask again at once when a dropped call's twin is silent too
+
+Hypothesis (backlog): in run_abc7db6e7a9804f9 a submit step's call and its twin both stayed silent; the original was
+dropped at `SILENCE` (30 s) but the twin, started at 10 s, was waited out to 40 s before the retry. Retry as soon as
+the original is dropped while the streamed twin has not sent a chunk (OpenRouter's unstreamed path unchanged).
+Commit b942b04 (`llm.chat`, test fails on the old code at 3.95 s, passes on the new; doc line in
+IMPLEMENTATION_PLAN). Gate: release check green, audit clean, adversarial reviewer PASS (worst case: a twin that would
+have started streaming between 30 and 40 s is asked again). Insurance: saves ~10 s on a rare stall.
+
+Runs (b942b04, started 07:11): run_e36d97ed806dea22 100 / 5:45 / $0.135 / **46.7 $·s**, run_f070cde80a0f6a81
+100 / 7:49 / $0.142 / 66.4 $·s, both signed. The new rule fired in neither (one twin in run_e36d, and it answered).
+
+Verdict: keep as insurance. Not worse on quality or signing (14 Qwen runs in a row at 100 on this line); the speed
+gain is only on the rare double-silent call and can't show in two runs. Next idea: phase 1 spread (generalization
+owner's area) is the largest remaining variance.
+
+One more pair of b942b04 for the morning decision (07:20): run_f63b9812b45ac269 100 / 7:10 / $0.133 / 57.3 $·s,
+run_4e307d86869b4141 100 / 6:12 / $0.156 / 58.1 $·s, both signed. b942b04: 4 runs, all 100, median 57.7 $·s.
+
+### 13 · 07:28 · Final: collect, summarize
+
+No agent change, no run started. Collected the 07:20 pair above, rewrote the Morning summary.
+
+## Backlog
+
+- `specs` at effort low (iteration 11: 17 s at medium in a slow run, not on the critical path; low priority): it only starts the early ERP searches and `requirements` corrects it, yet at medium it took
+  60 s and timed out into the low backup in run_b4c23813dd122d18 (early searches ~60 s later). Measure low vs medium
+  offline first (`/tmp`-style script calling `resolvers.specs` on `eval/fixtures/resolvers`); at 05:30 the local
+  proxy answered every call with 429, so it was not measured.
+- Phase 1 varies 99-243 s between identical runs (tender or supplier agent taking 13 vs 30 steps): the largest
+  remaining spread; the generalization owner's area, look at step counts before touching prompts.
+- TAN look-up after the bid (iteration 5): `fresh` waits up to 50 s for a mailbox start page that sometimes
+  never loads; the TAN agent wanders after finding the message.
+
+- In-page `fetch` without an answer: `FETCH_ABORT` 40 s, then the model retries and gets through at once
+  (run_01a5fe851c09aba6, TAN look-up 824→864 s, retry 6 s). Try abort 20 s plus one automatic retry inside
+  `Tab.fetch` (same worst case, typical recovery ~20 s sooner); the timer only covers the time to the headers.
+- `Tab.click`: when Playwright's click times out because the click started a navigation that hasn't answered, the
+  DOM-click fallback clicks the same control again once the page is free: a second request. Seen only in the local
+  reproduction so far.
+
+- ERP: "its requirement differs from the early searches: searching it now" at 252–268 s in both a4b9d2c runs; why
+  does the early search miss that requirement, and how long does the late search take?
+
+- Qwen reasoning tokens: the requirements and commercials resolvers spend 5–7k output tokens (69–124 s each, at
+  ≈55 tok/s) at effort medium, asked twice; in run_39d8950d739e2e2a 3:04→5:08 was nothing but resolver calls. Try a
+  smaller question (only the evidence each part needs), or `low` with a code check that sends it back on a gap;
+  check with `tools/resolver_eval.py --repeat` before any test run.
+- Queue waits on the hosted Qwen: p50 4 s per call, 13 min summed in run_cd888fae0ebef8da; fewer, larger steps help.
+- ERP searches are the critical path after the merge (264→448 s in run_364ee0e5b5151237): see how many steps each
+  search takes and whether the extract call waits on anything; never cut a search's own budget for it.
+- Submit: 22 sequential steps after the bid arrives (5 min in run_a65e32634be4efce); fewer, fuller `form` calls per
+  position, wording kept abstract.
