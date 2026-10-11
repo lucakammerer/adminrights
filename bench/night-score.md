@@ -2,7 +2,13 @@
 
 ## Morning summary
 
-Best candidate: **58f933b** (5c1668a + the night-gen merge 1920ba1 + the no-match check fix): run_92428b63f6b01b4e
+Best candidate: **2c5dd5f** (58f933b + a follow-up for a search cut by its step limit with facts missing):
+run_75da3ea2197f3709 100 / 5:30 / $0.150 / **49.6 $·s**, run_0a26a180075ecc2c 100 / 7:36 / $0.173 / 79.0 $·s. Our
+Haiku submission: 70 $·s; rank 1: 25 $·s. The branch's last six Qwen runs (5c1668a, 58f933b, 2c5dd5f): 49.6-79 $·s,
+5 of 6 at 100 (one 85.3 from a step-limited ERP search, which 2c5dd5f now follows up; one 5 from a bug fixed in
+58f933b). Single runs still vary ~1.5x with load and model wander.
+
+Previous best: **58f933b** (5c1668a + the night-gen merge 1920ba1 + the no-match check fix): run_92428b63f6b01b4e
 100 / 6:51 / $0.131 / **53.6 $·s**, run_28c8d1f903003c25 85.3 / 6:34 / $0.132 / 52.3 $·s (one ERP search hit its
 40-step limit before the price page). Cost × time is now below our Haiku submission's 70 $·s on Qwen, but quality
 is not yet steady: 2 of the last 4 runs missed 100. 5c1668a's pair: run_96d33dd7b340c037 100 / 6:34 / $0.142 / **56.1 $·s**
@@ -12,6 +18,8 @@ no_bid from a bug in 5f858c2 (a changed requirement never reached the ERP no-mat
 Main-based night-gen runs on Qwen: 85.8 and 121.6 $·s, so the radical-speed structure on this branch is not shown
 to beat main on Qwen; single runs vary 2× with load.
 Merge to main, each worth it on its own:
+- 2c5dd5f (erp): a search cut by its 40-step limit, a material chosen but required facts unkept, with >= 120 s left,
+  gets one follow-up of at most 12 steps on the same tab, driven by extract's gap list. Insurance, never fired live.
 - 58f933b (agent): goes with 5f858c2. The no-match check (a second ERP search) now gets the changed requirement
   too; without it a no_match decided on the specification's values became a no_bid (run_7d633f73aa69af53: 5).
 - 5c1668a (agent): the first TAN look-up's mailbox tab opens when the submission starts. TAN look-up 13 s and
@@ -299,6 +307,16 @@ Commit 2c5dd5f, test (a search forced at its step limit; old code: no price cond
 audit clean, reviewer PASS (notes: the follow-up ignores `news`, which `erp_search` reruns on anyway; it holds one of
 the 6 slots). Runs (2c5dd5f): run_0a26a180075ecc2c, run_75da3ea2197f3709 (started 05:47). Judge by: quality,
 signing, `follow-up for` in the log (fires only on a cut search), time.
+
+Results (2c5dd5f): run_75da3ea2197f3709 100 / 5:30 / $0.150 / **49.6 $·s** (best Qwen run of the night),
+run_0a26a180075ecc2c 100 / 7:36 / $0.173 / 79.0 $·s. The follow-up fired in neither: in run_0a26 a search did hit its
+step limit (281 s) but had kept every required fact, so extract found no gap (the trigger is correctly narrow). Verdict:
+keep as insurance (no regression, 2/2 signed at 100, costs nothing unless a cut search lacks facts); its catch is
+shown only by the unit test.
+
+Next idea: the step limit itself costs time even when facts are complete: run_0a26's search ran 40 steps to 281 s
+(bid ~65 s later than run_75da). Look at what those 40 steps did (retrying the search form again?) before touching
+prompts; the search form retry pattern also caused iteration 7's 85.3.
 
 ## Backlog
 

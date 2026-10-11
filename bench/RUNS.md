@@ -5,6 +5,8 @@ logged answer scored by `eval/compare.py` (what the bid would have scored if sig
 
 | Date (UTC) | Run | Commit | Platform | Eval | Time | Cost | Outcome and top problem (owner) |
 | --- | --- | --- | --- | --- | --- | --- | --- |
+| 2026-10-11 03:40 | run_75da3ea2197f3709 | luca/night-score@2c5dd5f | 100, eligible | – | 6 min (330 s) | $0.150 | Step-limit follow-up (not needed: no search cut short of facts), 49.6 $·s, best Qwen run so far. One search told the changed requirement, commercials at 241 s, `get_tan` 313 s. |
+| 2026-10-11 03:40 | run_0a26a180075ecc2c | luca/night-score@2c5dd5f | 100, eligible | – | 8 min (456 s) | $0.173 | Same package, 79.0 $·s. One search hit its step limit at 281 s but had kept every fact (no follow-up), so the bid came ~65 s later (306 s); `get_tan` 411 s. |
 | 2026-10-11 03:28 | run_92428b63f6b01b4e | luca/night-score@58f933b | 100, eligible | – | 7 min (411 s) | $0.131 | No-match check gets the changed requirement (not needed this run) + night-gen merge: 53.6 $·s. Bid at 253 s, `get_tan` 356 s. |
 | 2026-10-11 03:28 | run_28c8d1f903003c25 | luca/night-score@58f933b | 85.3, eligible | – | 7 min (394 s) | $0.132 | Same package, 52.3 $·s. One ERP search (the first, on the login tab) spent ~30 of its 40 steps retrying the search form, hit the step limit at 264 s (stage deadline ~9 min away) before the price page: 01.04 without base price, rebates and total off. Model wander, not the fix (no no_match this run). |
 | 2026-10-11 03:11 | run_96d33dd7b340c037 | luca/night-score@5c1668a | 100, eligible | – | 7 min (394 s) | $0.142 | First TAN tab opened when the submission starts: `get_tan` 381 s → signed 394 s, 56.1 $·s, best Qwen run so far (bid at 286 s, one search told). |
