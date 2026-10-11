@@ -295,7 +295,7 @@ on disagreement it logs both, re-asks once, then the rule wins.
 
 ### 5.3 Documents, numbers and dates
 
-- `fetch` and downloads: ZIP (recursive), CSV, TXT, HTML, PDF (`pypdf`) ✅. A fetched page is laid out in a hidden script-free frame, so its own style rules decide what is hidden (I17).
+- `fetch` and downloads: ZIP (recursive), CSV, TXT, HTML, PDF (`pypdf`) ✅; office files (`browser.office_text`: XLSX/ODS row by row with tab-separated cells, date cells as dates, hidden sheets and rows dropped; DOCX/ODT/PPTX paragraph by paragraph, hidden runs dropped) ✅; text in any byte-order mark, UTF-16, UTF-8, else Windows-1252 (`browser.decode`) ✅. A fetched page is laid out in a hidden script-free frame, so its own style rules decide what is hidden (I17).
 - Numbers are parsed by code with the stated format; ambiguous forms are refused, never guessed (I10, RULES 4.1).
 - Dates are compared in UTC; models report them as written, with their timezone and format hints (I18).
 
@@ -331,7 +331,7 @@ Same jobs and rules, different software, look, navigation, site names and data, 
 | Other navigation and labels | model navigation over page text; generic prompts ✅ |
 | Information on other sites | every gathering agent keeps rule-relevant records it finds on its site (`common.ALSO_KEEP`); resolvers get such pages by content (mail naming a position, pages naming a commercial record); gap sweep for open commercial facts during the ERP stage ✅ (I16) |
 | Other mail subjects | topics and senders from the brief, in several list shapes ✅ (I12) |
-| Other document formats | ZIP, CSV, TXT, HTML, PDF ✅ (I17) |
+| Other document formats | ZIP, CSV, TXT, HTML, PDF ✅ (I17); XLSX, ODS, DOCX, ODT, PPTX; UTF-16 and Windows-1252 text ✅ |
 | Other number and date conventions | strict parsing with hints (I10); UTC comparison |
 | More positions | at most 6 ERP searches at once (`erp.PARALLEL`); facts only some rules need are asked for once, not until the deadline |
 | An API submission target | the answer is posted by API when the run's `submission.kind` is `api` |

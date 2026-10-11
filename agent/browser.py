@@ -1,11 +1,15 @@
 """Generic browser tools for the model: read a page as text with control refs, act on a ref, read a URL without
 navigating, open downloaded files. Nothing here knows any website; the model decides where to go and what to do."""
 import asyncio
+import codecs
 import difflib
+import html
 import io
 import re
 import zipfile
+import xml.etree.ElementTree as ET
 from collections import Counter
+from datetime import datetime, timedelta
 from pathlib import Path
 from urllib.parse import urljoin
 
@@ -424,23 +428,139 @@ def _js(value: str) -> str:
 
 
 def describe_file(name: str, data: bytes) -> str:
-    """Text of a downloaded document; ZIPs are opened and each member described."""
+    """Text of a downloaded document; ZIPs are opened and each member described, office files read as their text."""
     if data[:2] == b"PK":
-        parts = []
         with zipfile.ZipFile(io.BytesIO(data)) as archive:
-            for info in archive.infolist():
-                if not info.is_dir():
-                    parts.append(describe_file(info.filename, archive.read(info)))
+            try:
+                office = office_text(archive)
+            except Exception:  # noqa: BLE001  a broken or unknown office part: list the members instead
+                office = None
+            if office is not None:
+                return f"DOCUMENT {name}:\n" + office[:MAX_CHARS]
+            parts = [describe_file(info.filename, archive.read(info)) for info in archive.infolist() if not info.is_dir()]
         return f"ZIP {name}:\n" + "\n\n".join(parts)
     if data[:4] == b"%PDF":
         return f"PDF {name}:\n" + pdf_text(data)
-    text = data.decode("utf-8", errors="replace")
+    text = decode(data)
     if "<html" in text[:500].lower() or name.endswith((".htm", ".html")):
         text = re.sub(r"<(script|style)[\s\S]*?</\1>", " ", text)
         text = re.sub(r"<br\s*/?>|</(p|div|tr|li|h\d)>", "\n", text)
         text = re.sub(r"<[^>]+>", " ", text)
     text = re.sub(r"[​-‍⁠﻿]", "", text)
     return f"FILE {name}:\n" + re.sub(r"[ \t]+", " ", text)[:MAX_CHARS]
+
+
+def decode(data: bytes) -> str:
+    """Plain text in whatever encoding an export uses: a byte-order mark, UTF-16 without one, UTF-8, else Windows-1252."""
+    if data[:3] == codecs.BOM_UTF8:
+        return data[3:].decode("utf-8", errors="replace")
+    if data[:2] in (codecs.BOM_UTF16_LE, codecs.BOM_UTF16_BE):
+        return data.decode("utf-16", errors="replace")
+    head = data[:2000]
+    if len(head) > 1 and head.count(0) > len(head) // 4:
+        return data.decode("utf-16-le" if head[1::2].count(0) > head[::2].count(0) else "utf-16-be", errors="replace")
+    text = data.decode("utf-8", errors="ignore")
+    bad = len(data) - len(text.encode())  # bytes that are no UTF-8
+    if bad > sum(ch > "\x7f" for ch in text):
+        return data.decode("cp1252", errors="replace")
+    return data.decode("utf-8", errors="replace")
+
+
+# Office text that is not shown: hidden runs (the bounded, tempered gap keeps a hidden paragraph mark from eating the
+# next run), deleted or moved-away tracked changes, hidden or collapsed text, rows and slides.
+OFFICE_HIDDEN = re.compile(
+    r'<(\w+:)?vanish\b(?![^>]*val="(0|false|off)")[^>]*>((?!<(\w+:)?r[ >]|</(\w+:)?pPr>)[\s\S]){0,5000}?</(\w+:)?r>'
+    r"|<(\w+:)?(delText|moveFrom|hidden-text|hidden-paragraph)\b[^>]*?(/>|>[\s\S]*?</(\w+:)?\8>)"
+    r'|<(\w+:)?table-row\b[^>]*visibility="(collapse|filter)"[^>]*?(/>|>[\s\S]*?</(\w+:)?table-row>)')
+
+
+def office_text(archive: zipfile.ZipFile) -> str | None:
+    """Spreadsheets row by row with their cells tab-separated; text documents and slides paragraph by paragraph.
+    None for an archive that is no office file."""
+    names = set(archive.namelist())
+    if "xl/workbook.xml" in names:
+        return xlsx_text(archive, names)
+    parts = sorted((n for n in names if re.fullmatch(r"word/document\.xml|content\.xml|ppt/slides/slide\d+\.xml", n)),
+                   key=lambda n: [int(d) if d.isdigit() else d for d in re.split(r"(\d+)", n)])
+    if not parts or not ({"[Content_Types].xml", "mimetype"} & names):
+        return None
+    out = []
+    for part in parts:
+        xml = archive.read(part).decode("utf-8", errors="replace")
+        if re.search(r'<(\w+:)?sld\b[^>]*\bshow="(0|false)"', xml):
+            continue
+        xml = OFFICE_HIDDEN.sub("", xml)
+        xml = re.sub(r'<(\w+:)?(covered-)?table-cell\b([^>]*number-columns-repeated="(\d+)")?[^>]*/>',
+                     lambda m: "\t" * min(int(m.group(4) or 1), 50), xml)
+        xml = re.sub(r"</(\w+:)?(p|h|tr|table-row)>|<(\w+:)?(br|line-break)\b[^>]*/>", "\n", xml)
+        xml = re.sub(r"</(\w+:)?(tc|table-cell)>|<(\w+:)?tab\b[^>]*/>", "\t", xml)
+        text = html.unescape(re.sub(r"<[^>]+>", "", xml))
+        out.append(re.sub(r"\t+\n", "\n", re.sub(r"\n\t", "\t", text)))  # a cell's own paragraph end; empty cells at row end
+    return "\n".join(out)
+
+
+def xlsx_text(archive: zipfile.ZipFile, names: set[str]) -> str | None:
+    m = "{http://schemas.openxmlformats.org/spreadsheetml/2006/main}"
+    ns = {"m": m[1:-1], "p": "http://schemas.openxmlformats.org/package/2006/relationships"}
+    rid = "{http://schemas.openxmlformats.org/officeDocument/2006/relationships}id"
+    shared = []
+    if "xl/sharedStrings.xml" in names:
+        shared = ["".join(t.text or "" for t in si.findall("m:t", ns) + si.findall("m:r/m:t", ns))
+                  for si in ET.fromstring(archive.read("xl/sharedStrings.xml")).findall("m:si", ns)]
+    targets = {}
+    if "xl/_rels/workbook.xml.rels" in names:
+        for rel in ET.fromstring(archive.read("xl/_rels/workbook.xml.rels")).findall("p:Relationship", ns):
+            target = rel.get("Target", "").lstrip("/")
+            targets[rel.get("Id")] = target if target.startswith("xl/") else "xl/" + target
+    dated = set()  # style indexes whose number format shows a date
+    if "xl/styles.xml" in names:
+        styles = ET.fromstring(archive.read("xl/styles.xml"))
+        codes = {f.get("numFmtId"): f.get("formatCode", "") for f in styles.iter(f"{m}numFmt")}
+        xfs = styles.find("m:cellXfs", ns)
+        for i, xf in enumerate(xfs.findall("m:xf", ns) if xfs is not None else []):
+            fmt = xf.get("numFmtId", "0")
+            code = re.sub(r'"[^"]*"|\[[^]]*]|\\.', "", codes.get(fmt, ""))
+            if 14 <= int(fmt) <= 17 or fmt == "22" or re.search(r"[dy]", code, re.I):
+                dated.add(str(i))
+    workbook = ET.fromstring(archive.read("xl/workbook.xml"))
+    pr = workbook.find("m:workbookPr", ns)
+    epoch = datetime(1904, 1, 1) if pr is not None and pr.get("date1904") in ("1", "true") else datetime(1899, 12, 30)
+    sheets = list(workbook.iter(f"{m}sheet"))
+    if not sheets:  # another schema (strict): the member listing at least carries the data
+        return None
+    out = []
+    for sheet in sheets:
+        part = targets.get(sheet.get(rid))
+        if sheet.get("state") in ("hidden", "veryHidden") or part not in names:
+            continue
+        root = ET.fromstring(archive.read(part))
+        hidden = {k for col in root.iter(f"{m}col") if col.get("hidden") in ("1", "true")
+                  for k in range(int(col.get("min")) - 1, int(col.get("max")))}
+        rows = [f"Sheet {sheet.get('name')} (numbers as stored, with a decimal point):"]
+        for row in root.iter(f"{m}row"):
+            if row.get("hidden") in ("1", "true"):
+                continue
+            cells: dict[int, str] = {}
+            for i, c in enumerate(row.findall("m:c", ns)):
+                letters = re.match(r"[A-Z]*", c.get("r", "")).group()
+                col = sum((ord(ch) - 64) * 26 ** k for k, ch in enumerate(reversed(letters))) - 1 if letters else i
+                v = c.find("m:v", ns)
+                value = v.text if v is not None and v.text else ""
+                if col in hidden:
+                    continue
+                if c.get("t") == "s" and value:
+                    cells[col] = shared[int(value)]
+                elif c.get("t") == "inlineStr":
+                    cells[col] = "".join(t.text or "" for t in c.iter(f"{m}t"))
+                elif value and c.get("s") in dated and c.get("t") in (None, "n") and 0 <= float(value) < 2958466:
+                    day = epoch + timedelta(minutes=round(float(value) * 1440))
+                    cells[col] = day.strftime("%Y-%m-%d %H:%M" if day.hour or day.minute else "%Y-%m-%d")
+                elif value:
+                    cells[col] = value
+            if cells:
+                rows.append("\t".join(cells.get(k, "") for k in range(max(cells) + 1)))
+        out.append("\n".join(rows))
+    return "\n\n".join(out)
 
 
 def pdf_text(data: bytes) -> str:
