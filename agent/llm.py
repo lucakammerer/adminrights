@@ -99,11 +99,12 @@ def client(fallback: bool = False) -> AsyncOpenAI:
 
 
 async def reply(messages: list, tools: list | None, silence: float, fallback: bool = False,
-                heard: asyncio.Event | None = None, **kwargs):
+                heard: asyncio.Event | None = None, cache: bool = True, **kwargs):
     """One streamed model reply, assembled like a non-streamed one; every read must bring a byte within `silence`, and
     `heard` is set at the first chunk. The snapshot, not get_final_completion: that raises on a reply cut at its length
-    limit, which counted before."""
-    extra = {"extra_body": CACHE} if CACHE and not fallback else {}
+    limit, which counted before. cache=False for a prompt no later call reads back: a request with the breakpoint has every
+    uncached token written to the cache at 1.25x the input price."""
+    extra = {"extra_body": CACHE} if CACHE and cache and not fallback else {}
     if OPENROUTER and not fallback:  # streamed, Haiku repeated the same login 40 times in every tab
         # (run_ac62aa59878278d0); unstreamed it worked (run_0bf3628e04112a0c). Its calls take 3-13 s, so a silent one
         # still ends at `silence`.
@@ -188,12 +189,12 @@ def parse_object(text: str) -> dict | None:
 
 async def ask_json(system: str, user: str, effort: str | None = None) -> dict:
     """One reasoning call that must answer with a JSON object. effort="low" suits copying values out of pages: several
-    times faster, while switching thinking off entirely made the model rewrite number formats. Always on the hosted
-    Qwen: the resolvers and the ERP extract are measured on it (tools/resolver_eval.py)."""
+    times faster, while switching thinking off entirely made the model rewrite number formats. Sent without the cache
+    breakpoint: calls on the same evidence start together, so none of them was ever read from the cache."""
     messages = [{"role": "system", "content": system}, {"role": "user", "content": user}]
     extra = {"reasoning_effort": effort} if effort else {}
     for _ in range(3):
-        reply = await chat(messages, response_format={"type": "json_object"}, **extra)
+        reply = await chat(messages, response_format={"type": "json_object"}, cache=False, **extra)
         text = reply.choices[0].message.content or ""
         value = parse_object(text)
         if value is not None:

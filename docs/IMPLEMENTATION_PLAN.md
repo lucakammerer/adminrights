@@ -166,7 +166,7 @@ Every browser agent is the same loop; agents differ only in mission, result sche
 - **`check` bounds:** its model calls take at most `CHECK_TIMEOUT` (60 s) each and end at the agent's deadline; a
   check that fails or runs out of time lets the result through unchecked.
 - **Model:** `AGENT_MODEL`, default Claude Haiku (`anthropic/claude-haiku-5.5`); a `<provider>/<model>` id runs on OpenRouter through the run's
-  proxy with the team secret `OPENROUTER_API_KEY` (Anthropic models with a moving cache breakpoint); its last three
+  proxy with the team secret `OPENROUTER_API_KEY` (Anthropic models with a moving cache breakpoint in the tool loop; `ask_json` sends none, since calls on the same evidence start together and none was ever read back); its last three
   attempts at a call go to the hosted Qwen (`llm.FALLBACK`), which `agent.json` keeps warm at no cost in time; a call
   without an answer after `HEDGE` (15 s) gets a twin and the first answer wins (about one OpenRouter call in six never
   came back); `ask_json` (resolvers, ERP extract) always runs on the hosted Qwen, where it is measured. Browser steps run
