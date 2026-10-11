@@ -2,11 +2,14 @@
 
 ## Morning summary
 
-Best candidate: **2c5dd5f** (58f933b + a follow-up for a search cut by its step limit with facts missing):
-run_75da3ea2197f3709 100 / 5:30 / $0.150 / **49.6 $·s**, run_0a26a180075ecc2c 100 / 7:36 / $0.173 / 79.0 $·s. Our
-Haiku submission: 70 $·s; rank 1: 25 $·s. The branch's last six Qwen runs (5c1668a, 58f933b, 2c5dd5f): 49.6-79 $·s,
-5 of 6 at 100 (one 85.3 from a step-limited ERP search, which 2c5dd5f now follows up; one 5 from a bug fixed in
-58f933b). Single runs still vary ~1.5x with load and model wander.
+Best candidate: **cd967a0**, the branch tip's code (2c5dd5f + 38d5b42 + the start pages loaded side by side). Its
+family, unchanged except for insurance that fired in none of them, has 8 Qwen runs, **all 100 and signed**:
+46.6, 49.6, 51.1, 61.3, 61.5, 79.0, 87.7, 102.6 $·s, median ~61 $·s (best run_4b06a64ace34d51f 100 / 5:35 / $0.139).
+cd967a0 itself: run_f17b48d291a7d8fd 100 / 6:15 / $0.136 / 51.1 $·s, run_ddc02354bde271f3 100 / 10:41 / $0.160 /
+102.6 $·s (a slow model hour). Our Haiku submission: 70 $·s; rank 1: 25 $·s. The spread (2x) is load and model
+wander, not the code. A last pair (run_2bfbe16b551a62a3, run_6fd78246ef5da521) was started at 06:45; check them
+before deciding. On Qwen the tip beats our submission's 70 $·s at the median only narrowly; on Haiku it is untested
+tonight (OpenRouter path untouched).
 
 Previous best: **58f933b** (5c1668a + the night-gen merge 1920ba1 + the no-match check fix): run_92428b63f6b01b4e
 100 / 6:51 / $0.131 / **53.6 $·s**, run_28c8d1f903003c25 85.3 / 6:34 / $0.132 / 52.3 $·s (one ERP search hit its
@@ -18,6 +21,10 @@ no_bid from a bug in 5f858c2 (a changed requirement never reached the ERP no-mat
 Main-based night-gen runs on Qwen: 85.8 and 121.6 $·s, so the radical-speed structure on this branch is not shown
 to beat main on Qwen; single runs vary 2× with load.
 Merge to main, each worth it on its own:
+- cd967a0 (agent): the four start pages load side by side, each within `OPEN_TIMEOUT` (20 s), a missed one stopped.
+  Before, they loaded one after another with a 30 s goto timeout, and a hung mailbox start page held every agent
+  3→35 s in 2 of 6 runs (run_b5bfbb3ed5ed5292, run_28dc851b508f1f3c). Reviewer PASS. Insurance: it fired in neither
+  of its two runs.
 - 38d5b42 (llm): a `fetch` of a kept page whose content is unchanged gets "unchanged since you kept it as evidence
   #n" appended (a search re-checked kept pages 14 times in run_0a26a180075ecc2c and hit its step limit). Its pair:
   run_822da1971e1635d9 100 / 61.5 $·s, run_28dc851b508f1f3c 100 / 87.7 $·s (phase 1 slow); no refetch in either,
