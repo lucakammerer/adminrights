@@ -132,14 +132,13 @@ async def chat(messages: list, tools: list | None = None, hosted: bool = False, 
     """One model reply, each attempt bounded by CAP and all of them by UNTIL; raises TimeoutError when time is up. An
     attempt silent for SILENCE seconds (twice that on a retry) is dropped and asked again. hosted: the hosted Qwen
     answers even when MODEL is an OpenRouter model."""
-    refused = False  # OpenRouter answered 402 (credit or spend limit): the rest of this call's attempts go to the hosted Qwen
     for attempt in range(6):
         left = UNTIL.get() - time.time() - 1
         if left < 3:
             raise TimeoutError("no time left for a model call")
         limit = min(CAP.get(), left)
         began = time.time()
-        fallback = OPENROUTER and (hosted or refused or attempt >= 3) and "QWEN_BASE_URL" in os.environ
+        fallback = OPENROUTER and (hosted or attempt >= 3) and "QWEN_BASE_URL" in os.environ
         heard = asyncio.Event()  # never set for an unstreamed OpenRouter reply: its twin waits for the answer
 
         def ask(heard: asyncio.Event) -> asyncio.Future:
@@ -173,7 +172,6 @@ async def chat(messages: list, tools: list | None = None, hosted: bool = False, 
         except Exception as error:  # noqa: BLE001  the hosted model may hiccup: retry like any provider
             if attempt == 5:
                 raise
-            refused = refused or getattr(error, "status_code", None) == 402
             print(f"[llm] retry after {type(error).__name__} at {time.time() - began:.0f} s: {str(error)[:200]}",
                   flush=True)
             await asyncio.sleep(min(2 + 3 * attempt, max(0.0, UNTIL.get() - time.time() - 5)))
