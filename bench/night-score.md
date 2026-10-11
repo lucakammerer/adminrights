@@ -2,11 +2,16 @@
 
 ## Morning summary
 
-Best candidate: **c31d89a** (a4b9d2c + a twin for stuck Qwen calls + the TAN look-up in a new mailbox tab). Its runs:
-100 / 11:52 / $0.296 / 210.8 $·s (run_c13fd1a74d3ad98c), 100 / 15:21 / $0.261 / 240 $·s (run_d0283ff8e1a3187d). On
-$·s, a4b9d2c's runs are still the best: 156.2 (run_bd99f53d4d7d5c7f) and 181.6 (run_ba99f2d4eb2f586e). Main on Qwen
-tonight: 122.6-262 $·s. Our submission: 70 $·s (Haiku). Rank 1: 25 $·s. No Qwen run is a submit candidate on $·s.
+Best candidate: **fcac256** (c31d89a + navigations without an answer stopped, in tabs and in `fresh`). Its runs:
+100 / 12:49 / $0.217 / 167.2 $·s (run_26b1c884ae47eb49), 100 / 11:59 / $0.205 / 147.6 $·s (run_2ec4765202c21efd).
+Earlier best single runs: a4b9d2c 156.2 and 181.6; c31d89a 210.8 and 240. Main on Qwen tonight: 122.6-262 $·s.
+Our submission: 70 $·s (Haiku). Rank 1: 25 $·s. No Qwen run is a submit candidate on $·s; the fixes below are
+model-independent and help Haiku too.
 Merge to main, each worth it on its own:
+- 9d32034 + fcac256 (browser, agent): a navigation the site never answers locks the tab: Playwright runs no script
+  on it until the navigation ends, so every read and form step waits out the 60 s tool timeout. Seen live twice
+  (a configurator POST: 150 s; the mailbox start page in `fresh`: two TAN agents forced, 6.5 min), reproduced
+  locally, both now freed after 30 s (CDP `Page.stopLoading`) and the model told.
 - a4b9d2c (calc): the setup fee comes from the commercials; the ERP's per-material fee only when they lack the
   position. Fixed an 84.8 (double count). Judgement call, see iteration 2.
 - c31d89a (submit): the TAN look-up opens a new tab of the mailbox (same login). The mail agents' idle tab hung
@@ -14,8 +19,9 @@ Merge to main, each worth it on its own:
 - 4d4a37f (llm): a streamed call without its first chunk after 10 s gets a twin. 6-10 calls a run sat silent for 30 s
   before; in run_c13fd1a74d3ad98c 9 twins, each answered in ~2 s, the originals never reached the platform.
 - 7cb21db (submit `form` hold): insurance, never fired live.
-Distrust: f5e86da (radical-speed merge) is not shown faster on Qwen; load noise dominates single runs. Next loss to
-fix: browser pages that stop answering (75-207 s per run, see backlog).
+Distrust: 3258746 (reverted in 74f20cd), whose idle-tab throttling theory was wrong; f5e86da (radical-speed merge),
+not shown faster on Qwen, load noise dominates single runs. Next loss to fix: in-page fetches the site never answers
+(40 s each, see backlog).
 
 ## Iterations
 
@@ -165,8 +171,14 @@ Change fcac256: `fresh` creates the `Tab` first; a start page that misses `OPEN_
 shared with the watcher) and opened once more with twice the time, then stopped again (worst 60 s, was 20 s + a
 locked tab). Test: a start page that never answers, then a read returns (old code: locked to the test's 10 s
 guard). Gate: green, audit clean, reviewer PASS (slow-but-working start pages: hence the longer second attempt).
-Runs (fcac256): run_26b1c884ae47eb49, run_2ec4765202c21efd (started ~02:35 UTC). Judge by: `start page not loaded`
-followed by a TAN/agent that works at once, quality, signing.
+Runs (fcac256): run_26b1c884ae47eb49 100 / 12:49 / $0.217 / 167.2 $·s, run_2ec4765202c21efd 100 / 11:59 / $0.205 /
+147.6 $·s: the best pair of Qwen runs on this branch. Neither hit an unanswered navigation (no `no answer`, no
+`start page not loaded`), so the live gain is unproven; the local reproductions show the mechanism. In run_26b1 the
+TAN look-up lost 46 s to a model call (twin sent, both timed out at 40 s).
+
+Verdict: keep 9d32034 and fcac256 (4/4 runs 100 and signed, no regression, two reproduced lock-ups fixed); 3258746
+reverted (wrong hypothesis). Next idea: the in-page `fetch` without an answer (backlog, first item), the same family
+of site requests that never answer; then the TAN agent's model calls (a 40 s timeout after a twin).
 
 ## Backlog
 
@@ -176,9 +188,6 @@ followed by a TAN/agent that works at once, quality, signing.
 - `Tab.click`: when Playwright's click times out because the click started a navigation that hasn't answered, the
   DOM-click fallback clicks the same control again once the page is free: a second request. Seen only in the local
   reproduction so far.
-
-- Frozen pages (see iteration 3 "Next idea"): 75-207 s per run in run_6038f546123323a1 and run_d0283ff8e1a3187d,
-  both on the submit agent's tender-portal tab after the bid.
 
 - ERP: "its requirement differs from the early searches: searching it now" at 252–268 s in both a4b9d2c runs; why
   does the early search miss that requirement, and how long does the late search take?
