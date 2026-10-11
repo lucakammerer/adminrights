@@ -2,12 +2,17 @@
 
 ## Morning summary
 
-Best Qwen candidate so far: **f5e86da** (main 1fa269f + `luca/radical-speed` merged, Qwen default, paging fix).
-Test runs: 100 / 11:01 / $0.201 / **132.8 $·s** (run_364ee0e5b5151237), 100 / 13:12 / $0.249 / 197 $·s
-(run_a65e32634be4efce). Main on Qwen the same night: 100 / 15–16 min / 258–262 $·s. Our submission 70 $·s (Haiku),
-rank 1 25 $·s. Distrust: the baselines ran under heavy Qwen queueing (13 min of queue wait), the merge runs under
-almost none; a paired run (both at once) is pending. Not a submit candidate on $·s: still ~2–3× our Haiku
-submission. Note also run_0b1441de63cf8acb (not ours, all Haiku): 100 in 5:09, 28.1 $·s.
+Best candidate so far: **a4b9d2c** (f5e86da + two fixes), runs pending: run_ba99f2d4eb2f586e, run_bd99f53d4d7d5c7f.
+- a4b9d2c fixes a quality loss that main has too: `calc.facts` added the ERP's per-material setup fee to the
+  commercials' per-position one (run_cf57141fcf4352a0: 84.8). Now the commercials' value, the ERP's only when the
+  commercials lack the position. Judgement call: the brief doesn't say where the ordinary setup fee lives; public-1
+  has it in the Q&A, and the ERP shows a per-material fee as a decoy. Worth merging to main on its own.
+- 7cb21db: the submit agent's `form` call is held once when it types a position's unit price without one of its
+  non-zero breakdown values (a bonus typed as 0 cost ~110 s of walking back in run_a65e32634be4efce, and a wrong
+  value in run_c086c4a6429b3bd9).
+- The radical-speed merge (f5e86da) is **not** shown faster on Qwen: merge 132.8 / 197 / 232.9 $·s vs main
+  257.8 / 262 / 122.6 $·s; the one paired pair went to main (122.6 vs 232.9). Load noise dominates.
+Our submission 70 $·s (Haiku), rank 1 25 $·s. No Qwen run is a submit candidate on $·s yet.
 
 ## Iterations
 
@@ -40,6 +45,26 @@ Next idea: the submit phase. It starts early but enters each configurator positi
 the bid arrives; time per step is browser waits plus a 5–15 s Qwen call.
 
 Seen on the way: run_0b1441de63cf8acb (package fc98097b, not mine, all Haiku): 100 in 5:09, $0.091, 28.1 $·s.
+
+### 2 · 02:22 · Submit re-entry and a setup-fee double count
+
+Paired runs of iteration 1: main 1fa269f run_52961ce393c136de 100 / 10:01 / 122.6 $·s; merge f5e86da
+run_cf57141fcf4352a0 84.8 / 14:46 / 232.9 $·s. The merge's earlier lead was load. The 84.8 was calc, not the merge:
+the ERP agent kept a material's planning tab with its own setup fee, and `calc.facts` added it to the commercials'
+per-position fee (01.02 got a fee it doesn't have, 01.03 counted it twice). Fixed in a4b9d2c with a test.
+
+Hypothesis (submit): the submit agent loses ~110 s when `verify_summary` finds a breakdown value typed wrong, because
+the portal makes it walk back and re-enter every later position (run_a65e32634be4efce: 01.04 bonus typed as 0,
+same field wrong in run_c086c4a6429b3bd9). Catch it before the page's next-step button: 7cb21db holds a `form` call
+once per position when it types the position's unit price but not one of its non-zero breakdown values; a position
+held again switches the hold off (portal asks for them elsewhere). Number parsing accepts any common format.
+
+Gate: check_release green, audit clean. Reviewer on 7cb21db: no hardcoding; asked for a cap on holds and a format-
+agnostic parser, both done. Reviewer on a4b9d2c: no hardcoding, warned an unseen dataset might keep the ordinary
+setup fee only in the ERP; kept because the old sum double-counts whenever both sources show it, and the ERP value
+still stands in when the commercials lack the position. Flagged for Luca above.
+
+Runs: run_ba99f2d4eb2f586e, run_bd99f53d4d7d5c7f (a4b9d2c, started 00:44 UTC). Verdict pending.
 
 ## Backlog
 
