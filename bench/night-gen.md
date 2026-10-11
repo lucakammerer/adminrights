@@ -2,6 +2,12 @@
 
 ## Morning summary
 
+- **Merge candidate 2:** `calc.number` reads space/apostrophe grouping (`1 234,50`, `1'234.50`) and comma-locale hints
+  other than German (iteration 2). Before, such a price ≥ 1000 parsed as 1 and `1234,50` with a `fr-FR` hint as
+  123450. No change on public-1.
+- **Reader commit, sandbox:** two runs of ea63e98: 80.1 (sandbox tool timeouts after the login) and 15 (submit stuck in
+  the configurator after a correct answer at 417 s). Neither failure is in the reader; the clean local control is
+  74/74. Treat the reader as neutral on public-1, positive on other software.
 - **Candidate to merge:** the reader commit of iteration 1 (styled tables and script-driven controls). It closes two
   gaps that matter only on other software: values in styled span/div rows merged into one number (`100` and `12,50`
   read as `10012,50`), and ARIA widgets, links without href and click-handler elements had no ref, so the model could
@@ -47,6 +53,42 @@ Evidence:
 
 Commits: b031f2b (stress tool), 68e6e6c (reader). Verdict: pending a valid final-reader control and a sandbox run
 (team at 3 active test runs at 02:05, so none started).
+
+### 2 · 2026-10-11 02:58 · calc: numbers in other locales
+
+Collected first: the reader commit's two sandbox runs (ea63e98, same package):
+- `run_a1e07a5b9bdce64b` 80.1: three 60 s browser-tool timeouts on tender-portal reads right after the login, so
+  phase 1 hit its cut and three base prices were missing. The same login page read fine in the second run, so this
+  points at the sandbox rather than the reader.
+- `run_dba11642f54df6c6` 15: the answer at 417 s equals the 100 runs (all five positions), but submit lost 9 min on
+  the configurator's dependent dropdowns: it set all four in one `form` call with one apply click, the dependent
+  dropdown stayed disabled, and select/keys/reloads never recovered it. It signed with every position omitted. In the
+  80.1 run the model clicked apply after each dropdown and it worked. Nothing in the reader diff touches selects or
+  disabled state; this is a submit-agent weakness on stateful forms (Finn: submit), and a likely trap on unseen
+  portals too.
+
+Hypothesis: `calc.number` reads only `.`/`,` notation. Prices of 1,000 or more that other locales group by spaces or
+apostrophes (`1 234,50`, `1'234.50`) parse as 1; a `fr-FR`/`es-ES` hint turns `1234,50` into 123450; a `de-CH` hint
+does the same to `1234.50`. Public-1 never shows these, so nothing caught it.
+
+Fix (`calc.number`, `calc.hinted_decimal`): a number shows its own format whenever it can (both separators, one
+repeated, space or apostrophe grouping, a lone separator before anything but exactly three digits); only `12,345` /
+`12.345` follow the hint, which may be a whole locale tag (with the comma-decimal languages, `-CH/-LI/-MX/-US` as
+point), a sample like `1 234,56`, or words like "decimal comma". Tests in `tests/test_calc.py`.
+
+Evidence: 36 hand cases, old against new: no case the old parser got right is wrong now. Wrong before and right
+now: every grouped price, comma-locale hints, `German format` hints, `decimal comma`. Adversarial review round 1
+FAILED (space grouping merged `12,50 100` into 12.501; a hint starting "no ..." read as Norwegian), fixed; round 2:
+FAILED on hints with words after the tag (`de-DE format`) and `0,125` under a `de-CH` hint, both fixed and checked case by case (`ab 100 250,00` stays joined: wrong before too, a quantity in `price_as_shown` cannot be told apart from French grouping). Unit tests and `check_release.sh` green, audit clean.
+Unmutated local control of the final reader (`gen-new-ctrl3`): gather 74/74, 152 model calls (old reader 163), longest agent 193 s: the reader commit is not worse on public-1. Not a check of the calc change: public-1 shows no grouped or comma-locale numbers, so its answer is unchanged by construction (unit tests cover the replayed public-1 facts).
+
+Verdict: keep. Pure parser fix, no behaviour change on public-1; it removes a silent 1000x error on any unseen ERP
+that prints prices the French, Swiss or Scandinavian way. No sandbox run started: public-1 cannot show the
+difference, and my last two runs on this branch answer the reader question already.
+
+Next: the configurator failure in `run_dba11642f54df6c6` is the bigger risk on unseen portals (dependent dropdowns
+that only enable after an apply click or a trusted event). Submit is Finn's; worth a stress page with dependent
+selects to measure how often the submit agent gets stuck.
 
 ## Backlog
 
