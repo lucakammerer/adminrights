@@ -5,6 +5,8 @@ logged answer scored by `eval/compare.py` (what the bid would have scored if sig
 
 | Date (UTC) | Run | Commit | Platform | Eval | Time | Cost | Outcome and top problem (owner) |
 | --- | --- | --- | --- | --- | --- | --- | --- |
+| 2026-10-11 00:59 | run_840f0cd20f29dc8c | luca/night-score@4d4a37f | 100, eligible | – | 12 min (713 s) | $0.213 | Twin for a call without a first chunk: never fired (no stuck call this run), 151.8 $·s. Bid at 381 s; the TAN look-up's mailbox tab hung 517→667 s (start page timeout, then a fetch to the cut), the second look-up got through at once (Luca: c31d89a). |
+| 2026-10-11 00:59 | run_6038f546123323a1 | luca/night-score@4d4a37f | 100, eligible | – | 14 min (850 s) | $0.265 | Same package, 225.4 $·s; no twin. Bid at 415 s; a submit click and two reads on the tender portal hung 479→686 s (no model call), a `goto` recovered it. |
 | 2026-10-11 00:41 | run_bd99f53d4d7d5c7f | luca/night-score@a4b9d2c | 100, eligible | – | 11 min (680 s) | $0.230 | Setup fee from the commercials and the submit `form` hold: 156.2 $·s. Bid at 350 s, verify_summary matched first time at 475 s; no hold needed. |
 | 2026-10-11 00:41 | run_ba99f2d4eb2f586e | luca/night-score@a4b9d2c | 100, eligible | – | 13 min (772 s) | $0.235 | Same package: 181.6 $·s. Bid only at 545 s (ERP phase), verify_summary first time at 689 s; no hold needed. |
 | 2026-10-11 00:23 | run_cf57141fcf4352a0 | luca/night-score@f5e86da | 84.8, eligible | – | 15 min (886 s) | $0.263 | Paired with the baseline: 232.9 $·s. calc added the ERP's per-material setup fee (85) to the commercials' per-position one: 01.02 got 85 it doesn't have, 01.03 counted it twice (Luca: a4b9d2c). Supplier portal to 258 s, one ERP search 38 steps to 607 s. |

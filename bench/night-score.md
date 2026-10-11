@@ -90,8 +90,20 @@ Commit 4d4a37f: `llm.FIRST_CHUNK`, `reply` sets an event at its first chunk, `ch
 `[llm] twin after`. Test: a silent first request answered by the twin in < 5 s. Gate: check_release green, audit clean,
 reviewer PASS (watch the twin rate under load: it adds requests while the service queues).
 
-Runs (4d4a37f): run_840f0cd20f29dc8c, run_6038f546123323a1 (started 01:12 UTC). Judge by: count of `twin after` vs
-`retry after APITimeoutError`, time to bid, quality.
+Runs (4d4a37f): run_840f0cd20f29dc8c 100 / 11:53 / $0.213 / 151.8 $·s, run_6038f546123323a1 100 / 14:10 / $0.265 /
+225.4 $·s. Neither had a stuck call, so the twin never fired: neutral, untested live. Kept (cheap insurance, reviewer
+PASS); judge again once a run logs `twin after`.
+
+Both runs lost their time after the bid instead (381→713 s, 415→850 s): browser tabs that stopped answering. A survey
+of 8 earlier runs (subagent, run_profile + logs) found every stall over 40 s in the TAN look-up on the mailbox's
+original tab: run_bd99f53d4d7d5c7f 75 + 89 s (TAN finish forced), run_52961ce393c136de 75 s, run_a65e32634be4efce
+44 s, run_c7805bca216fa2e0 75 s; plus run_840f0cd20f29dc8c 150 s. The pattern: `start page failed: TimeoutError`
+(15 s), then the first read waits out `TOOL_TIMEOUT` (60 s); a later look-up gets through at once. 5 of 10 runs.
+
+Change c31d89a: `get_tan` opens a new tab of the mailbox's browser (same login) through `agent.fresh` for each look-up
+instead of the mail agents' idle tab. Gate: green, audit clean, reviewer PASS (a mailbox with a per-tab session would
+need a new login; the mission carries the login line). Runs (c31d89a): run_c13fd1a74d3ad98c, run_d0283ff8e1a3187d
+(started 01:20 UTC). Judge by: time from `get_tan` to the TAN agent's finish, quality, signing.
 
 ## Backlog
 
