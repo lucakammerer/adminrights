@@ -271,18 +271,24 @@ async def main() -> int:
         searches: dict[tuple, tuple] = {}  # spec_key -> (tag, task, requirement, news), one per governing requirement
 
         async def erp_search(req, first, news):
-            tab = erp_tab if first and "erp-login" not in CUT else await fresh(erp_tab)
-            result = await erp_agent.run(task, tab, req, erp_end - 30, news)
-            if news:  # the requirement changed after this search had decided: its result is for the old values
-                news.clear()
-                llm.log(f"erp:{req.get('catalogue_group')}", "requirement changed after the search decided: again")
-                result = await erp_agent.run(task, await fresh(erp_tab), req, erp_end - 30)
-            if result.get("forced"):  # cut off: its search did not finish, so it can't have proven "no match"
-                result.pop("no_match", None)
+            async def once(tab):
+                result = await erp_agent.run(task, tab, req, erp_end - 30, news)
+                if news:  # the requirement changed after this search had decided: its result is for the old values
+                    news.clear()
+                    llm.log(f"erp:{req.get('catalogue_group')}", "requirement changed after the search decided: again")
+                    result = await erp_agent.run(task, await fresh(erp_tab), req, erp_end - 30, news)
+                if result.get("forced"):  # cut off: its search did not finish, so it can't have proven "no match"
+                    result.pop("no_match", None)
+                return result
+
+            result = await once(erp_tab if first and "erp-login" not in CUT else await fresh(erp_tab))
             if result.get("no_match") and erp_end - 30 - time.time() > 150:  # a no_bid costs the bid: confirm it (I11)
-                second = await erp_agent.run(task, await fresh(erp_tab), req, erp_end - 30)
+                asked = dict(req)
+                second = await once(await fresh(erp_tab))
                 llm.log(f"erp:{req.get('catalogue_group')}", f"no-match check found {second.get('material_number')!r}")
-                if second.get("material_number") and not second.get("forced"):
+                if req != asked:  # the requirement changed during the check: the first "no match" was for the old values
+                    result.pop("no_match", None)
+                if not second.get("forced") and (second.get("material_number") or req != asked):
                     return second
             return result
 

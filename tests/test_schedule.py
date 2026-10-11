@@ -79,8 +79,17 @@ class Schedule(unittest.TestCase):
         async def erp_run(task, tab, req, deadline, news=None):
             group = req["catalogue_group"]
             events.append((f"search {group}", time.time()))
+            if group == "E":  # decides "no match" on the old values at once; its check is told of the change
+                if [name for name, _ in events].count("search E") == 1:
+                    return {"material_number": "", "no_match": True}
+                for _ in range(40):
+                    if news:
+                        return {"material_number": "M-E", "stroke_mm": req["stroke_mm"], "told": news.pop(0)}
+                    await asyncio.sleep(0.05)
+                return {"material_number": "", "no_match": True}
             try:
-                if group in ("B", "D") and news is not None:  # runs until it is told of a changed requirement
+                first = [name for name, _ in events].count(f"search {group}") == 1
+                if group in ("B", "D") and news is not None and first:  # runs until told of a changed requirement
                     while not news:
                         await asyncio.sleep(0.05)
                     if group == "B":  # read before its next step; D had already decided and never reads it
@@ -154,6 +163,15 @@ class Schedule(unittest.TestCase):
                        {"position": "2", "final_quantity_pieces": 5, **spec_d, "stroke_mm": 300}])
         self.assertEqual([name for name, _ in events].count("search D"), 2)
         self.assertEqual(handed["2"], {"material_number": "M-D", "stroke_mm": 300})
+
+    def test_a_change_during_the_no_match_check_reaches_the_check(self):
+        spec_e = {**SPEC_A, "catalogue_group": "E"}
+        events, stopped, handed = self.run_main(
+            {"requirements": [{"requirement": "R1", **SPEC_A}, {"requirement": "R2", **spec_e}]},
+            positions=[{"position": "1", "final_quantity_pieces": 5, **SPEC_A},
+                       {"position": "2", "final_quantity_pieces": 5, **spec_e, "stroke_mm": 300}])
+        self.assertEqual(handed["2"]["material_number"], "M-E")
+        self.assertEqual(handed["2"]["stroke_mm"], 300)
 
     def test_without_specs_the_searches_wait_for_the_requirements(self):
         events, stopped, handed = self.run_main({"requirements": []})
