@@ -2,12 +2,16 @@
 
 ## Morning summary
 
-Best candidate: **fcac256** (c31d89a + navigations without an answer stopped, in tabs and in `fresh`). Its runs:
-100 / 12:49 / $0.217 / 167.2 $·s (run_26b1c884ae47eb49), 100 / 11:59 / $0.205 / 147.6 $·s (run_2ec4765202c21efd).
-Earlier best single runs: a4b9d2c 156.2 and 181.6; c31d89a 210.8 and 240. Main on Qwen tonight: 122.6-262 $·s.
-Our submission: 70 $·s (Haiku). Rank 1: 25 $·s. No Qwen run is a submit candidate on $·s; the fixes below are
-model-independent and help Haiku too.
+Best candidate: **5f858c2** (fcac256 + a changed requirement goes to the running early ERP search). Its runs:
+100 / 9:47 / $0.285 / 167.2 $·s (run_b4c23813dd122d18), 100 / 10:26 / $0.275 / 172.4 $·s (run_5150d06e5790477d):
+the fastest Qwen runs on this branch (bid at 421 s and 344 s, was 497-545 s); $·s flat because cost was higher.
+fcac256's pair: 167.2 and 147.6 $·s. Main on Qwen tonight: 122.6-262 $·s. Our submission: 70 $·s (Haiku). Rank 1:
+25 $·s. No Qwen run is a submit candidate on $·s; the fixes below are model-independent and help Haiku too.
 Merge to main, each worth it on its own:
+- 5f858c2 (agent, llm, erp): early ERP searches start from the specification; when the final requirements carry an
+  amendment the specification lacked, main used to cancel that search and start over (the last search to finish,
+  ~110 s). Now the running search of the same catalogue group gets the new values as a message; one that had
+  already decided runs again. Fired in both runs, 2 reviews (the first found the decided-search gap, fixed).
 - 9d32034 + fcac256 (browser, agent): a navigation the site never answers locks the tab: Playwright runs no script
   on it until the navigation ends, so every read and form step waits out the 60 s tool timeout. Seen live twice
   (a configurator POST: 150 s; the mailbox start page in `fresh`: two TAN agents forced, 6.5 min), reproduced
@@ -20,8 +24,8 @@ Merge to main, each worth it on its own:
   before; in run_c13fd1a74d3ad98c 9 twins, each answered in ~2 s, the originals never reached the platform.
 - 7cb21db (submit `form` hold): insurance, never fired live.
 Distrust: 3258746 (reverted in 74f20cd), whose idle-tab throttling theory was wrong; f5e86da (radical-speed merge),
-not shown faster on Qwen, load noise dominates single runs. Next loss to fix: in-page fetches the site never answers
-(40 s each, see backlog).
+not shown faster on Qwen, load noise dominates single runs. Next loss to fix: the TAN look-up (the mailbox start
+page not loading in a new tab, 50 s in 2 of ~8 runs; the TAN agent wandering), see iteration 5.
 
 ## Iterations
 
@@ -199,7 +203,29 @@ behaviour); an empty catalogue group is never redirected; test for both cases. R
 run_b4c23813dd122d18, run_5150d06e5790477d (started 04:53). Judge by: `told the search` in the log, time from the
 requirements answer to the last ERP finish, quality, signing.
 
+Results (5f858c2): run_b4c23813dd122d18 100 / 9:47 / $0.285 / 167.2 $·s, run_5150d06e5790477d 100 / 10:26 / $0.275 /
+172.4 $·s: the two fastest Qwen runs on this branch. `told the search` fired in both (two groups and one), no search
+had to run again, bid at 421 s and 344 s (fcac256: 497 s; a4b9d2c and earlier: 350-545 s). $·s is flat because cost
+was higher ($0.275-0.285 against $0.205-0.217 for fcac256; the branch has ranged $0.205-0.296 tonight, so not
+attributed to the change). Verdict: keep.
+
+Now the longest stretch is after the bid (166 s and 282 s). In run_5150d the TAN look-up took 161 s: `fresh` lost
+50 s because the mailbox's start page didn't load in the new tab, twice (20 s, then 30 s: Playwright's own navigation
+timeout ends the second attempt before its 40 s). The TAN agent's own `goto` right after worked at once. Then the
+agent wandered (a refused finish with an empty TAN, a 42 s `all_pages` fetch of the inbox) and was forced at 624 s.
+Same start page stall in run_86571e2d5c35436b: 2 of about 8 runs. Cause unknown (no frames could be cut).
+
+Next idea: TAN look-up. (a) Don't wait for the mailbox start page in `fresh` for the TAN: if it doesn't load within a
+short time, stop it and let the agent open the URL (its mission names it); one model step is cheaper than 50 s.
+Watch out: the ERP and sweep tabs use `fresh` too, so either make it a parameter or show the shorter timeout is
+safe for all. (b) The TAN agent's mission or check: a finish with an empty TAN should send it to open the message
+it found, not search again.
+
+
 ## Backlog
+
+- TAN look-up after the bid (iteration 5): `fresh` waits up to 50 s for a mailbox start page that sometimes
+  never loads; the TAN agent wanders after finding the message.
 
 - In-page `fetch` without an answer: `FETCH_ABORT` 40 s, then the model retries and gets through at once
   (run_01a5fe851c09aba6, TAN look-up 824→864 s, retry 6 s). Try abort 20 s plus one automatic retry inside

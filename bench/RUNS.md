@@ -5,6 +5,8 @@ logged answer scored by `eval/compare.py` (what the bid would have scored if sig
 
 | Date (UTC) | Run | Commit | Platform | Eval | Time | Cost | Outcome and top problem (owner) |
 | --- | --- | --- | --- | --- | --- | --- | --- |
+| 2026-10-11 02:50 | run_b4c23813dd122d18 | luca/night-score@5f858c2 | 100, eligible | – | 10 min (587 s) | $0.285 | A changed requirement goes to the running early ERP search: two searches told (no restart), bid at 421 s (was 497-545 s), 167.2 $·s. Submit after the bid 166 s. |
+| 2026-10-11 02:50 | run_5150d06e5790477d | luca/night-score@5f858c2 | 100, eligible | – | 10 min (626 s) | $0.275 | Same package: one search told, bid at 344 s, 172.4 $·s. Submit after the bid 282 s is now the longest stretch. |
 | 2026-10-11 02:30 | run_26b1c884ae47eb49 | luca/night-score@fcac256 | 100, eligible | – | 13 min (769 s) | $0.217 | `fresh` stops a start page without an answer: not needed this run, 167.2 $·s. TAN look-up 86 s, 46 s of it one model call (twin, both timed out at 40 s). |
 | 2026-10-11 02:30 | run_2ec4765202c21efd | luca/night-score@fcac256 | 100, eligible | – | 12 min (719 s) | $0.205 | Same package: 147.6 $·s, the branch's best Qwen pair. Bid 497 s, verify_summary first time 654 s, no browser stall. |
 | 2026-10-11 02:07 | run_86571e2d5c35436b | luca/night-score@9d32034 | 100, eligible | – | 17 min (1040 s) | $0.246 | Unanswered navigation stopped after 30 s: never needed on the portal, 255.6 $·s. Lost 6.5 min in the TAN look-up: twice the mailbox start page in `fresh` got no answer and the pending load locked the new tab (first read 60 s, fetches hung), both TAN agents forced (Luca: fcac256). |
