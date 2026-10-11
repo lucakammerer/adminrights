@@ -95,6 +95,9 @@ class Site(BaseHTTPRequestHandler):
         if path == "/marked":  # names with invisible marks inside, which the reader shows cleaned
             return self.page('<label>Deli\u200eve\u2063ry\u2060 date <input name="d"></label><input name="n" '
                              'placeholder="Re\u00adference/No"><button onclick="document.title=\'sent\'">Se\u200bnd</button>')
+        if path == "/icons":  # labels and buttons named only by an icon's text alternative
+            return self.page('<label for="r"><span role="img" aria-label="Receipt number"></span></label><input id="r">'
+                             '<button onclick="document.title=\'sent\'"><img src="data:," alt="Send"></button>')
         if path == "/stall":  # a frame source that never answers (an ad or chat server)
             time.sleep(20)
             return None
@@ -339,6 +342,19 @@ class TabAgainstLocalSite(unittest.TestCase):
         log, date, ref, title = self.run_tab(steps)
         self.assertNotIn("FAILED", log.split("\n", 1)[0])
         self.assertEqual((date, ref, title), ("2027-02-01", "X-1", "sent"))
+
+
+    def test_form_finds_fields_and_buttons_named_by_an_icon(self):
+        async def steps(tab):
+            await tab.act("goto", {"url": "/icons"})
+            text = await tab.read()
+            log = await tab.form([{"field": "Receipt number", "value": "64"}, {"click": "Send"}])
+            return text, log, await tab.page.input_value("#r"), await tab.page.title()
+        text, log, value, title = self.run_tab(steps)
+        self.assertRegex(text, r'input type=text "Receipt number"')
+        self.assertRegex(text, r'button "Send"')
+        self.assertNotIn("FAILED", log.split("\n", 1)[0])
+        self.assertEqual((value, title), ("64", "sent"))
 
 
 if __name__ == "__main__":

@@ -105,15 +105,22 @@
     const inherited = el.parentElement && view.getComputedStyle(el.parentElement).visibility === "hidden"
     return st.display === "none" || vanished(st) || (st.visibility === "hidden" && !inherited)
   }
-  // An element's text without its hidden descendants (decoys planted inside names, labels and tooltips).
-  const textOf = (el) => {
+  // An element's text without its hidden descendants (decoys planted inside names, labels and tooltips). With alt, a
+  // part with no text of its own (an icon, an image) counts by its text alternative: for names that are empty without.
+  const textOf = (el, alt) => {
     let t = ""
     for (const n of el.childNodes) {
       if (n.nodeType === 3) t += ink(el) === "clear" ? "" : n.textContent
-      else if (n.nodeType === 1 && !SKIP.has(n.tagName) && !hiddenWithin(n)) t += " " + textOf(n) + stamp(n) + " "
+      else if (n.nodeType === 1 && !SKIP.has(n.tagName) && !hiddenWithin(n)) {
+        const own = textOf(n, alt)
+        t += " " + (alt && !/\S/.test(clean(own)) ? alternative(n) : own) + stamp(n) + " "
+      }
     }
     return t
   }
+  const alternative = (el) => /^(INPUT|SELECT|TEXTAREA)$/.test(el.tagName) ? "" :
+    el.getAttribute("aria-label") || el.getAttribute("alt") || el.getAttribute("title") || ""
+  const shown = (el) => clean(textOf(el)).trim() || clean(textOf(el, true)).trim()
   // A <time> shown as "yesterday" or in a short local form keeps its exact moment only in its datetime attribute.
   const stamp = (el) => {
     const at = el.tagName === "TIME" ? clean(el.getAttribute("datetime")).trim() : ""
@@ -129,11 +136,11 @@
     if (el.getAttribute("aria-label")) return clean(el.getAttribute("aria-label")).trim()
     if (el.id) {
       const l = doc.querySelector(`label[for="${CSS.escape(el.id)}"]`)
-      if (l && clean(textOf(l)).trim()) return clean(textOf(l)).trim()
+      if (l && shown(l)) return shown(l)
     }
     const wrap = el.closest("label")
-    if (wrap && clean(textOf(wrap)).trim()) return clean(textOf(wrap)).trim()
-    return clean(el.getAttribute("placeholder") || el.getAttribute("title") || el.getAttribute("name") || "").trim()
+    if (wrap && shown(wrap)) return shown(wrap)
+    return clean(el.getAttribute("placeholder") || el.getAttribute("alt") || el.getAttribute("title") || el.getAttribute("name") || "").trim()
   }
   const described = (el) => {
     const ids = (el.getAttribute("aria-describedby") || "").split(/\s+/).filter(Boolean)
@@ -153,12 +160,12 @@
     const tag = el.tagName
     const role = el.getAttribute("role")
     if (tag === "A" && el.hasAttribute("href")) {
-      const name = clean(textOf(el)).trim() || labelOf(el)
+      const name = clean(textOf(el)).trim() || labelOf(el) || clean(textOf(el, true)).trim()
       return `[${ref(el)}link "${name}" -> ${el.getAttribute("href")}]`
     }
     if (tag === "BUTTON" || role === "button" || role === "menuitem" || role === "tab" || role === "option" ||
-        (tag === "INPUT" && ["submit", "button", "reset"].includes(el.type))) {
-      const name = clean(textOf(el)).trim() || labelOf(el) || el.value || ""
+        (tag === "INPUT" && ["submit", "button", "reset", "image"].includes(el.type))) {
+      const name = clean(textOf(el)).trim() || labelOf(el) || clean(textOf(el, true)).trim() || el.value || ""
       const d = described(el)
       return `[${ref(el)}button "${name}"${d ? ` (info: ${d})` : ""}${disabledMark(el)}]`
     }
@@ -180,7 +187,7 @@
     const editor = el.isContentEditable && !(el.parentElement && el.parentElement.isContentEditable)
     if (editor) return `[${ref(el)}input type=text "${labelOf(el)}" value="${clean(textOf(el)).trim()}"${disabledMark(el)}]`
     if ((tag === "A" || role === "link" || TOGGLE_ROLES.has(role) || TEXT_ROLES.has(role)) && !el.querySelector(CONTROLS + ", [contenteditable]")) {
-      const name = clean(textOf(el)).trim()
+      const name = clean(textOf(el)).trim() || clean(textOf(el, true)).trim()
       if (TOGGLE_ROLES.has(role)) {
         const kind = role === "radio" || role === "menuitemradio" ? "radio" : "checkbox"
         return `[${ref(el)}${kind} "${name || labelOf(el)}" ${el.getAttribute("aria-checked") === "true" ? "checked" : "unchecked"}${disabledMark(el)}]`

@@ -33,7 +33,8 @@ bindingly. Without a submission the run scores 0.
   value; one test run set every choice before one apply and lost 9 minutes on the closed choice). Test runs filled the configurator one choice per model call,
   which was most of the submit agent's time. Where a configurator narrows its materials by the earlier choices, a
   wrong choice shows up as a material step without a match; `verify_summary` still checks prices and total.
-- `form` finds a field by any name the reader shows for it (label, else placeholder, title or name attribute) and
+- `form` finds a field by any name the reader shows for it (label, an icon's text alternative inside the label, else
+  placeholder, title or name attribute) and
   fields and buttons inside frames too, also when the page hides invisible characters inside a name the reader shows
   cleaned; a name it cannot find fails at once instead of after Playwright's 30 s wait.
   Choices are named by field label: refs are `data-aref` attributes written by `read`, so a re-render after an apply

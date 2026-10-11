@@ -52,6 +52,11 @@ PAGE = """<!doctype html><html><head><style>
 <div role="row"><span role="gridcell">250</span><span role="gridcell">17,40</span></div>
 <span role="link">Open record</span><div role="checkbox" aria-checked="false">Confirm</div>
 <div style="cursor:pointer" onmousedown="0">Next results <span>page</span></div>
+<a href="/p/2"><img src="data:," alt="Next page"></a><button><i class="icon" aria-label="Download offer"></i></button>
+<a href="/p/1" title="First page"><svg viewBox="0 0 1 1"><path d="M0 0"/></svg></a><input type="image" alt="Search" src="data:,">
+<a href="/p/3">Price <span aria-label="decoy-label-over-text">12,50</span></a>
+<button aria-label="Delete item"><i title="Trash"></i></button><label>Email <i title="required"></i><input></label>
+<span role="link" onclick="0"><img src="data:," alt="Previous page"></span>
 </body></html>"""
 
 
@@ -166,6 +171,12 @@ class Reader(unittest.TestCase):
         self.assertRegex(self.live, r'\[\d+:link "Open record"\]')
         self.assertRegex(self.live, r'\[\d+:checkbox "Confirm" unchecked\]')
         self.assertRegex(self.live, r"\[\d+:clickable\] Next results page")
+
+    def test_icon_controls_are_named_by_their_text_alternative(self):
+        for name in ('link "Next page"', 'button "Download offer"', 'link "First page"', 'button "Search"',
+                     'link "Price 12,50"', 'button "Delete item"', 'input type=text "Email"', 'link "Previous page"'):
+            # a part's own text and the control's own label win over a part's text alternative
+            self.assertRegex(self.live, r"\[\d+:" + name)
 
     def test_invisible_characters_leave_identifiers(self):
         for text in (self.live, self.fetched, describe_file("ref.txt", "Ref AB\u200f-12\u2066-34".encode())):

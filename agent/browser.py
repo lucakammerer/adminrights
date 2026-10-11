@@ -20,6 +20,11 @@ READER = (Path(__file__).parent / "reader.js").read_text()
 MAX_CHARS = 14000
 DISABLED = "e => e.matches(':disabled') || e.getAttribute('aria-disabled') === 'true'"
 OPEN_DETAILS = "e => { for (let d = e.closest('details'); d; d = d.parentElement?.closest('details')) d.open = true }"
+FIELDS = ("input:not([type=hidden]), select, textarea, [contenteditable]:not([contenteditable=false]), [role=textbox], "
+          "[role=searchbox], [role=combobox], [role=spinbutton], [role=slider], [role=listbox], [role=checkbox], "
+          "[role=switch], [role=radio]")
+MARK_CONTROL = """e => { const c = e.control; if (!c) return ''
+  return c.dataset.anamed ||= String(Math.random()).slice(2) }"""
 SETTLE_MAX = 1.5  # seconds a read waits at most for the page to settle (popups appear up to that long after load)
 FRAME_WAIT = 3  # seconds a settle waits at most for the page's frames to load
 # Every page of the tab tracks its pending short timers and its last DOM change, so a read waits exactly as long as
@@ -354,6 +359,7 @@ class Tab:
         quoted = json.dumps(label, ensure_ascii=False)
         attribute = ", ".join(f"{t}[{a}={quoted}]" for a in ("title", "name")
                               for t in ("input:not([type=hidden])", "select", "textarea"))
+        wrapped = None
         for attempt in range(2):  # a frame the last step reloaded may still be loading: wait for the page once
             # exact, then partial, then with invisible characters between its letters; None: by title or name attribute
             for exact in (True, False, "loose", None):
@@ -366,13 +372,18 @@ class Tab:
                                  frame.get_by_role("link", name=name, exact=exact is True)] if exact is not None else []
                     elif exact is None:
                         found = [frame.locator(attribute)]
-                    else:
-                        found = [frame.get_by_label(name, exact=exact is True),
-                                 frame.get_by_placeholder(name, exact=exact is True)]
+                    else:  # the name may be an icon's inside a <label>: then the field is that label's control
+                        by_label = frame.get_by_label(name, exact=exact is True)
+                        wrapped = frame.locator("label", has=by_label)
+                        found = [by_label.and_(frame.locator(FIELDS)),
+                                 frame.get_by_placeholder(name, exact=exact is True), wrapped, by_label]
                     for loc in found:
                         try:
                             if await loc.count():
-                                return loc.first
+                                if loc is not wrapped:
+                                    return loc.first
+                                if mark := await loc.first.evaluate(MARK_CONTROL):
+                                    return frame.locator(f'[data-anamed="{mark}"]')
                         except Exception:  # noqa: BLE001  a frame detached while it was searched
                             pass
             if not attempt:
